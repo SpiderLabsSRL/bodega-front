@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
@@ -33,13 +34,13 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Redirigir raíz directamente a login */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          {/* Ruta principal pública (sin protección) */}
+          <Route path="/" element={<Index />} />
           
           {/* Ruta de login */}
           <Route path="/login" element={<Login />} />
           
-          {/* Rutas protegidas del dashboard */}
+          {/* Rutas protegidas del dashboard - SOLO estas requieren autenticación */}
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <Dashboard />

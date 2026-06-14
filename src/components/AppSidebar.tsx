@@ -46,6 +46,12 @@ const menuItems = [
     roles: ["admin", "asistente"],
   },
   {
+    title: "Notas",
+    url: "notas",
+    icon: StickyNote,
+    roles: ["admin", "asistente"],
+  },
+  {
     title: "Productos",
     url: "productos",
     icon: Package,
@@ -58,6 +64,18 @@ const menuItems = [
     icon: TrendingUp,
     roles: ["admin", "asistente"],
   },
+  {
+    title: "Cotización",
+    url: "cotizacion",
+    icon: FileText,
+    roles: ["admin", "asistente"],
+  },
+  {
+    title: "Pagos Pendientes",
+    url: "pagos-pendientes",
+    icon: Clock,
+    roles: ["admin", "asistente"],
+  },
   { title: "Caja", url: "caja", icon: CreditCard, roles: ["admin"] },
   {
     title: "Registra Movimiento",
@@ -65,6 +83,8 @@ const menuItems = [
     icon: CreditCard,
     roles: ["admin", "asistente"],
   },
+  { title: "Reportes", url: "reportes", icon: FileBarChart, roles: ["admin"] },
+  { title: "Ecommerce", url: "ecommerce", icon: Globe, roles: ["admin"] },
   {
     title: "Configuración",
     url: "configuracion",
@@ -88,7 +108,6 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
   const user = getCurrentUser();
   const userRole = user?.rol.toLowerCase() || "admin";
 
-  // Filtrar opciones de menú según el rol
   const filteredMenuItems = menuItems.filter((item) =>
     item.roles.includes(userRole),
   );
@@ -135,7 +154,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
     handleRouteChange();
   }, [currentView, setOpenMobile]);
 
-  return (
+return (
     <Sidebar className="h-screen overflow-hidden bg-background">
       <SidebarHeader className="p-4 flex-shrink-0 border-b bg-background">
         <div className="flex items-center gap-2">
