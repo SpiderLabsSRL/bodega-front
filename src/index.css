@@ -1,0 +1,205 @@
+@import url('https://fonts.googleapis.com/css2?family=Gotham:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hide number input arrows and prevent scroll changes */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.number-input-no-scroll {
+  -moz-appearance: textfield;
+}
+
+.number-input-no-scroll::-webkit-outer-spin-button,
+.number-input-no-scroll::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* NEOLED Design System - Colores actualizados */
+
+@layer base {
+  :root {
+    --neoled-primary: 345 100% 23%;
+    --neoled-secondary: 25 78% 48%;
+    --neoled-accent: 36 89% 61%;
+    --neoled-background: 30 40% 94%;
+    --neoled-grey-90: 0 0% 10%;
+    --neoled-grey-50: 0 0% 50%;
+    --neoled-white: 0 0% 100%;
+    
+    /* Sistema de colores basado en la marca */
+    --background: 30 40% 94%;
+    --foreground: 345 100% 18%;
+    
+    --card: 30 40% 98%;
+    --card-foreground: 345 100% 23%;
+    
+    --popover: 30 40% 98%;
+    --popover-foreground: 345 100% 23%;
+    
+    --primary: 345 100% 23%;
+    --primary-foreground: 30 40% 94%;
+    
+    --secondary: 25 78% 48%;
+    --secondary-foreground: 30 40% 94%;
+    
+    --muted: 30 30% 90%;
+    --muted-foreground: 345 40% 35%;
+    
+    --accent: 36 89% 61%;
+    --accent-foreground: 345 100% 18%;
+    
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 30 40% 94%;
+    
+    --border: 30 30% 85%;
+    --input: 30 40% 96%;
+    --ring: 345 100% 23%;
+    
+    --radius: 0.75rem;
+    
+    /* Gradientes */
+    --gradient-primary: linear-gradient(135deg, #73001C, #9e0026);
+    --gradient-secondary: linear-gradient(135deg, #D96A1D, #e8853a);
+    --gradient-accent: linear-gradient(135deg, #F4A340, #f6b55c);
+    --gradient-hero: linear-gradient(135deg, #73001C 0%, #9e0026 40%, #D96A1D 80%, #F4A340 100%);
+    
+    /* Sombras */
+    --shadow-neoled: 0 10px 30px -10px rgba(115, 0, 28, 0.3);
+    --shadow-glow: 0 0 40px rgba(244, 163, 64, 0.4);
+    --shadow-copper: 0 8px 25px -8px rgba(217, 106, 29, 0.35);
+    
+    /* Transiciones */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    
+    --sidebar-background: 345 100% 18%;
+    --sidebar-foreground: 30 40% 94%;
+    --sidebar-primary: 36 89% 61%;
+    --sidebar-primary-foreground: 345 100% 18%;
+    --sidebar-accent: 25 78% 48%;
+    --sidebar-accent-foreground: 30 40% 94%;
+    --sidebar-border: 345 50% 28%;
+    --sidebar-ring: 36 89% 61%;
+  }
+  
+  .dark {
+    --background: 345 100% 10%;
+    --foreground: 30 40% 94%;
+    --card: 345 100% 14%;
+    --card-foreground: 30 40% 94%;
+    --popover: 345 100% 14%;
+    --popover-foreground: 30 40% 94%;
+    --primary: 36 89% 61%;
+    --primary-foreground: 345 100% 10%;
+    --secondary: 25 78% 48%;
+    --secondary-foreground: 30 40% 94%;
+    --muted: 345 50% 18%;
+    --muted-foreground: 30 30% 70%;
+    --accent: 25 78% 48%;
+    --accent-foreground: 30 40% 94%;
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 30 40% 94%;
+    --border: 345 50% 20%;
+    --input: 345 50% 18%;
+    --ring: 36 89% 61%;
+    --sidebar-background: 345 100% 8%;
+    --sidebar-foreground: 30 40% 94%;
+    --sidebar-primary: 36 89% 61%;
+    --sidebar-primary-foreground: 345 100% 10%;
+    --sidebar-accent: 25 78% 48%;
+    --sidebar-accent-foreground: 30 40% 94%;
+    --sidebar-border: 345 50% 18%;
+    --sidebar-ring: 36 89% 61%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-gotham;
+  }
+}
+
+@layer components {
+  .btn-neoled {
+    @apply bg-primary text-primary-foreground px-6 py-3 rounded-xl font-bold 
+           transition-all duration-300 hover:shadow-lg hover:scale-105 
+           hover:bg-primary/90 active:scale-95;
+  }
+  
+  .btn-neoled-secondary {
+    @apply bg-secondary text-secondary-foreground px-6 py-3 rounded-xl font-bold 
+           transition-all duration-300 hover:shadow-lg hover:scale-105 
+           hover:bg-secondary/90 active:scale-95;
+  }
+  
+  .btn-neoled-outline {
+    @apply border-2 border-primary text-primary bg-transparent px-6 py-3 rounded-xl font-bold 
+           transition-all duration-300 hover:bg-primary hover:text-primary-foreground 
+           hover:shadow-lg active:scale-95;
+  }
+  
+  .float-animation {
+    @apply animate-bounce;
+    animation: float 3s ease-in-out infinite;
+  }
+  
+  .gradient-neoled {
+    background: var(--gradient-hero);
+  }
+  
+  .product-hover {
+    @apply transition-all duration-300 hover:scale-105 hover:shadow-xl;
+  }
+  
+  .glow-effect {
+    filter: drop-shadow(0 0 20px rgba(244, 163, 64, 0.5));
+    transition: filter 0.3s ease;
+  }
+  
+  .glow-effect:hover {
+    filter: drop-shadow(0 0 30px rgba(244, 163, 64, 0.8));
+  }
+  
+  .copper-glow {
+    filter: drop-shadow(0 0 15px rgba(217, 106, 29, 0.4));
+    transition: filter 0.3s ease;
+  }
+  
+  .copper-glow:hover {
+    filter: drop-shadow(0 0 25px rgba(217, 106, 29, 0.7));
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@layer utilities {
+  .animate-fade-in-up { animation: fadeInUp 0.6s ease-out; }
+  .animate-scale-in { animation: scaleIn 0.4s ease-out; }
+}
