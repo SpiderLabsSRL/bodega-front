@@ -5,14 +5,10 @@ import {
   TrendingUp,
   FileText,
   CreditCard,
-  FileBarChart,
-  Bell,
   Users,
-  Globe,
   Settings,
   LogOut,
   Clock,
-  StickyNote,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -43,12 +39,6 @@ const menuItems = [
     title: "Vender",
     url: "vender",
     icon: ShoppingCart,
-    roles: ["admin", "asistente"],
-  },
-  {
-    title: "Notas",
-    url: "notas",
-    icon: StickyNote,
     roles: ["admin", "asistente"],
   },
   {
@@ -83,15 +73,12 @@ const menuItems = [
     icon: CreditCard,
     roles: ["admin", "asistente"],
   },
-  { title: "Reportes", url: "reportes", icon: FileBarChart, roles: ["admin"] },
-  { title: "Ecommerce", url: "ecommerce", icon: Globe, roles: ["admin"] },
   {
     title: "Configuración",
     url: "configuracion",
     icon: Settings,
     roles: ["admin"],
   },
-  { title: "Alertas", url: "alertas", icon: Bell, roles: ["admin"] },
   {
     title: "Gestión de Usuarios",
     url: "usuarios",
@@ -154,7 +141,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
     handleRouteChange();
   }, [currentView, setOpenMobile]);
 
-return (
+  return (
     <Sidebar className="h-screen overflow-hidden bg-background">
       <SidebarHeader className="p-4 flex-shrink-0 border-b bg-background">
         <div className="flex items-center gap-2">

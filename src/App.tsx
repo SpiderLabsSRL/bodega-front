@@ -48,7 +48,6 @@ const App = () => (
           }>
             <Route index element={<Navigate to="/dashboard/vender" replace />} />
             <Route path="vender" element={<VenderView />} />
-            <Route path="notas" element={<NotasView />} />
             <Route path="productos" element={<ProductosView />} />
             <Route path="inventario" element={<InventarioView />} />
             <Route path="ventas" element={<VentasView />} />
@@ -56,10 +55,7 @@ const App = () => (
             <Route path="pagos-pendientes" element={<PagosPendientesView />} />
             <Route path="caja" element={<CajaView />} />
             <Route path="registra-movimiento" element={<RegistraMovimientoView />} />
-            <Route path="reportes" element={<ReportesView />} />
-            <Route path="ecommerce" element={<EcommerceView />} />
             <Route path="configuracion" element={<ConfiguracionView />} />
-            <Route path="alertas" element={<AlertasView />} />
             <Route path="usuarios" element={<GestionUsuariosView />} />
           </Route>
           
