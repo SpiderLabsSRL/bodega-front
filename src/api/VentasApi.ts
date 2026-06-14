@@ -25,6 +25,7 @@ interface BackendVenta {
   descripcion: string;
   sub_total: string;
   descuento: string;
+  descripcion_descuento?: string;
   total: string;
   metodo_pago: string;
   usuario_nombre: string;
@@ -49,6 +50,7 @@ export interface Venta {
   usuario_completo: string;
   usuario_login: string;
   descripcion: string;
+  descripcion_descuento?: string;
   detalle: DetalleVenta[];
   subtotal: number;
   descuento: number;
@@ -119,6 +121,7 @@ export const getVentas = async (filtros?: VentasFiltros): Promise<Venta[]> => {
       usuario_completo: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_login: venta.usuario_usuario,
       descripcion: venta.descripcion,
+      descripcion_descuento: venta.descripcion_descuento,
       detalle: venta.detalle.map((detalle) => ({
         iddetalle_venta: detalle.iddetalle_venta,
         idproducto: detalle.idproducto,

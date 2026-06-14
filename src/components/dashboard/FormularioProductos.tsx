@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, X, Search, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { AddItemDialog } from "./AddItemDialog";
+import BarcodeScanner from "./BarcodeScanner";
 import {
   createUbicacion,
   createCategoria,
@@ -36,10 +38,10 @@ interface ProductFormData {
   categorias: string[];
   descripcion: string;
   ubicacion: string;
-  precioVenta: string;
-  precioCompra?: string;
-  stock: number;
-  stockMinimo?: number;
+  precioVenta: string | number;
+  precioCompra?: string | number;
+  stock: number | string;
+  stockMinimo?: number | string;
   imagen?: string;
   imagenFile?: File | string | string[];
   codigoBarras?: string;
@@ -288,10 +290,10 @@ export function FormularioProductos({
         categorias: product.categorias || [],
         descripcion: product.descripcion || "",
         ubicacion: product.ubicacion || "",
-        precioVenta: product.precio_venta?.toString() || "0",
-        precioCompra: product.precio_compra?.toString() || "0",
-        stock: product.stock || 0,
-        stockMinimo: product.stock_minimo || 0,
+        precioVenta: product.precio_venta?.toString() || "",
+        precioCompra: product.precio_compra?.toString() || "",
+        stock: product.stock?.toString() || "",
+        stockMinimo: product.stock_minimo?.toString() || "",
         imagen: product.imagen || "",
         imagenFile: product.imagen
           ? base64ToFile(product.imagen, "producto.jpg")
@@ -307,10 +309,10 @@ export function FormularioProductos({
       categorias: [],
       descripcion: "",
       ubicacion: "",
-      precioVenta: "0",
-      precioCompra: "0",
-      stock: 0,
-      stockMinimo: 0,
+      precioVenta: "",
+      precioCompra: "",
+      stock: "",
+      stockMinimo: "",
       imagen: "",
       imagenFile: null,
       codigoBarras: "",
@@ -325,6 +327,7 @@ export function FormularioProductos({
   });
   const [todosProductos, setTodosProductos] = useState<ProductoSelect[]>([]);
   const [loadingProductos, setLoadingProductos] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const [localLists, setLocalLists] = useState({
     ubicaciones: ubicaciones,
@@ -343,6 +346,38 @@ export function FormularioProductos({
   const [isAddingElement, setIsAddingElement] = useState(false);
 
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+
+  // Manejar historial del navegador para el escáner
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (showScanner) {
+        event.preventDefault();
+        setShowScanner(false);
+        window.history.pushState(null, '', window.location.pathname);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [showScanner]);
+
+  const openScanner = () => {
+    setShowScanner(true);
+    window.history.pushState({ scanner: true }, '');
+  };
+
+  const handleBarcodeScanned = (barcode: string) => {
+    setShowScanner(false);
+    setFormData((prev) => ({ ...prev, codigoBarras: barcode }));
+    toast({
+      title: "Código escaneado",
+      description: `Código: ${barcode}`,
+      duration: 2000,
+    });
+  };
 
   useEffect(() => {
     const loadTodosProductos = async () => {
@@ -445,7 +480,7 @@ export function FormularioProductos({
       return;
     }
 
-    if (!formData.precioVenta) {
+    if (!formData.precioVenta || formData.precioVenta === "") {
       toast({
         title: "Error",
         description: "El precio de venta es obligatorio",
@@ -498,16 +533,26 @@ export function FormularioProductos({
           ),
         ),
       );
-      formDataToSend.append("precio_venta", formData.precioVenta.toString());
-      formDataToSend.append(
-        "precio_compra",
-        (formData.precioCompra || "0").toString(),
-      );
-      formDataToSend.append("stock", formData.stock.toString());
-      formDataToSend.append(
-        "stock_minimo",
-        (formData.stockMinimo || 0).toString(),
-      );
+      
+      const precioVentaValue = formData.precioVenta === "" || formData.precioVenta === null || formData.precioVenta === undefined 
+        ? 0 
+        : Number(formData.precioVenta);
+      formDataToSend.append("precio_venta", precioVentaValue.toString());
+      
+      const precioCompraValue = formData.precioCompra === "" || formData.precioCompra === null || formData.precioCompra === undefined 
+        ? 0 
+        : Number(formData.precioCompra);
+      formDataToSend.append("precio_compra", precioCompraValue.toString());
+      
+      const stockValue = formData.stock === "" || formData.stock === null || formData.stock === undefined 
+        ? 0 
+        : Number(formData.stock);
+      formDataToSend.append("stock", stockValue.toString());
+      
+      const stockMinimoValue = formData.stockMinimo === "" || formData.stockMinimo === null || formData.stockMinimo === undefined 
+        ? 0 
+        : Number(formData.stockMinimo);
+      formDataToSend.append("stock_minimo", stockMinimoValue.toString());
 
       if (formData.codigoBarras && formData.codigoBarras.trim()) {
         formDataToSend.append("codigo_barras", formData.codigoBarras.trim());
@@ -675,6 +720,17 @@ export function FormularioProductos({
 
   return (
     <>
+      {/* Escáner de código de barras - solo visible en móvil */}
+      {showScanner && (
+        <BarcodeScanner
+          onScanSuccess={handleBarcodeScanned}
+          onClose={() => {
+            setShowScanner(false);
+            window.history.back();
+          }}
+        />
+      )}
+
       <form onSubmit={handleSubmit} className="w-full space-y-2">
         {/* Nombre del producto */}
         <div className="space-y-1">
@@ -691,7 +747,7 @@ export function FormularioProductos({
           />
         </div>
 
-        {/* Imagen circular centrada - TODO EL CÍRCULO ES CLICKEABLE */}
+        {/* Imagen circular centrada */}
         <div className="flex justify-center py-1">
           <div className="relative">
             <div
@@ -732,7 +788,7 @@ export function FormularioProductos({
           </div>
         </div>
 
-        {/* Descripción - más baja */}
+        {/* Descripción */}
         <div className="space-y-1">
           <Label htmlFor="descripcion" className="text-xs font-medium">
             Descripción <span className="text-red-500">*</span>
@@ -819,11 +875,14 @@ export function FormularioProductos({
               id="precioVenta"
               type="number"
               step="0.01"
-              value={formData.precioVenta}
-              onChange={(e) => handleInputChange("precioVenta", e.target.value)}
+              value={formData.precioVenta === "" ? "" : formData.precioVenta}
+              onChange={(e) => {
+                const value = e.target.value;
+                handleInputChange("precioVenta", value === "" ? "" : Number(value));
+              }}
+              placeholder="0"
               className="h-8 text-xs number-input-no-scroll"
               onWheel={(e) => e.currentTarget.blur()}
-              required
             />
           </div>
 
@@ -835,10 +894,12 @@ export function FormularioProductos({
               id="precioCompra"
               type="number"
               step="0.01"
-              value={formData.precioCompra}
-              onChange={(e) =>
-                handleInputChange("precioCompra", e.target.value)
-              }
+              value={formData.precioCompra === "" ? "" : formData.precioCompra}
+              onChange={(e) => {
+                const value = e.target.value;
+                handleInputChange("precioCompra", value === "" ? "" : Number(value));
+              }}
+              placeholder="0"
               className="h-8 text-xs number-input-no-scroll"
               onWheel={(e) => e.currentTarget.blur()}
             />
@@ -854,14 +915,14 @@ export function FormularioProductos({
             <Input
               type="number"
               value={formData.stock}
-              onChange={(e) =>
-                handleInputChange("stock", parseInt(e.target.value) || 0)
-              }
+              onChange={(e) => {
+                const value = e.target.value;
+                handleInputChange("stock", value === "" ? "" : Number(value));
+              }}
               placeholder="0"
               min="0"
               className="h-8 text-xs number-input-no-scroll"
               onWheel={(e) => e.currentTarget.blur()}
-              required
             />
           </div>
 
@@ -870,9 +931,10 @@ export function FormularioProductos({
             <Input
               type="number"
               value={formData.stockMinimo}
-              onChange={(e) =>
-                handleInputChange("stockMinimo", parseInt(e.target.value) || 0)
-              }
+              onChange={(e) => {
+                const value = e.target.value;
+                handleInputChange("stockMinimo", value === "" ? "" : Number(value));
+              }}
               placeholder="0"
               min="0"
               className="h-8 text-xs number-input-no-scroll"
@@ -881,18 +943,32 @@ export function FormularioProductos({
           </div>
         </div>
 
-        {/* Código de Barras */}
+        {/* Código de Barras con escáner integrado */}
         <div className="space-y-1">
           <Label htmlFor="codigoBarras" className="text-xs font-medium">
             Código de Barras
           </Label>
-          <Input
-            id="codigoBarras"
-            value={formData.codigoBarras || ""}
-            onChange={(e) => handleInputChange("codigoBarras", e.target.value)}
-            placeholder="Opcional"
-            className="h-8 text-xs"
-          />
+          <div className="relative">
+            <Input
+              id="codigoBarras"
+              value={formData.codigoBarras || ""}
+              onChange={(e) => handleInputChange("codigoBarras", e.target.value)}
+              placeholder="Escanea o escribe el código"
+              className="h-8 text-xs"
+            />
+            {/* Botón de escáner - SOLO para móvil */}
+            {isMobile && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openScanner}
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+              >
+                <Camera className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Productos Similares */}

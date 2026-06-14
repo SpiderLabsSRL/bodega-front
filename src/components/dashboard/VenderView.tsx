@@ -33,6 +33,7 @@ import {
 } from "@/api/SalesApi";
 import { getUserId, getCurrentUser } from "@/api/AuthApi";
 import BarcodeScanner from "./BarcodeScanner";
+import { Textarea } from "../ui/textarea";
 
 interface SaleItem extends Product {
   cantidad: number;
@@ -129,6 +130,8 @@ export function VenderView() {
   const [loadingSimilars, setLoadingSimilars] = useState<Map<number, boolean>>(
     new Map(),
   );
+  const [showDiscountField, setShowDiscountField] = useState(false);
+  const [discountReason, setDiscountReason] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -138,6 +141,7 @@ export function VenderView() {
   const isSearchingRef = useRef<boolean>(false);
   const barcodeBufferRef = useRef<string>("");
   const barcodeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isScanningRef = useRef<boolean>(false); // Para controlar si estamos en medio de un escaneo
 
   const currentUser = getCurrentUser();
   const username = currentUser?.nombres || "Usuario";
@@ -201,48 +205,134 @@ export function VenderView() {
     window.history.pushState({ scanner: true }, '');
   };
 
+  // Función para verificar si un producto ya está en el carrito y su cantidad
+  const getCantidadEnCarrito = (productId: number): number => {
+    const item = ventaItems.find(item => item.idproducto === productId);
+    return item ? item.cantidad : 0;
+  };
+
   const handleBarcodeScanned = async (barcode: string) => {
     setShowScanner(false);
     
     try {
-      // Realizar búsqueda con el código de barras escaneado
-      setSearchQuery(barcode);
       setLoading(true);
+      isScanningRef.current = true;
+      
+      // Limpiar el buscador y mostrar el nuevo código escaneado
+      setSearchQuery(barcode);
+      setSearchResults([]);
+      setExpandedProduct(null);
+      setSimilarProductsData(new Map());
+      lastSearchQueryRef.current = barcode;
       
       const results = await searchProducts(barcode);
-      setSearchResults(results);
-      setSimilarProductsData(new Map());
       
       if (results.length > 0) {
-        toast({
-          title: "Producto encontrado",
-          description: `Se encontró: ${results[0].nombre}`,
-          duration: 2000,
-        });
+        const product = results[0];
+        const cantidadEnCarrito = getCantidadEnCarrito(product.idproducto);
+        const stockDisponible = product.stock - cantidadEnCarrito;
         
-        // Enfocar el input después del escaneo
-        setTimeout(() => {
-          if (searchInputRef.current) {
-            searchInputRef.current.focus();
+        // Mostrar resultados en el buscador
+        setSearchResults(results);
+        
+        // Si hay stock disponible, agregar automáticamente al carrito
+        if (stockDisponible > 0) {
+          // Agregar solo 1 unidad por escaneo
+          agregarProductoUnidad(product);
+          toast({
+            title: "Producto agregado",
+            description: `${product.nombre} agregado al carrito. Stock restante: ${stockDisponible - 1}`,
+            duration: 2000,
+          });
+        } else {
+          // Si no hay stock disponible, mostrar mensaje y expandir similares
+          toast({
+            title: "Stock agotado",
+            description: `${product.nombre} no tiene más stock disponible. Mostrando productos similares...`,
+            variant: "destructive",
+            duration: 3000,
+          });
+          
+          // Expandir automáticamente para mostrar similares
+          setExpandedProduct(product.idproducto);
+          
+          // Cargar productos similares
+          if (product.productos_similares && product.productos_similares.length > 0) {
+            await loadSimilarProducts(product.idproducto, product.productos_similares);
           }
-        }, 100);
+        }
       } else {
+        setSearchResults([]);
         toast({
           title: "Producto no encontrado",
           description: `No se encontró producto con código: ${barcode}`,
           variant: "destructive",
-          duration: 2000,
+          duration: 3000,
         });
       }
     } catch (error) {
+      console.error("Error en escaneo:", error);
       toast({
         title: "Error",
         description: "Error al buscar el producto escaneado",
         variant: "destructive",
       });
+      setSearchResults([]);
     } finally {
       setLoading(false);
+      // Resetear el flag después de un breve momento
+      setTimeout(() => {
+        isScanningRef.current = false;
+      }, 100);
     }
+  };
+
+  // Nueva función para agregar SOLO UNA unidad por escaneo
+  const agregarProductoUnidad = (product: Product) => {
+    const existingIndex = ventaItems.findIndex(
+      (item) => item.idproducto === product.idproducto,
+    );
+
+    if (existingIndex !== -1) {
+      // Producto ya existe, verificar stock
+      const item = ventaItems[existingIndex];
+      if (item.cantidad < product.stock) {
+        const newItems = [...ventaItems];
+        newItems[existingIndex].cantidad += 1;
+        setVentaItems(newItems);
+      } else {
+        toast({
+          title: "Stock insuficiente",
+          description: `No hay más stock disponible para ${product.nombre}`,
+          variant: "destructive",
+        });
+      }
+    } else {
+      // Producto nuevo
+      if (product.stock > 0) {
+        const nuevoItem: SaleItem = {
+          ...product,
+          cantidad: 1,
+        };
+        setVentaItems([...ventaItems, nuevoItem]);
+      } else {
+        toast({
+          title: "Sin stock",
+          description: `${product.nombre} no tiene stock disponible`,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleDiscountChange = (discountValue: number) => {
+    if (discountValue > 0) {
+      setShowDiscountField(true);
+    } else {
+      setShowDiscountField(false);
+      setDiscountReason('');
+    }
+    setDescuento(discountValue);
   };
 
   const loadSimilarProducts = async (
@@ -283,15 +373,6 @@ export function VenderView() {
   };
 
   const handleKeyPress = (event: KeyboardEvent) => {
-    const target = event.target as HTMLElement;
-    if (
-      target.tagName === "INPUT" ||
-      target.tagName === "TEXTAREA" ||
-      target.tagName === "SELECT"
-    ) {
-      return;
-    }
-
     if (event.ctrlKey || event.altKey || event.metaKey) {
       return;
     }
@@ -307,26 +388,14 @@ export function VenderView() {
           barcodeTimeoutRef.current = null;
         }
 
-        setSearchQuery(barcode);
-
-        setTimeout(() => {
-          if (searchInputRef.current) {
-            searchInputRef.current.focus();
-          }
-        }, 0);
-
-        toast({
-          title: "Código escaneado",
-          description: `Buscando: ${barcode}`,
-          duration: 1000,
-        });
+        // Buscar y agregar automáticamente el producto escaneado
+        handleBarcodeScanned(barcode);
       }
       return;
     }
 
-    if (event.key.length === 1) {
-      event.preventDefault();
-
+    // Detectar caracteres (para código de barras)
+    if (event.key.length === 1 && !isScanningRef.current) {
       if (barcodeTimeoutRef.current) {
         clearTimeout(barcodeTimeoutRef.current);
       }
@@ -348,7 +417,7 @@ export function VenderView() {
         clearTimeout(barcodeTimeoutRef.current);
       }
     };
-  }, [toast]);
+  }, [ventaItems]);
 
   const loadCashStatus = async () => {
     try {
@@ -370,13 +439,6 @@ export function VenderView() {
       const results = await searchProducts(query);
       setSearchResults(results);
       setSimilarProductsData(new Map());
-
-      // Mantener el foco después de la búsqueda
-      setTimeout(() => {
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-        }
-      }, 0);
     } catch (error) {
       toast({
         title: "Error",
@@ -396,31 +458,15 @@ export function VenderView() {
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (searchInputRef.current) {
-        searchInputRef.current.focus();
-      }
-    }
+    // No hacer nada especial, permitir que el evento normal fluya
   };
 
   const toggleProductExpansion = (productId: number) => {
     setExpandedProduct(expandedProduct === productId ? null : productId);
-
-    // Mantener el foco después de expandir/contraer
-    setTimeout(() => {
-      if (searchInputRef.current) {
-        searchInputRef.current.focus();
-      }
-    }, 0);
   };
 
+  // Función original para agregar producto (para los botones)
   const agregarProducto = (product: Product) => {
-    const nuevoItem: SaleItem = {
-      ...product,
-      cantidad: 1,
-    };
-
     const existingIndex = ventaItems.findIndex(
       (item) => item.idproducto === product.idproducto,
     );
@@ -440,28 +486,20 @@ export function VenderView() {
       }
     } else {
       if (product.stock > 0) {
+        const nuevoItem: SaleItem = {
+          ...product,
+          cantidad: 1,
+        };
         setVentaItems([...ventaItems, nuevoItem]);
       } else {
         toast({
           title: "Sin stock",
-          description: `${product.nombre}`,
+          description: `${product.nombre} no tiene stock disponible`,
           variant: "destructive",
         });
         return;
       }
     }
-
-    // Mantener el foco después de agregar producto
-    setTimeout(() => {
-      if (searchInputRef.current) {
-        searchInputRef.current.focus();
-      }
-    }, 0);
-
-    toast({
-      title: "Producto agregado",
-      description: `${product.nombre} agregado a la venta`,
-    });
   };
 
   const actualizarCantidad = (index: number, nuevaCantidad: number) => {
@@ -573,6 +611,15 @@ export function VenderView() {
       return;
     }
 
+    if (descuento > 0 && !discountReason.trim()) {
+      toast({
+        title: "Error",
+        description: "Proporcione una razon para el descuento",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!userId) {
       toast({
         title: "Error",
@@ -607,6 +654,7 @@ export function VenderView() {
             : descripcion,
         sub_total: subtotal,
         descuento: descuento,
+        descripcion_descuento: discountReason,
         total: total,
         metodo_pago: metodoPago,
         items: items,
@@ -618,6 +666,8 @@ export function VenderView() {
       setDescuento(0);
       setMontoPagado(0);
       setShowConfirm(false);
+      setDiscountReason('');
+      setShowDiscountField(false);
 
       toast({
         title: "¡Venta procesada!",
@@ -625,12 +675,6 @@ export function VenderView() {
       });
 
       await loadCashStatus();
-
-      setTimeout(() => {
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-        }
-      }, 0);
     } catch (error) {
       toast({
         title: "Error",
@@ -738,6 +782,8 @@ export function VenderView() {
                     similarProductsData.get(product.idproducto) || [];
                   const isLoadingSimilars =
                     loadingSimilars.get(product.idproducto) || false;
+                  const cantidadEnCarrito = getCantidadEnCarrito(product.idproducto);
+                  const stockRestante = product.stock - cantidadEnCarrito;
 
                   return (
                     <div
@@ -778,9 +824,14 @@ export function VenderView() {
                               <Badge variant="outline" className="text-xs">
                                 {product.nombre_ubicacion}
                               </Badge>
+                              {cantidadEnCarrito > 0 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  En carrito: {cantidadEnCarrito} | Stock disponible: {stockRestante}
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-xs font-medium">
-                              Bs {formatBs(product.precio_venta)} | Stock:{" "}
+                              Bs {formatBs(product.precio_venta)} | Stock total:{" "}
                               {product.stock}
                             </p>
                           </div>
@@ -791,10 +842,10 @@ export function VenderView() {
                             e.stopPropagation();
                             agregarProducto(product);
                           }}
-                          disabled={product.stock === 0}
+                          disabled={stockRestante === 0}
                           className="ml-2 flex-shrink-0"
                         >
-                          {product.stock === 0 ? "Sin Stock" : "Agregar"}
+                          {stockRestante === 0 ? "Sin Stock" : "Agregar"}
                         </Button>
                       </div>
 
@@ -837,74 +888,78 @@ export function VenderView() {
                               </p>
                             </div>
                           ) : similarProducts.length > 0 ? (
-                            similarProducts.map((similar) => (
-                              <div
-                                key={similar.idproducto}
-                                className="bg-muted/30 rounded-lg p-3"
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex items-start gap-3 flex-1">
-                                    {(() => {
-                                      const imageUrl = getImageUrl(
-                                        similar.imagen,
-                                      );
-                                      return imageUrl ? (
-                                        <img
-                                          src={imageUrl}
-                                          alt={similar.nombre}
-                                          className="w-12 h-12 rounded-md object-cover"
-                                          onError={(e) => {
-                                            e.currentTarget.style.display =
-                                              "none";
-                                          }}
-                                        />
-                                      ) : (
-                                        <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center">
-                                          <span className="text-xs text-muted-foreground">
-                                            Sin img
-                                          </span>
+                            similarProducts.map((similar) => {
+                              const cantSimilarEnCarrito = getCantidadEnCarrito(similar.idproducto);
+                              const stockRestanteSimilar = similar.stock - cantSimilarEnCarrito;
+                              return (
+                                <div
+                                  key={similar.idproducto}
+                                  className="bg-muted/30 rounded-lg p-3"
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex items-start gap-3 flex-1">
+                                      {(() => {
+                                        const imageUrl = getImageUrl(
+                                          similar.imagen,
+                                        );
+                                        return imageUrl ? (
+                                          <img
+                                            src={imageUrl}
+                                            alt={similar.nombre}
+                                            className="w-12 h-12 rounded-md object-cover"
+                                            onError={(e) => {
+                                              e.currentTarget.style.display =
+                                                "none";
+                                            }}
+                                          />
+                                        ) : (
+                                          <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center">
+                                            <span className="text-xs text-muted-foreground">
+                                              Sin img
+                                            </span>
+                                          </div>
+                                        );
+                                      })()}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">
+                                          {similar.nombre}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground line-clamp-1">
+                                          {similar.descripcion?.substring(0, 60)}
+                                          ...
+                                        </p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                          >
+                                            {similar.nombre_ubicacion}
+                                          </Badge>
                                         </div>
-                                      );
-                                    })()}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium truncate">
-                                        {similar.nombre}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground line-clamp-1">
-                                        {similar.descripcion?.substring(0, 60)}
-                                        ...
-                                      </p>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <Badge
-                                          variant="outline"
-                                          className="text-xs"
-                                        >
-                                          {similar.nombre_ubicacion}
-                                        </Badge>
+                                        <p className="text-xs font-medium mt-1">
+                                          Bs {formatBs(similar.precio_venta)} |
+                                          Stock: {similar.stock}
+                                        </p>
                                       </div>
-                                      <p className="text-xs font-medium mt-1">
-                                        Bs {formatBs(similar.precio_venta)} |
-                                        Stock: {similar.stock}
-                                      </p>
                                     </div>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        agregarProducto(similar);
+                                      }}
+                                      disabled={stockRestanteSimilar === 0}
+                                      className="ml-2 flex-shrink-0 h-8"
+                                    >
+                                      {stockRestanteSimilar === 0
+                                        ? "Sin Stock"
+                                        : "Agregar"}
+                                    </Button>
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      agregarProducto(similar);
-                                    }}
-                                    disabled={similar.stock === 0}
-                                    className="ml-2 flex-shrink-0 h-8"
-                                  >
-                                    {similar.stock === 0
-                                      ? "Sin Stock"
-                                      : "Agregar"}
-                                  </Button>
                                 </div>
-                              </div>
-                            ))
+                              );
+                            })
                           ) : (
                             <div className="text-center py-4">
                               <p className="text-xs text-muted-foreground">
@@ -1042,27 +1097,39 @@ export function VenderView() {
                 <span>Bs {formatBs(subtotal)}</span>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <Label
-                  htmlFor="descuento"
-                  className="text-sm whitespace-nowrap"
-                >
-                  Descuento (Bs):
-                </Label>
-                <Input
-                  id="descuento"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={descuento || ""}
-                  onChange={(e) => setDescuento(Number(e.target.value) || 0)}
-                  placeholder="0"
-                  className="w-20 h-8 number-input-no-scroll"
-                  onWheel={(e) => e.currentTarget.blur()}
-                />
-                <span className="text-sm whitespace-nowrap">
-                  -Bs {formatBs(descuento)}
-                </span>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Label htmlFor="descuento" className="text-sm whitespace-nowrap">
+                    Descuento (Bs):
+                  </Label>
+                  <Input
+                    id="descuento"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={descuento || ""}
+                    onChange={(e) => handleDiscountChange(Number(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-20 h-8 number-input-no-scroll"
+                    onWheel={(e) => e.currentTarget.blur()}
+                  />
+                  <span className="text-sm whitespace-nowrap">
+                    -Bs {formatBs(descuento)}
+                  </span>
+                </div>
+
+                {showDiscountField && (
+                  <div className="mt-2">
+                    <Label htmlFor="discountReason">Justificación del descuento *</Label>
+                    <Textarea
+                      id="discountReason"
+                      value={discountReason}
+                      onChange={(e) => setDiscountReason(e.target.value)}
+                      placeholder="Explique el motivo del descuento..."
+                      rows={3}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-between text-lg font-bold border-t pt-2">

@@ -45,13 +45,6 @@ const menuItems = [
     icon: ShoppingCart,
     roles: ["admin", "asistente"],
   },
-  // Notas - ELIMINADO para ambos
-  // {
-  //   title: "Notas",
-  //   url: "notas",
-  //   icon: StickyNote,
-  //   roles: ["admin", "asistente"],
-  // },
   {
     title: "Productos",
     url: "productos",
@@ -65,20 +58,6 @@ const menuItems = [
     icon: TrendingUp,
     roles: ["admin", "asistente"],
   },
-  // Cotización - ELIMINADO para ambos
-  // {
-  //   title: "Cotización",
-  //   url: "cotizacion",
-  //   icon: FileText,
-  //   roles: ["admin", "asistente"],
-  // },
-  // Pagos Pendientes - ELIMINADO para ambos
-  // {
-  //   title: "Pagos Pendientes",
-  //   url: "pagos-pendientes",
-  //   icon: Clock,
-  //   roles: ["admin", "asistente"],
-  // },
   { title: "Caja", url: "caja", icon: CreditCard, roles: ["admin"] },
   {
     title: "Registra Movimiento",
@@ -86,10 +65,6 @@ const menuItems = [
     icon: CreditCard,
     roles: ["admin", "asistente"],
   },
-  // Reportes - ELIMINADO para admin
-  // { title: "Reportes", url: "reportes", icon: FileBarChart, roles: ["admin"] },
-  // Ecommerce - ELIMINADO para admin
-  // { title: "Ecommerce", url: "ecommerce", icon: Globe, roles: ["admin"] },
   {
     title: "Configuración",
     url: "configuracion",
@@ -161,8 +136,8 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
   }, [currentView, setOpenMobile]);
 
   return (
-    <Sidebar className="h-screen overflow-hidden bg-white dark:bg-gray-900">
-      <SidebarHeader className="p-4 flex-shrink-0 border-b bg-white dark:bg-gray-900">
+    <Sidebar className="h-screen overflow-hidden bg-background">
+      <SidebarHeader className="p-4 flex-shrink-0 border-b bg-background">
         <div className="flex items-center gap-2">
           <img
             src="/lovable-uploads/84af3e7f-9171-4c73-900f-9499a9673234.png"
@@ -172,7 +147,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-gray-900 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <SidebarContent className="flex-1 overflow-y-auto overflow-x-hidden bg-background [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -199,7 +174,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 flex-shrink-0 border-t bg-white dark:bg-gray-900">
+      <SidebarFooter className="p-4 flex-shrink-0 border-t bg-background">
         <Button
           variant="secondary"
           size={collapsed ? "sm" : "default"}

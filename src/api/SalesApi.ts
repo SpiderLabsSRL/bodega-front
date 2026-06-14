@@ -57,6 +57,7 @@ export interface SaleRequest {
   descuento: number;
   total: number;
   metodo_pago: "Efectivo" | "QR";
+  descripcion_descuento: string;
   items: SaleItem[];
   userId?: number;
 }

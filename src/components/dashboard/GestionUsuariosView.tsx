@@ -132,7 +132,7 @@ export function GestionUsuariosView() {
     setFormData({
       nombres: usuario.nombres,
       apellidos: usuario.apellidos,
-      telefono: usuario.telefono,
+      telefono: usuario.telefono ?? '',
       usuario: usuario.usuario,
       contraseña: "", // No cargar la contraseña
       rol: usuario.rol

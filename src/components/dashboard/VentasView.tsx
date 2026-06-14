@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { CalendarIcon, Download, Calendar as CalendarRangeIcon, Printer, Loader2, Check, X } from "lucide-react";
+import { CalendarIcon, Download, Calendar as CalendarRangeIcon, Printer, Loader2, Check, X, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -128,6 +128,7 @@ export function VentasView() {
   
   // Estados para detalle de venta
   const [ventaSeleccionada, setVentaSeleccionada] = useState<Venta | null>(null);
+  const [mostrarDetallesImpresion, setMostrarDetallesImpresion] = useState<boolean>(true);
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
   const [mostrarAlerta, setMostrarAlerta] = useState(false);
   const [nombreCliente, setNombreCliente] = useState("");
@@ -344,7 +345,8 @@ export function VentasView() {
     setMostrarRango(false);
   };
 
-  const abrirDetalleVenta = (venta: Venta) => {
+  const abrirDetalleVenta = (venta: Venta, imprimir : boolean = true) => {
+    setMostrarDetallesImpresion(imprimir);
     setVentaSeleccionada(venta);
     setMostrarDetalle(true);
     setNombreCliente("");
@@ -624,6 +626,7 @@ export function VentasView() {
                     <TableHead className="w-[130px] text-right">Total</TableHead>
                     <TableHead className="w-[120px]">Método</TableHead>
                     <TableHead className="w-[140px]">Impresión</TableHead>
+                    <TableHead className="w-[50px]">Detalle</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -720,6 +723,18 @@ export function VentasView() {
                             </Button>
                           </div>
                         </TableCell>
+                        <TableCell className="md:table-cell block md:border-0 border-0 p-0">
+                          <div className="flex justify-start md:justify-start">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => abrirDetalleVenta(venta, false)}
+                              className="flex items-center gap-2"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -738,32 +753,37 @@ export function VentasView() {
           </DialogHeader>
 
           {/* Formulario para datos del cliente */}
-          <div className="mb-6">
-            <div>
-              <Label htmlFor="nombreCliente">Nombre del Cliente</Label>
-              <Input
-                id="nombreCliente"
-                value={nombreCliente}
-                onChange={(e) => setNombreCliente(e.target.value)}
-                placeholder="Ingrese el nombre del cliente"
-              />
+          {mostrarDetallesImpresion && (
+            <div className="mb-6">
+              <div>
+                <Label htmlFor="nombreCliente">Nombre del Cliente</Label>
+                <Input
+                  id="nombreCliente"
+                  value={nombreCliente}
+                  onChange={(e) => setNombreCliente(e.target.value)}
+                  placeholder="Ingrese el nombre del cliente"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Contenido a imprimir */}
           <div id="detalle-venta-imprimir" className="space-y-6">
-            {/* Logo */}
-            <div className="logo text-center mb-6">
-              <img 
-                src="/lovable-uploads/84af3e7f-9171-4c73-900f-9499a9673234.png" 
-                alt="NEOLED Logo" 
-                className="h-16 mx-auto"
-              />
-            </div>
+            {mostrarDetallesImpresion && (
+              <div className="logo text-center mb-6">
+                <img 
+                  src="/lovable-uploads/84af3e7f-9171-4c73-900f-9499a9673234.png" 
+                  alt="Lumyla Logo" 
+                  className="h-16 mx-auto"
+                />
+              </div>
+            )}
 
             {/* Información del cliente */}
             <div className="info-cliente space-y-2">
-              <p><strong>Cliente:</strong> {nombreCliente || "No especificado"}</p>
+              {mostrarDetallesImpresion && (
+                <p><strong>Cliente:</strong> {nombreCliente || "No especificado"}</p>
+              )}
               <p><strong>Fecha:</strong> {ventaSeleccionada ? `${formatDateForDisplay(ventaSeleccionada.fecha)} ${formatTimeForDisplay(ventaSeleccionada.fecha)}` : ""}</p>
               <p><strong>Dirección:</strong> Av. Heroinas esq. Hamiraya #316</p>
               <p><strong>Números:</strong> 77950297 - 77918672</p>
@@ -774,6 +794,12 @@ export function VentasView() {
               <h3 className="font-semibold mb-2">Descripción de la Venta:</h3>
               <p className="text-sm">{ventaSeleccionada?.descripcion}</p>
             </div>
+            {ventaSeleccionada?.descripcion_descuento && (
+              <div className="descripcion-venta bg-muted/50 p-4 rounded-lg">
+                <h3 className="font-semibold mb-2">Descripción del descuento:</h3>
+                <p className="text-sm">{ventaSeleccionada?.descripcion_descuento}</p>
+              </div>
+            )}
 
             {/* Tabla de productos y totales - Solo si hay productos */}
             {ventaSeleccionada?.detalle && ventaSeleccionada.detalle.length > 0 && (
@@ -827,12 +853,14 @@ export function VentasView() {
           </div>
 
           {/* Botón de imprimir */}
-          <div className="flex justify-end mt-6">
-            <Button onClick={imprimirDetalle} className="flex items-center gap-2">
-              <Printer className="h-4 w-4" />
-              Descargar PDF
-            </Button>
-          </div>
+          {mostrarDetallesImpresion && (
+            <div className="flex justify-end mt-6">
+              <Button onClick={imprimirDetalle} className="flex items-center gap-2">
+                <Printer className="h-4 w-4" />
+                Descargar PDF
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
