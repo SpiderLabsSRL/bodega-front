@@ -24,102 +24,102 @@ input[type="number"] {
   margin: 0;
 }
 
-/* NEOLED Design System - Colores actualizados */
+/* NEOLED Design System - Colores actualizados (Amarillo suave, Negro y Blanco) */
 
 @layer base {
   :root {
-    --neoled-primary: 345 100% 23%;
-    --neoled-secondary: 25 78% 48%;
-    --neoled-accent: 36 89% 61%;
-    --neoled-background: 30 40% 94%;
-    --neoled-grey-90: 0 0% 10%;
-    --neoled-grey-50: 0 0% 50%;
-    --neoled-white: 0 0% 100%;
+    --neoled-primary: 48 100% 45%;    /* Amarillo mostaza/apagado */
+    --neoled-secondary: 0 0% 0%;      /* Negro */
+    --neoled-accent: 0 0% 100%;       /* Blanco */
+    --neoled-background: 0 0% 100%;   /* Blanco */
+    --neoled-grey-90: 0 0% 10%;       /* Negro 90% */
+    --neoled-grey-50: 0 0% 50%;       /* Gris medio */
+    --neoled-white: 0 0% 100%;        /* Blanco */
     
     /* Sistema de colores basado en la marca */
-    --background: 30 40% 94%;
-    --foreground: 345 100% 18%;
+    --background: 0 0% 100%;          /* Blanco */
+    --foreground: 0 0% 0%;            /* Negro */
     
-    --card: 30 40% 98%;
-    --card-foreground: 345 100% 23%;
+    --card: 0 0% 100%;                /* Blanco */
+    --card-foreground: 0 0% 0%;       /* Negro */
     
-    --popover: 30 40% 98%;
-    --popover-foreground: 345 100% 23%;
+    --popover: 0 0% 100%;             /* Blanco */
+    --popover-foreground: 0 0% 0%;    /* Negro */
     
-    --primary: 345 100% 23%;
-    --primary-foreground: 30 40% 94%;
+    --primary: 48 100% 45%;           /* Amarillo mostaza apagado */
+    --primary-foreground: 0 0% 0%;    /* Negro */
     
-    --secondary: 25 78% 48%;
-    --secondary-foreground: 30 40% 94%;
+    --secondary: 0 0% 0%;             /* Negro */
+    --secondary-foreground: 48 100% 45%; /* Amarillo mostaza */
     
-    --muted: 30 30% 90%;
-    --muted-foreground: 345 40% 35%;
+    --muted: 48 30% 96%;              /* Amarillo muy tenue */
+    --muted-foreground: 0 0% 20%;     /* Negro 80% */
     
-    --accent: 36 89% 61%;
-    --accent-foreground: 345 100% 18%;
+    --accent: 48 100% 45%;            /* Amarillo mostaza */
+    --accent-foreground: 0 0% 0%;     /* Negro */
     
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 30 40% 94%;
+    --destructive-foreground: 0 0% 100%; /* Blanco */
     
-    --border: 30 30% 85%;
-    --input: 30 40% 96%;
-    --ring: 345 100% 23%;
+    --border: 48 30% 88%;             /* Amarillo tenue */
+    --input: 48 30% 97%;              /* Amarillo muy claro */
+    --ring: 48 100% 45%;              /* Amarillo mostaza */
     
     --radius: 0.75rem;
     
     /* Gradientes */
-    --gradient-primary: linear-gradient(135deg, #73001C, #9e0026);
-    --gradient-secondary: linear-gradient(135deg, #D96A1D, #e8853a);
-    --gradient-accent: linear-gradient(135deg, #F4A340, #f6b55c);
-    --gradient-hero: linear-gradient(135deg, #73001C 0%, #9e0026 40%, #D96A1D 80%, #F4A340 100%);
+    --gradient-primary: linear-gradient(135deg, #C9A300, #B89500);
+    --gradient-secondary: linear-gradient(135deg, #000000, #1A1A1A);
+    --gradient-accent: linear-gradient(135deg, #FFFFFF, #F8F6F0);
+    --gradient-hero: linear-gradient(135deg, #C9A300 0%, #B89500 50%, #000000 100%);
     
     /* Sombras */
-    --shadow-neoled: 0 10px 30px -10px rgba(115, 0, 28, 0.3);
-    --shadow-glow: 0 0 40px rgba(244, 163, 64, 0.4);
-    --shadow-copper: 0 8px 25px -8px rgba(217, 106, 29, 0.35);
+    --shadow-neoled: 0 10px 30px -10px rgba(201, 163, 0, 0.25);
+    --shadow-glow: 0 0 40px rgba(201, 163, 0, 0.3);
+    --shadow-copper: 0 8px 25px -8px rgba(0, 0, 0, 0.35);
     
     /* Transiciones */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     
-    --sidebar-background: 345 100% 18%;
-    --sidebar-foreground: 30 40% 94%;
-    --sidebar-primary: 36 89% 61%;
-    --sidebar-primary-foreground: 345 100% 18%;
-    --sidebar-accent: 25 78% 48%;
-    --sidebar-accent-foreground: 30 40% 94%;
-    --sidebar-border: 345 50% 28%;
-    --sidebar-ring: 36 89% 61%;
+    --sidebar-background: 0 0% 0%;           /* Negro */
+    --sidebar-foreground: 48 100% 45%;       /* Amarillo mostaza */
+    --sidebar-primary: 48 100% 45%;          /* Amarillo mostaza */
+    --sidebar-primary-foreground: 0 0% 0%;   /* Negro */
+    --sidebar-accent: 0 0% 100%;             /* Blanco */
+    --sidebar-accent-foreground: 0 0% 0%;    /* Negro */
+    --sidebar-border: 48 80% 35%;             /* Amarillo oscuro */
+    --sidebar-ring: 48 100% 45%;             /* Amarillo mostaza */
   }
   
   .dark {
-    --background: 345 100% 10%;
-    --foreground: 30 40% 94%;
-    --card: 345 100% 14%;
-    --card-foreground: 30 40% 94%;
-    --popover: 345 100% 14%;
-    --popover-foreground: 30 40% 94%;
-    --primary: 36 89% 61%;
-    --primary-foreground: 345 100% 10%;
-    --secondary: 25 78% 48%;
-    --secondary-foreground: 30 40% 94%;
-    --muted: 345 50% 18%;
-    --muted-foreground: 30 30% 70%;
-    --accent: 25 78% 48%;
-    --accent-foreground: 30 40% 94%;
+    --background: 0 0% 0%;                   /* Negro */
+    --foreground: 48 100% 45%;               /* Amarillo mostaza */
+    --card: 0 0% 5%;                         /* Negro 5% más claro */
+    --card-foreground: 48 100% 45%;          /* Amarillo mostaza */
+    --popover: 0 0% 5%;                      /* Negro 5% más claro */
+    --popover-foreground: 48 100% 45%;       /* Amarillo mostaza */
+    --primary: 48 100% 45%;                  /* Amarillo mostaza */
+    --primary-foreground: 0 0% 0%;           /* Negro */
+    --secondary: 48 100% 45%;                /* Amarillo mostaza */
+    --secondary-foreground: 0 0% 0%;         /* Negro */
+    --muted: 48 30% 15%;                     /* Amarillo oscuro */
+    --muted-foreground: 48 30% 65%;          /* Amarillo claro */
+    --accent: 48 100% 45%;                   /* Amarillo mostaza */
+    --accent-foreground: 0 0% 0%;            /* Negro */
     --destructive: 0 62.8% 45%;
-    --destructive-foreground: 30 40% 94%;
-    --border: 345 50% 20%;
-    --input: 345 50% 18%;
-    --ring: 36 89% 61%;
-    --sidebar-background: 345 100% 8%;
-    --sidebar-foreground: 30 40% 94%;
-    --sidebar-primary: 36 89% 61%;
-    --sidebar-primary-foreground: 345 100% 10%;
-    --sidebar-accent: 25 78% 48%;
-    --sidebar-accent-foreground: 30 40% 94%;
-    --sidebar-border: 345 50% 18%;
-    --sidebar-ring: 36 89% 61%;
+    --destructive-foreground: 48 100% 45%;   /* Amarillo mostaza */
+    --border: 48 30% 20%;                    /* Amarillo muy oscuro */
+    --input: 48 30% 15%;                     /* Amarillo oscuro */
+    --ring: 48 100% 45%;                     /* Amarillo mostaza */
+    --sidebar-background: 0 0% 0%;           /* Negro */
+    --sidebar-foreground: 48 100% 45%;       /* Amarillo mostaza */
+    --sidebar-primary: 48 100% 45%;          /* Amarillo mostaza */
+    --sidebar-primary-foreground: 0 0% 0%;   /* Negro */
+    --sidebar-accent: 0 0% 100%;             /* Blanco */
+    --sidebar-accent-foreground: 0 0% 0%;    /* Negro */
+    --sidebar-border: 48 80% 30%;            /* Amarillo oscuro */
+    --sidebar-ring: 48 100% 45%;             /* Amarillo mostaza */
   }
 }
 
@@ -166,21 +166,21 @@ input[type="number"] {
   }
   
   .glow-effect {
-    filter: drop-shadow(0 0 20px rgba(244, 163, 64, 0.5));
+    filter: drop-shadow(0 0 20px rgba(201, 163, 0, 0.4));
     transition: filter 0.3s ease;
   }
   
   .glow-effect:hover {
-    filter: drop-shadow(0 0 30px rgba(244, 163, 64, 0.8));
+    filter: drop-shadow(0 0 30px rgba(201, 163, 0, 0.6));
   }
   
   .copper-glow {
-    filter: drop-shadow(0 0 15px rgba(217, 106, 29, 0.4));
+    filter: drop-shadow(0 0 15px rgba(0, 0, 0, 0.4));
     transition: filter 0.3s ease;
   }
   
   .copper-glow:hover {
-    filter: drop-shadow(0 0 25px rgba(217, 106, 29, 0.7));
+    filter: drop-shadow(0 0 25px rgba(0, 0, 0, 0.6));
   }
 }
 

@@ -713,7 +713,7 @@ export function VenderView() {
               ¡Bienvenido, {username}!
             </h2>
             <p className="text-muted-foreground">
-              Sistema de Farmacia LUMYRA
+              Sistema TRAXION
             </p>
           </div>
           <div className="text-right">

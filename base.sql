@@ -67,7 +67,8 @@ CREATE TABLE ventas (
     sub_total DECIMAL(10,2) NOT NULL CHECK (sub_total >= 0),
     descuento DECIMAL(10,2) DEFAULT 0 CHECK (descuento >= 0),
     total DECIMAL(10,2) NOT NULL CHECK (total >= 0),
-    metodo_pago VARCHAR(20) CHECK (metodo_pago IN ('Efectivo', 'QR'))
+    metodo_pago VARCHAR(20) CHECK (metodo_pago IN ('Efectivo', 'QR')),
+    descripcion_descuento TEXT
 );
 
 CREATE TABLE detalle_ventas (

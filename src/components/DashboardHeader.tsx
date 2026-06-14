@@ -12,7 +12,7 @@ export function DashboardHeader() {
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-primary">Sistema - LUMYRA</h1>
+          <h1 className="text-xl font-bold text-primary">Sistema - TRAXION</h1>
         </div>
       </div>
 
