@@ -9,6 +9,8 @@ import {
   Settings,
   LogOut,
   Clock,
+  Warehouse,
+  User,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -47,7 +49,12 @@ const menuItems = [
     icon: Package,
     roles: ["admin", "asistente"],
   },
-  { title: "Inventario", url: "inventario", icon: Package2, roles: ["admin"] },
+  { 
+    title: "Inventario", 
+    url: "inventario", 
+    icon: Package2, 
+    roles: ["admin"] 
+  },
   {
     title: "Ventas",
     url: "ventas",
@@ -66,11 +73,16 @@ const menuItems = [
     icon: Clock,
     roles: ["admin", "asistente"],
   },
-  { title: "Caja", url: "caja", icon: CreditCard, roles: ["admin"] },
   {
-    title: "Registra Movimiento",
-    url: "registra-movimiento",
-    icon: CreditCard,
+    title: "Bodega",
+    url: "bodega",
+    icon: Warehouse,
+    roles: ["admin"],
+  },
+  {
+    title: "Clientes",
+    url: "clientes",
+    icon: User,
     roles: ["admin", "asistente"],
   },
   {
@@ -156,22 +168,25 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
       <SidebarContent className="flex-1 overflow-y-auto overflow-x-hidden bg-background [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-2 p-2">
               {filteredMenuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     onClick={() =>
                       handleMenuItemClick(item.url as DashboardView)
                     }
-                    className={
-                      isActive(item.url)
+                    className={`
+                      py-3 px-4 h-auto min-h-[48px]
+                      ${isActive(item.url)
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-accent hover:text-accent-foreground"
-                    }
+                      }
+                      ${collapsed ? "justify-center px-2" : "justify-start"}
+                    `}
                     tooltip={collapsed ? item.title : undefined}
                   >
-                    <item.icon className="h-4 w-4" />
-                    {!collapsed && <span>{item.title}</span>}
+                    <item.icon className={`${collapsed ? "h-5 w-5" : "h-5 w-5"}`} />
+                    {!collapsed && <span className="text-base">{item.title}</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -185,10 +200,13 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
           variant="secondary"
           size={collapsed ? "sm" : "default"}
           onClick={handleLogout}
-          className="w-full"
+          className={`
+            w-full
+            ${collapsed ? "h-12 px-2" : "h-12"}
+          `}
         >
-          <LogOut className="h-4 w-4" />
-          {!collapsed && <span className="ml-2">Cerrar Sesión</span>}
+          <LogOut className={`${collapsed ? "h-5 w-5" : "h-5 w-5"}`} />
+          {!collapsed && <span className="ml-2 text-base">Cerrar Sesión</span>}
         </Button>
       </SidebarFooter>
     </Sidebar>

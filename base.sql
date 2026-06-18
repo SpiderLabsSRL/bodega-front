@@ -1,8 +1,12 @@
+-- ============================================
+-- TABLAS EXISTENTES (con modificaciones)
+-- ============================================
 
 CREATE TABLE ubicaciones (
     idubicacion SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL UNIQUE,
-    estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1))
+    estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1)),
+    idbodega INTEGER -- Nueva columna para asociar a bodega/sucursal
 );
 
 CREATE TABLE categorias (
@@ -17,7 +21,7 @@ CREATE TABLE tipos (
     estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1))
 );
 
--- Usuarios con rol directo
+-- Usuarios con rol directo y asignación a bodega/sucursal
 CREATE TABLE usuarios (
     idusuario SERIAL PRIMARY KEY,
     nombres VARCHAR(100) NOT NULL,
@@ -26,10 +30,11 @@ CREATE TABLE usuarios (
     usuario VARCHAR(50) UNIQUE NOT NULL,
     contraseña VARCHAR(255) NOT NULL,
     rol VARCHAR(20) CHECK (rol IN ('Admin', 'Asistente')),
-    estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1, 2))
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE SET NULL, -- Asignación a bodega/sucursal
+    estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1, 2)) -- 0: Activo, 1: Inactivo, 2: Eliminado
 );
 
--- Tablas de productos
+-- Tablas de productos (modificada)
 CREATE TABLE productos (
     idproducto SERIAL PRIMARY KEY,
     nombre VARCHAR(200) NOT NULL,
@@ -41,7 +46,9 @@ CREATE TABLE productos (
     precio_compra integer NOT NULL DEFAULT 0,
     stock integer NOT NULL DEFAULT 0,
     stock_minimo INTEGER NOT NULL DEFAULT 0,
-    codigo_barras VARCHAR(100) UNIQUE
+    codigo_barras VARCHAR(100) UNIQUE,
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE SET NULL, -- Identifica a qué bodega/sucursal pertenece
+    idproducto_principal INTEGER REFERENCES productos(idproducto) ON DELETE SET NULL -- Referencia al producto original en bodega principal
 );
 
 -- Relación muchos a muchos: Productos - Categorías
@@ -58,11 +65,13 @@ CREATE TABLE producto_tipos (
     PRIMARY KEY (idproducto, idtipo)
 );
 
--- Tablas de ventas y transacciones
+-- Tablas de ventas y transacciones (modificada)
 CREATE TABLE ventas (
     idventa SERIAL PRIMARY KEY,
     fecha_hora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     idusuario INTEGER REFERENCES usuarios(idusuario) NOT NULL,
+    idcliente INTEGER REFERENCES clientes(idcliente) ON DELETE SET NULL, -- Cliente opcional
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE SET NULL, -- Bodega donde se realizó la venta
     descripcion TEXT,
     sub_total DECIMAL(10,2) NOT NULL CHECK (sub_total >= 0),
     descuento DECIMAL(10,2) DEFAULT 0 CHECK (descuento >= 0),
@@ -86,7 +95,8 @@ CREATE TABLE estado_caja (
     estado VARCHAR(20) CHECK (estado IN ('abierta', 'cerrada')),
     monto_inicial DECIMAL(15, 2) DEFAULT 0,
     monto_final DECIMAL(15, 2) DEFAULT 0,
-    idusuario INTEGER REFERENCES usuarios(idusuario) NOT NULL
+    idusuario INTEGER REFERENCES usuarios(idusuario) NOT NULL,
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE SET NULL -- Caja asociada a una bodega/sucursal
 );
 
 CREATE TABLE transacciones_caja (
@@ -97,13 +107,14 @@ CREATE TABLE transacciones_caja (
     monto DECIMAL(15, 2) NOT NULL,
     fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     idusuario INTEGER REFERENCES usuarios(idusuario) NOT NULL,
-    idventa INTEGER REFERENCES ventas(idventa) NULL
+    idventa INTEGER REFERENCES ventas(idventa) NULL,
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE SET NULL -- Transacción asociada a una bodega
 );
 
--- Tablas de cotizaciones
+-- Tablas de cotizaciones (modificada)
 CREATE TABLE cotizaciones (
     idcotizacion SERIAL PRIMARY KEY,
-    vigencia TEXT, -- Días de vigencia en texto
+    vigencia TEXT,
     cliente_nombre VARCHAR(200) NOT NULL,
     cliente_telefono VARCHAR(20),
     cliente_direccion TEXT,
@@ -113,8 +124,10 @@ CREATE TABLE cotizaciones (
     total DECIMAL(10,2) NOT NULL CHECK (total >= 0),
     abono DECIMAL(10,2) DEFAULT 0 CHECK (abono >= 0),
     saldo DECIMAL(10,2) DEFAULT 0 CHECK (saldo >= 0),
-    estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1)), -- 0 activo, 1 eliminado
+    estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1)),
     idusuario INTEGER REFERENCES usuarios(idusuario) NOT NULL,
+    idcliente INTEGER REFERENCES clientes(idcliente) ON DELETE SET NULL, -- Cliente opcional
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE SET NULL, -- Bodega donde se realizó la cotización
     fecha_creacion TIMESTAMP DEFAULT TIMEZONE('America/La_Paz', NOW())
 );
 
@@ -140,7 +153,8 @@ CREATE TABLE objetivos (
     mes INTEGER NOT NULL CHECK (mes >= 1 AND mes <= 12),
     año INTEGER NOT NULL CHECK (año >= 2020),
     monto DECIMAL(10,2) NOT NULL CHECK (monto > 0),
-    UNIQUE(mes, año)
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE CASCADE, -- Objetivo por bodega/sucursal
+    UNIQUE(mes, año, idbodega)
 );
 
 CREATE TABLE carruseles (
@@ -163,24 +177,59 @@ CREATE TABLE notas (
     contenido TEXT NOT NULL,
     fecha DATE NOT NULL DEFAULT CURRENT_DATE
 );
+
 CREATE TABLE productos_similares (
     idproducto INTEGER REFERENCES productos(idproducto) ON DELETE CASCADE,
     idproducto_similar INTEGER REFERENCES productos(idproducto) ON DELETE CASCADE,
     PRIMARY KEY (idproducto, idproducto_similar),
     CHECK (idproducto != idproducto_similar)
 );
--- Índices para mejorar rendimiento
+
+-- ============================================
+-- NUEVAS TABLAS
+-- ============================================
+
+-- Tabla Bodega/Sucursal
+CREATE TABLE bodegas (
+    idbodega SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL UNIQUE,
+    tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('Principal', 'Sucursal')),
+    direccion TEXT,
+    telefono VARCHAR(20),
+    estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1)) -- 0: Activo, 1: Inactivo
+);
+
+-- Tabla Clientes
+CREATE TABLE clientes (
+    idcliente SERIAL PRIMARY KEY,
+    nombres VARCHAR(100) NOT NULL,
+    apellidos VARCHAR(100) NOT NULL,
+    carnet VARCHAR(20) UNIQUE NOT NULL,
+    celular VARCHAR(20),
+    nota TEXT,
+    estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1)) -- 0: Activo, 1: Inactivo
+);
+
+-- ============================================
+-- ÍNDICES MEJORADOS
+-- ============================================
+
 CREATE INDEX idx_ventas_fecha ON ventas(fecha_hora);
 CREATE INDEX idx_ventas_usuario ON ventas(idusuario);
+CREATE INDEX idx_ventas_cliente ON ventas(idcliente);
+CREATE INDEX idx_ventas_bodega ON ventas(idbodega);
 CREATE INDEX idx_transacciones_caja_fecha ON transacciones_caja(fecha);
 CREATE INDEX idx_transacciones_caja_usuario ON transacciones_caja(idusuario);
+CREATE INDEX idx_transacciones_caja_bodega ON transacciones_caja(idbodega);
 CREATE INDEX idx_detalle_ventas_venta ON detalle_ventas(idventa);
 CREATE INDEX idx_detalle_cotizaciones_cotizacion ON detalle_cotizaciones(idcotizacion);
 CREATE INDEX idx_productos_codigo_barras ON productos(codigo_barras);
 CREATE INDEX idx_productos_similares_producto ON productos_similares(idproducto);
 CREATE INDEX idx_productos_similares_similar ON productos_similares(idproducto_similar);
-
-
-
-
-
+CREATE INDEX idx_productos_bodega ON productos(idbodega);
+CREATE INDEX idx_ubicaciones_bodega ON ubicaciones(idbodega);
+CREATE INDEX idx_clientes_carnet ON clientes(carnet);
+CREATE INDEX idx_cotizaciones_cliente ON cotizaciones(idcliente);
+CREATE INDEX idx_cotizaciones_bodega ON cotizaciones(idbodega);
+CREATE INDEX idx_usuarios_bodega ON usuarios(idbodega);
+CREATE INDEX idx_estado_caja_bodega ON estado_caja(idbodega);

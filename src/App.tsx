@@ -17,13 +17,13 @@ import { InventarioView } from "@/components/dashboard/InventarioView";
 import { VentasView } from "@/components/dashboard/VentasView";
 import { CotizacionView } from "@/components/dashboard/CotizacionView";
 import { PagosPendientesView } from "@/components/dashboard/PagosPendientesView";
-import { CajaView } from "@/components/dashboard/CajaView";
-import { RegistraMovimientoView } from "@/components/dashboard/RegistraMovimientoView";
 import { ReportesView } from "@/components/dashboard/ReportesView";
 import { EcommerceView } from "@/components/dashboard/EcommerceView";
 import { ConfiguracionView } from "@/components/dashboard/ConfiguracionView";
 import { AlertasView } from "@/components/dashboard/AlertasView";
 import { GestionUsuariosView } from "@/components/dashboard/GestionUsuariosView";
+import { BodegaView } from "@/components/dashboard/BodegaView";
+import { ClientesView } from "@/components/dashboard/ClientesView";
 
 const queryClient = new QueryClient();
 
@@ -53,10 +53,10 @@ const App = () => (
             <Route path="ventas" element={<VentasView />} />
             <Route path="cotizacion" element={<CotizacionView />} />
             <Route path="pagos-pendientes" element={<PagosPendientesView />} />
-            <Route path="caja" element={<CajaView />} />
-            <Route path="registra-movimiento" element={<RegistraMovimientoView />} />
             <Route path="configuracion" element={<ConfiguracionView />} />
             <Route path="usuarios" element={<GestionUsuariosView />} />
+            <Route path="bodega" element={<BodegaView />} />
+            <Route path="clientes" element={<ClientesView />} />
           </Route>
           
           <Route path="*" element={<NotFound />} />
