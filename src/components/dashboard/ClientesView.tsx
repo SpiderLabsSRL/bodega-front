@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+// Clientes.tsx
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,68 +40,18 @@ import {
   Phone,
   CreditCard,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-// Datos mock para clientes
-interface Cliente {
-  id: number;
-  nombres: string;
-  apellidos: string;
-  carnet: string;
-  celular: string;
-  nota?: string;
-  fechaRegistro: string;
-}
-
-// Mock de clientes
-const mockClientes: Cliente[] = [
-  {
-    id: 1,
-    nombres: "María",
-    apellidos: "González Ramírez",
-    carnet: "1234567",
-    celular: "72123456",
-    nota: "Cliente preferente",
-    fechaRegistro: "2026-01-15",
-  },
-  {
-    id: 2,
-    nombres: "Carlos",
-    apellidos: "Mendoza Pérez",
-    carnet: "7654321",
-    celular: "71234567",
-    nota: "",
-    fechaRegistro: "2026-02-20",
-  },
-  {
-    id: 3,
-    nombres: "Ana",
-    apellidos: "Flores Jiménez",
-    carnet: "9876543",
-    celular: "70876543",
-    nota: "Cliente frecuente",
-    fechaRegistro: "2026-03-10",
-  },
-  {
-    id: 4,
-    nombres: "Roberto",
-    apellidos: "Sánchez Lima",
-    carnet: "4567890",
-    celular: "73456789",
-    nota: "Pago en efectivo",
-    fechaRegistro: "2026-04-05",
-  },
-  {
-    id: 5,
-    nombres: "Laura",
-    apellidos: "Torres Vaca",
-    carnet: "5432109",
-    celular: "74567890",
-    nota: "",
-    fechaRegistro: "2026-05-12",
-  },
-];
+import {
+  getClientes,
+  createCliente,
+  updateCliente,
+  deleteCliente,
+  toggleClienteStatus,
+  type Cliente,
+  type ClienteRequest,
+} from "@/api/clientesApi";
 
 interface ClienteFormData {
   nombres: string;
@@ -115,7 +66,9 @@ export function ClientesView() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [clientes, setClientes] = useState<Cliente[]>(mockClientes);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState<ClienteFormData>({
     nombres: "",
     apellidos: "",
@@ -124,6 +77,27 @@ export function ClientesView() {
     nota: "",
   });
   const { toast } = useToast();
+
+  // Cargar clientes al montar el componente
+  useEffect(() => {
+    loadClientes();
+  }, []);
+
+  const loadClientes = async () => {
+    try {
+      setLoading(true);
+      const data = await getClientes();
+      setClientes(data);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "No se pudieron cargar los clientes",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filtrar clientes
   const filteredClientes = useMemo(() => {
@@ -164,16 +138,36 @@ export function ClientesView() {
     setIsFormOpen(true);
   };
 
-  const handleDelete = (id: number, nombreCompleto: string) => {
-    setClientes(clientes.filter((c) => c.id !== id));
-    toast({
-      title: "Cliente eliminado",
-      description: `${nombreCompleto} ha sido eliminado.`,
-      variant: "destructive",
-    });
+  const handleDelete = async (id: number, nombreCompleto: string) => {
+    try {
+      await deleteCliente(id);
+      setClientes(clientes.filter((c) => c.id !== id));
+      toast({
+        title: "Cliente eliminado",
+        description: `${nombreCompleto} ha sido eliminado.`,
+        variant: "destructive",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "No se pudo eliminar el cliente",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleSubmit = () => {
+  // Validación para carnet: entre 5 y 13 caracteres (cualquier carácter)
+  const validateCarnet = (carnet: string): boolean => {
+    return carnet.length >= 5 && carnet.length <= 13;
+  };
+
+  // Validación para celular: solo números y el signo +, entre 6 y 12 caracteres
+  const validateCelular = (celular: string): boolean => {
+    const celularRegex = /^[0-9+]{6,12}$/;
+    return celularRegex.test(celular);
+  };
+
+  const handleSubmit = async () => {
     // Validaciones
     if (!formData.nombres.trim()) {
       toast({
@@ -199,6 +193,14 @@ export function ClientesView() {
       });
       return;
     }
+    if (!validateCarnet(formData.carnet.trim())) {
+      toast({
+        title: "Error",
+        description: "El carnet debe tener entre 5 y 13 caracteres",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!formData.celular.trim()) {
       toast({
         title: "Error",
@@ -207,45 +209,61 @@ export function ClientesView() {
       });
       return;
     }
-
-    if (isEditing && editingId !== null) {
-      // Editar cliente existente
-      setClientes(
-        clientes.map((c) =>
-          c.id === editingId
-            ? {
-                ...c,
-                ...formData,
-              }
-            : c
-        )
-      );
+    if (!validateCelular(formData.celular.trim())) {
       toast({
-        title: "Cliente actualizado",
-        description: `${formData.nombres} ${formData.apellidos} ha sido actualizado.`,
+        title: "Error",
+        description: "El celular debe tener entre 6 y 12 caracteres (solo números y el signo +)",
+        variant: "destructive",
       });
-    } else {
-      // Agregar nuevo cliente
-      const newCliente: Cliente = {
-        id: Math.max(...clientes.map((c) => c.id), 0) + 1,
-        ...formData,
-        fechaRegistro: new Date().toISOString().split("T")[0],
-      };
-      setClientes([...clientes, newCliente]);
-      toast({
-        title: "Cliente agregado",
-        description: `${formData.nombres} ${formData.apellidos} ha sido agregado.`,
-      });
+      return;
     }
 
-    setIsFormOpen(false);
-    setFormData({
-      nombres: "",
-      apellidos: "",
-      carnet: "",
-      celular: "",
-      nota: "",
-    });
+    try {
+      setSubmitting(true);
+      
+      const clienteData: ClienteRequest = {
+        nombres: formData.nombres.trim(),
+        apellidos: formData.apellidos.trim(),
+        carnet: formData.carnet.trim(),
+        celular: formData.celular.trim(),
+        nota: formData.nota.trim() || undefined,
+      };
+
+      if (isEditing && editingId !== null) {
+        // Editar cliente existente
+        const updated = await updateCliente(editingId, clienteData);
+        setClientes(clientes.map((c) => (c.id === editingId ? updated : c)));
+        toast({
+          title: "Cliente actualizado",
+          description: `${formData.nombres} ${formData.apellidos} ha sido actualizado.`,
+        });
+      } else {
+        // Agregar nuevo cliente
+        const newCliente = await createCliente(clienteData);
+        setClientes([...clientes, newCliente]);
+        toast({
+          title: "Cliente agregado",
+          description: `${formData.nombres} ${formData.apellidos} ha sido agregado.`,
+        });
+      }
+
+      setIsFormOpen(false);
+      setFormData({
+        nombres: "",
+        apellidos: "",
+        carnet: "",
+        celular: "",
+        nota: "",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "No se pudo guardar el cliente",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
@@ -260,11 +278,44 @@ export function ClientesView() {
   };
 
   const inputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target;
+    
+    // Para carnet: limitar a 13 caracteres
+    if (id === "carnet") {
+      if (value.length <= 13) {
+        setFormData({
+          ...formData,
+          [id]: value,
+        });
+      }
+      return;
+    }
+    
+    // Para celular: solo permitir números y el signo +, limitar a 12 caracteres
+    if (id === "celular") {
+      const validChars = value.replace(/[^0-9+]/g, "");
+      if (validChars.length <= 12) {
+        setFormData({
+          ...formData,
+          [id]: validChars,
+        });
+      }
+      return;
+    }
+
     setFormData({
       ...formData,
-      [e.target.id]: e.target.value,
+      [id]: value,
     });
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 md:space-y-6 p-2 md:p-0">
@@ -287,39 +338,53 @@ export function ClientesView() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="nombres">Nombre(s) *</Label>
+                <Label htmlFor="nombres">
+                  Nombre(s) <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="nombres"
                   placeholder="Ej: María"
                   value={formData.nombres}
                   onChange={inputChange}
+                  disabled={submitting}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="apellidos">Apellido(s) *</Label>
+                <Label htmlFor="apellidos">
+                  Apellido(s) <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="apellidos"
                   placeholder="Ej: González Ramírez"
                   value={formData.apellidos}
                   onChange={inputChange}
+                  disabled={submitting}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="carnet">Carnet *</Label>
+                <Label htmlFor="carnet">
+                  Carnet <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="carnet"
                   placeholder="Ej: 1234567"
                   value={formData.carnet}
                   onChange={inputChange}
+                  maxLength={13}
+                  disabled={submitting}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="celular">Celular *</Label>
+                <Label htmlFor="celular">
+                  Celular <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="celular"
                   placeholder="Ej: 72123456"
                   value={formData.celular}
                   onChange={inputChange}
+                  maxLength={12}
+                  disabled={submitting}
                 />
               </div>
               <div className="space-y-2">
@@ -329,78 +394,21 @@ export function ClientesView() {
                   placeholder="Observaciones adicionales..."
                   value={formData.nota}
                   onChange={inputChange}
+                  disabled={submitting}
                 />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={handleCancel}>
+              <Button variant="outline" onClick={handleCancel} disabled={submitting}>
                 Cancelar
               </Button>
-              <Button onClick={handleSubmit} className="bg-primary hover:bg-primary/90">
+              <Button onClick={handleSubmit} className="bg-primary hover:bg-primary/90" disabled={submitting}>
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isEditing ? "Actualizar" : "Guardar"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
-
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Clientes</p>
-                <p className="text-2xl font-bold">{clientes.length}</p>
-              </div>
-              <div className="p-3 bg-primary/10 rounded-full">
-                <User className="h-6 w-6 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Con Nota</p>
-                <p className="text-2xl font-bold">{clientes.filter(c => c.nota?.trim()).length}</p>
-              </div>
-              <div className="p-3 bg-blue-500/10 rounded-full">
-                <FileText className="h-6 w-6 text-blue-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Con Celular</p>
-                <p className="text-2xl font-bold">{clientes.filter(c => c.celular).length}</p>
-              </div>
-              <div className="p-3 bg-green-500/10 rounded-full">
-                <Phone className="h-6 w-6 text-green-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Con Carnet</p>
-                <p className="text-2xl font-bold">{clientes.filter(c => c.carnet).length}</p>
-              </div>
-              <div className="p-3 bg-orange-500/10 rounded-full">
-                <CreditCard className="h-6 w-6 text-orange-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Tabla de clientes */}
@@ -488,9 +496,6 @@ export function ClientesView() {
                       <span className="font-medium">Nota:</span> {cliente.nota}
                     </div>
                   )}
-                  <div className="text-xs text-muted-foreground">
-                    Registro: {cliente.fechaRegistro}
-                  </div>
                 </div>
               </Card>
             ))}
@@ -578,7 +583,7 @@ export function ClientesView() {
 
           {filteredClientes.length === 0 && (
             <div className="text-center text-muted-foreground py-8">
-              No se encontraron clientes
+              {searchTerm ? "No se encontraron clientes" : "No hay clientes registrados"}
             </div>
           )}
         </CardContent>
