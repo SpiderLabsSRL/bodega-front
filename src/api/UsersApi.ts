@@ -9,6 +9,8 @@ interface BackendUsuario {
   usuario: string;
   rol: "Admin" | "Asistente";
   estado: number;
+  idbodega?: number;
+  bodega_nombre?: string;
 }
 
 export interface Usuario {
@@ -19,6 +21,8 @@ export interface Usuario {
   usuario: string;
   rol: "admin" | "asistente";
   activo: boolean;
+  idbodega?: number;
+  bodega_nombre?: string;
 }
 
 export interface UsuarioRequest {
@@ -28,6 +32,7 @@ export interface UsuarioRequest {
   usuario: string;
   contraseña: string;
   rol: "admin" | "asistente";
+  idbodega: number;
 }
 
 const api = axios.create({
@@ -49,6 +54,8 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
       usuario: usuario.usuario,
       rol: usuario.rol.toLowerCase() as "admin" | "asistente",
       activo: usuario.estado === 0,
+      idbodega: usuario.idbodega,
+      bodega_nombre: usuario.bodega_nombre,
     }));
   } catch (error) {
     console.error("Error fetching users:", error);
@@ -65,6 +72,7 @@ export const createUsuario = async (usuario: UsuarioRequest): Promise<Usuario> =
       usuario: usuario.usuario,
       contraseña: usuario.contraseña,
       rol: usuario.rol.charAt(0).toUpperCase() + usuario.rol.slice(1),
+      idbodega: usuario.idbodega,
     });
     return mapBackendUsuario(response.data);
   } catch (error) {
@@ -82,6 +90,7 @@ export const updateUsuario = async (id: number, usuario: UsuarioRequest): Promis
       usuario: usuario.usuario,
       contraseña: usuario.contraseña || undefined,
       rol: usuario.rol.charAt(0).toUpperCase() + usuario.rol.slice(1),
+      idbodega: usuario.idbodega,
     });
     return mapBackendUsuario(response.data);
   } catch (error) {
@@ -117,6 +126,8 @@ function mapBackendUsuario(usuario: BackendUsuario): Usuario {
     telefono: usuario.telefono,
     usuario: usuario.usuario,
     rol: usuario.rol.toLowerCase() as "admin" | "asistente",
-    activo: usuario.estado === 1,
+    activo: usuario.estado === 0,
+    idbodega: usuario.idbodega,
+    bodega_nombre: usuario.bodega_nombre,
   };
 }

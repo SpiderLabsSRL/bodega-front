@@ -11,10 +11,23 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Edit, Trash2, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getUsuarios, createUsuario, updateUsuario, deleteUsuario, toggleUsuarioStatus, Usuario, UsuarioRequest } from "@/api/UsersApi";
+import { getBodegasActivas } from "@/api/BodegaApi";
+
+// Definir interfaz local para bodega
+interface Bodega {
+  id: number;
+  nombre: string;
+  tipo?: string;
+  direccion?: string;
+  telefono?: string;
+  estado?: number;
+}
 
 export function GestionUsuariosView() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cargandoBodegas, setCargandoBodegas] = useState(true);
   const [editandoUsuario, setEditandoUsuario] = useState<Usuario | null>(null);
   const [formData, setFormData] = useState({
     nombres: "",
@@ -22,15 +35,50 @@ export function GestionUsuariosView() {
     telefono: "",
     usuario: "",
     contraseña: "",
-    rol: "" as "admin" | "asistente" | ""
+    rol: "" as "admin" | "asistente" | "",
+    idbodega: "" as string | ""
   });
   const [mostrandoFormulario, setMostrandoFormulario] = useState(false);
   const [enviandoFormulario, setEnviandoFormulario] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    cargarUsuarios();
+    cargarDatosIniciales();
   }, []);
+
+  const cargarDatosIniciales = async () => {
+    try {
+      setLoading(true);
+      setCargandoBodegas(true);
+      
+      // Cargar usuarios y bodegas en paralelo
+      const [usuariosData, bodegasData] = await Promise.all([
+        getUsuarios(),
+        getBodegasActivas()
+      ]);
+      
+      setUsuarios(usuariosData);
+      // Mapear los datos de bodega al formato esperado
+      setBodegas(bodegasData.map(b => ({
+        id: b.idbodega,
+        nombre: b.nombre,
+        tipo: b.tipo,
+        direccion: b.direccion,
+        telefono: b.telefono,
+        estado: b.estado
+      })));
+    } catch (error) {
+      console.error("Error cargando datos iniciales:", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los datos",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      setCargandoBodegas(false);
+    }
+  };
 
   const cargarUsuarios = async () => {
     try {
@@ -56,7 +104,8 @@ export function GestionUsuariosView() {
       telefono: "",
       usuario: "",
       contraseña: "",
-      rol: ""
+      rol: "",
+      idbodega: ""
     });
     setEditandoUsuario(null);
     setMostrandoFormulario(false);
@@ -76,6 +125,16 @@ export function GestionUsuariosView() {
       return;
     }
 
+    // Validar bodega
+    if (!formData.idbodega) {
+      toast({
+        title: "Error",
+        description: "Debe seleccionar una bodega",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Bloquear el botón para evitar doble clic
     setEnviandoFormulario(true);
     
@@ -88,7 +147,8 @@ export function GestionUsuariosView() {
           telefono: formData.telefono,
           usuario: formData.usuario,
           contraseña: formData.contraseña,
-          rol: formData.rol as "admin" | "asistente"
+          rol: formData.rol as "admin" | "asistente",
+          idbodega: parseInt(formData.idbodega)
         };
         await updateUsuario(editandoUsuario.id, usuarioRequest);
         toast({
@@ -103,7 +163,8 @@ export function GestionUsuariosView() {
           telefono: formData.telefono,
           usuario: formData.usuario,
           contraseña: formData.contraseña,
-          rol: formData.rol as "admin" | "asistente"
+          rol: formData.rol as "admin" | "asistente",
+          idbodega: parseInt(formData.idbodega)
         };
         await createUsuario(usuarioRequest);
         toast({
@@ -135,7 +196,8 @@ export function GestionUsuariosView() {
       telefono: usuario.telefono ?? '',
       usuario: usuario.usuario,
       contraseña: "", // No cargar la contraseña
-      rol: usuario.rol
+      rol: usuario.rol,
+      idbodega: usuario.idbodega ? String(usuario.idbodega) : ""
     });
     setMostrandoFormulario(true);
   };
@@ -181,10 +243,17 @@ export function GestionUsuariosView() {
     setFormData({ ...formData, telefono: value });
   };
 
-  if (loading) {
+  // Obtener el nombre de la bodega por ID
+  const getBodegaNombre = (idbodega?: number) => {
+    if (!idbodega) return "Sin asignar";
+    const bodega = bodegas.find(b => b.id === idbodega);
+    return bodega ? bodega.nombre : "Bodega no encontrada";
+  };
+
+  if (loading && cargandoBodegas) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Cargando usuarios...</div>
+        <div className="text-lg">Cargando datos...</div>
       </div>
     );
   }
@@ -277,11 +346,39 @@ export function GestionUsuariosView() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label htmlFor="idbodega">Bodega *</Label>
+                  <Select 
+                    value={formData.idbodega} 
+                    onValueChange={(value) => setFormData({ ...formData, idbodega: value })}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar bodega" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bodegas.length === 0 ? (
+                        <SelectItem value="" disabled>No hay bodegas disponibles</SelectItem>
+                      ) : (
+                        bodegas.map((bodega) => (
+                          <SelectItem key={bodega.id} value={String(bodega.id)}>
+                            {bodega.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {bodegas.length === 0 && (
+                    <p className="text-sm text-yellow-600 mt-1">
+                      No hay bodegas activas. Crea una bodega primero.
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button 
                   type="submit" 
-                  disabled={enviandoFormulario || (formData.telefono.length !== 8 && formData.telefono.length > 0)}
+                  disabled={enviandoFormulario || (formData.telefono.length !== 8 && formData.telefono.length > 0) || bodegas.length === 0}
                 >
                   {enviandoFormulario ? "Procesando..." : (editandoUsuario ? "Actualizar" : "Crear")} Usuario
                 </Button>
@@ -311,6 +408,7 @@ export function GestionUsuariosView() {
                   <TableHead>Usuario</TableHead>
                   <TableHead>Teléfono</TableHead>
                   <TableHead>Rol</TableHead>
+                  <TableHead>Bodega</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Acciones</TableHead>
                 </TableRow>
@@ -318,7 +416,7 @@ export function GestionUsuariosView() {
               <TableBody>
                 {usuarios.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       No hay usuarios registrados
                     </TableCell>
                   </TableRow>
@@ -336,13 +434,21 @@ export function GestionUsuariosView() {
                       </TableCell>
                       <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
                         <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">TELÉFONO</div>
-                        <div className="text-center md:text-left">{usuario.telefono}</div>
+                        <div className="text-center md:text-left">{usuario.telefono || "No registrado"}</div>
                       </TableCell>
                       <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
                         <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">ROL</div>
                         <div className="flex justify-center md:justify-start">
                           <Badge variant={usuario.rol === "admin" ? "default" : "secondary"}>
                             {usuario.rol === "admin" ? "Admin" : "Asistente"}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
+                        <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">BODEGA</div>
+                        <div className="text-center md:text-left">
+                          <Badge variant="outline">
+                            {getBodegaNombre(usuario.idbodega)}
                           </Badge>
                         </div>
                       </TableCell>

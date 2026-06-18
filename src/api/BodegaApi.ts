@@ -75,6 +75,10 @@ export interface Sucursal {
   id: number;
   nombre: string;
   ubicacion: string;
+  tipo?: string;
+  direccion?: string;
+  telefono?: string;
+  estado?: number;
 }
 
 export interface BodegaRequest {
