@@ -141,7 +141,9 @@ export function ClientesView() {
   const handleDelete = async (id: number, nombreCompleto: string) => {
     try {
       await deleteCliente(id);
-      setClientes(clientes.filter((c) => c.id !== id));
+      // Recargar la lista desde el backend para asegurar que los datos estén actualizados
+      const data = await getClientes();
+      setClientes(data);
       toast({
         title: "Cliente eliminado",
         description: `${nombreCompleto} ha sido eliminado.`,
