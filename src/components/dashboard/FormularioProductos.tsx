@@ -1,3 +1,4 @@
+// src/components/dashboard/FormularioProductos.tsx
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,10 +28,10 @@ import {
   getCategorias,
 } from "@/api/ManagementSectionApi";
 import {
-  createProducto,
-  updateProducto,
+  createProductoBodega,
+  updateProductoBodega,
   getTodosProductosParaSelect,
-} from "@/api/ProductsApi";
+} from "@/api/BodegaApi";
 
 interface ProductFormData {
   id?: string;
@@ -47,6 +48,7 @@ interface ProductFormData {
   codigoBarras?: string;
   productosSimilares?: number[];
   productosSimilaresData?: Array<{ idproducto: number; nombre: string }>;
+  idbodega?: number;
 }
 
 interface FormularioProductosProps {
@@ -56,6 +58,7 @@ interface FormularioProductosProps {
   onSubmit: (productData: ProductFormData, isEditing: boolean) => void;
   onCancel: () => void;
   onRefreshData?: () => void;
+  idbodega?: number;
 }
 
 interface AddDialogState {
@@ -281,6 +284,7 @@ export function FormularioProductos({
   onSubmit,
   onCancel,
   onRefreshData,
+  idbodega,
 }: FormularioProductosProps) {
   const [formData, setFormData] = useState<ProductFormData>(() => {
     if (product) {
@@ -302,6 +306,7 @@ export function FormularioProductos({
         productosSimilares:
           product.productos_similares?.map((p: any) => p.idproducto) || [],
         productosSimilaresData: product.productos_similares || [],
+        idbodega: product.idbodega || idbodega || 1,
       };
     }
     return {
@@ -318,6 +323,7 @@ export function FormularioProductos({
       codigoBarras: "",
       productosSimilares: [],
       productosSimilaresData: [],
+      idbodega: idbodega || 1,
     };
   });
 
@@ -554,6 +560,10 @@ export function FormularioProductos({
         : Number(formData.stockMinimo);
       formDataToSend.append("stock_minimo", stockMinimoValue.toString());
 
+      // IMPORTANTE: Enviar idbodega para que el stock se guarde en producto_bodega
+      const bodegaId = formData.idbodega || idbodega || 1;
+      formDataToSend.append("idbodega", bodegaId.toString());
+
       if (formData.codigoBarras && formData.codigoBarras.trim()) {
         formDataToSend.append("codigo_barras", formData.codigoBarras.trim());
       }
@@ -573,13 +583,15 @@ export function FormularioProductos({
       }
 
       if (product && formData.id) {
-        await updateProducto(parseInt(formData.id), formDataToSend);
+        // USAR updateProductoBodega en lugar de updateProducto
+        await updateProductoBodega(parseInt(formData.id), formDataToSend);
         toast({
           title: "Producto actualizado",
           description: "El producto ha sido actualizado exitosamente.",
         });
       } else {
-        await createProducto(formDataToSend);
+        // USAR createProductoBodega en lugar de createProducto
+        await createProductoBodega(formDataToSend);
         toast({
           title: "Producto creado",
           description: "El producto ha sido creado exitosamente.",

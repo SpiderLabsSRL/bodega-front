@@ -180,6 +180,19 @@ export const getAllProductosBodega = async (): Promise<ProductoBodega[]> => {
   }
 };
 
+export const getTodosProductosParaSelect = async (): Promise<Array<{ idproducto: number; nombre: string }>> => {
+  try {
+    const response = await api.get<BackendProductoBodega[]>("/bodegas/productos/todos");
+    return response.data.map(p => ({
+      idproducto: p.idproducto,
+      nombre: p.nombre
+    }));
+  } catch (error) {
+    console.error("Error fetching productos para select:", error);
+    return [];
+  }
+};
+
 export const createProductoBodega = async (formData: FormData): Promise<ProductoBodega> => {
   try {
     const response = await api.post<BackendProductoBodega>("/bodegas/productos", formData, {
