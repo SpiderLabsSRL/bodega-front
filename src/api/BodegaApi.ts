@@ -317,7 +317,7 @@ function mapBackendProductoBodega(producto: BackendProductoBodega): ProductoBode
     ubicacion: producto.ubicacion_nombre || "Sin ubicación",
     precio: parseFloat(producto.precio_venta) || 0,
     precio_compra: parseFloat(producto.precio_compra) || 0,
-    proveedor: "Laboratorios Andes",
+    proveedor: "", // Quitamos "Laboratorios Andes"
     imagen: imagenBase64,
     idbodega: producto.idbodega,
     bodega_nombre: producto.bodega_nombre,

@@ -249,6 +249,20 @@ export function BodegaView() {
   const userRole = localStorage.getItem("userRole") || "admin";
   const isAssistant = userRole === "Asistente";
 
+  // Función para refrescar ubicaciones y categorías
+  const refreshUbicacionesYCategorias = useCallback(async () => {
+    try {
+      const [ubicacionesData, categoriasData] = await Promise.all([
+        getUbicaciones(),
+        getCategorias(),
+      ]);
+      setUbicaciones(ubicacionesData.map((item) => item.nombre));
+      setCategorias(categoriasData);
+    } catch (error) {
+      console.error("Error refrescando ubicaciones y categorías:", error);
+    }
+  }, []);
+
   // Cargar datos iniciales
   useEffect(() => {
     const loadInitialData = async () => {
@@ -634,6 +648,9 @@ export function BodegaView() {
         });
       }
 
+      // Refrescar ubicaciones y categorías después de crear/editar
+      await refreshUbicacionesYCategorias();
+
       if (showAllProducts) {
         await loadAllProductos();
       } else if (selectedBodega) {
@@ -731,6 +748,7 @@ export function BodegaView() {
                     categorias={categorias.map(c => c.nombre)}
                     onSubmit={handleFormSubmit}
                     onCancel={handleFormCancel}
+                    onRefreshData={refreshUbicacionesYCategorias}
                   />
                 </div>
               </DialogContent>
@@ -979,7 +997,6 @@ export function BodegaView() {
                               </div>
                               <div>
                                 <div className="font-medium text-sm">{product.nombre}</div>
-                                <div className="text-xs text-muted-foreground">{product.proveedor}</div>
                               </div>
                             </div>
                           </TableCell>

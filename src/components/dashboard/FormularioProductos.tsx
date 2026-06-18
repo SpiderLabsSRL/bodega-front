@@ -287,14 +287,14 @@ const base64ToFile = (base64String, fileName = "imagen.jpg") => {
 
 export function FormularioProductos({
   product,
-  ubicaciones,
-  categorias,
+  ubicaciones: ubicacionesProp,
+  categorias: categoriasProp,
   onSubmit,
   onCancel,
   onRefreshData,
   idbodega,
 }: FormularioProductosProps) {
-  const getInitialFormData = (): ProductFormData => {
+  const [formData, setFormData] = useState<ProductFormData>(() => {
     if (!product) {
       return {
         nombre: "",
@@ -340,9 +340,8 @@ export function FormularioProductos({
       productosSimilaresData: product.productos_similares || [],
       idbodega: product.idbodega || idbodega || 1,
     };
-  };
+  });
 
-  const [formData, setFormData] = useState<ProductFormData>(getInitialFormData);
   const [addDialogState, setAddDialogState] = useState<AddDialogState>({
     open: false,
     type: null,
@@ -351,9 +350,13 @@ export function FormularioProductos({
   const [loadingProductos, setLoadingProductos] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
-  const [localLists, setLocalLists] = useState({
-    ubicaciones: ubicaciones,
-    categorias: categorias,
+  // Estado local para ubicaciones y categorías
+  const [localLists, setLocalLists] = useState<{
+    ubicaciones: string[];
+    categorias: string[];
+  }>({
+    ubicaciones: ubicacionesProp || [],
+    categorias: categoriasProp || [],
   });
 
   const [managementItems, setManagementItems] = useState<{
@@ -370,9 +373,63 @@ export function FormularioProductos({
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
+  // Actualizar listas locales cuando cambian las props
   useEffect(() => {
-    setFormData(getInitialFormData());
-  }, [product]);
+    setLocalLists({
+      ubicaciones: ubicacionesProp || [],
+      categorias: categoriasProp || [],
+    });
+  }, [ubicacionesProp, categoriasProp]);
+
+  // Actualizar el formulario cuando cambia el producto
+  useEffect(() => {
+    if (!product) {
+      setFormData({
+        nombre: "",
+        categorias: [],
+        descripcion: "",
+        ubicacion: "",
+        precioVenta: "",
+        precioCompra: "",
+        stock: "",
+        stockMinimo: "",
+        imagen: "",
+        imagenFile: null,
+        codigoBarras: "",
+        productosSimilares: [],
+        productosSimilaresData: [],
+        idbodega: idbodega || 1,
+      });
+      return;
+    }
+
+    let categoriasArray = [];
+    if (product.categorias) {
+      if (Array.isArray(product.categorias)) {
+        categoriasArray = product.categorias;
+      } else {
+        categoriasArray = [product.categorias];
+      }
+    }
+
+    setFormData({
+      id: product.idproducto?.toString() || product.id?.toString(),
+      nombre: product.nombre || "",
+      categorias: categoriasArray,
+      descripcion: product.descripcion || "",
+      ubicacion: product.ubicacion || "",
+      precioVenta: product.precio_venta?.toString() || product.precio?.toString() || "",
+      precioCompra: product.precio_compra?.toString() || "",
+      stock: product.stock?.toString() || "",
+      stockMinimo: product.stock_minimo?.toString() || "",
+      imagen: product.imagen || "",
+      imagenFile: product.imagen ? base64ToFile(product.imagen, "producto.jpg") : null,
+      codigoBarras: product.codigo_barras || product.codigo || "",
+      productosSimilares: product.productos_similares?.map((p: any) => p.idproducto) || [],
+      productosSimilaresData: product.productos_similares || [],
+      idbodega: product.idbodega || idbodega || 1,
+    });
+  }, [product, idbodega]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -419,6 +476,7 @@ export function FormularioProductos({
     loadTodosProductos();
   }, []);
 
+  // Cargar elementos de gestión iniciales
   useEffect(() => {
     const loadManagementItems = async () => {
       try {
@@ -427,14 +485,17 @@ export function FormularioProductos({
           getCategorias(),
         ]);
 
+        const ubicacionesNombres = ubicacionesData.map((item) => item.nombre);
+        const categoriasNombres = categoriasData.map((item) => item.nombre);
+
         setManagementItems({
           ubicaciones: ubicacionesData,
           categorias: categoriasData,
         });
 
         setLocalLists({
-          ubicaciones: ubicacionesData.map((item) => item.nombre),
-          categorias: categoriasData.map((item) => item.nombre),
+          ubicaciones: ubicacionesNombres,
+          categorias: categoriasNombres,
         });
       } catch (error) {
         console.error("Error cargando elementos de gestión:", error);
@@ -443,13 +504,6 @@ export function FormularioProductos({
 
     loadManagementItems();
   }, []);
-
-  useEffect(() => {
-    setLocalLists({
-      ubicaciones: ubicaciones,
-      categorias: categorias,
-    });
-  }, [ubicaciones, categorias]);
 
   const handleInputChange = (
     field: keyof ProductFormData,
@@ -471,6 +525,85 @@ export function FormularioProductos({
   const getItemIdByName = (items: ManagementItem[], name: string): number => {
     const item = items.find((item) => item.nombre === name);
     return item?.id || 0;
+  };
+
+  // Función para actualizar las listas después de agregar un nuevo elemento
+  const updateLocalLists = async (type: string) => {
+    try {
+      let ubicacionesData: ManagementItem[] = [];
+      let categoriasData: ManagementItem[] = [];
+
+      if (type === "ubicacion" || type === "all") {
+        ubicacionesData = await getUbicaciones();
+        const ubicacionesNombres = ubicacionesData.map((item) => item.nombre);
+        setManagementItems((prev) => ({ ...prev, ubicaciones: ubicacionesData }));
+        setLocalLists((prev) => ({
+          ...prev,
+          ubicaciones: ubicacionesNombres,
+        }));
+      }
+
+      if (type === "categoria" || type === "all") {
+        categoriasData = await getCategorias();
+        const categoriasNombres = categoriasData.map((item) => item.nombre);
+        setManagementItems((prev) => ({ ...prev, categorias: categoriasData }));
+        setLocalLists((prev) => ({
+          ...prev,
+          categorias: categoriasNombres,
+        }));
+      }
+
+      // Llamar a onRefreshData si existe para actualizar también en el padre
+      if (onRefreshData) {
+        await onRefreshData();
+      }
+    } catch (error) {
+      console.error(`Error actualizando listas:`, error);
+    }
+  };
+
+  const handleAddNewElement = async (name: string) => {
+    if (isAddingElement) return;
+
+    const type = addDialogState.type;
+    if (!type) return;
+
+    setIsAddingElement(true);
+
+    try {
+      switch (type) {
+        case "categoria":
+          await createCategoria({ nombre: name });
+          break;
+        case "ubicacion":
+          await createUbicacion({ nombre: name });
+          break;
+      }
+
+      // Actualizar las listas inmediatamente después de crear
+      await updateLocalLists(type);
+
+      // Si se creó una ubicación, seleccionarla automáticamente
+      if (type === "ubicacion") {
+        handleInputChange("ubicacion", name);
+      }
+
+      toast({
+        title: `${type.charAt(0).toUpperCase() + type.slice(1)} agregado`,
+        description: `El ${type} "${name}" ha sido agregado exitosamente.`,
+      });
+
+      setAddDialogState({ open: false, type: null });
+    } catch (error) {
+      console.error(`Error agregando ${type}:`, error);
+      toast({
+        title: "Error",
+        description: `No se pudo agregar el ${type}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingElement(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -630,77 +763,6 @@ export function FormularioProductos({
 
   const openAddDialog = (type: "categoria" | "ubicacion") => {
     setAddDialogState({ open: true, type });
-  };
-
-  const updateLocalList = async (type: string) => {
-    try {
-      let newData: ManagementItem[] = [];
-
-      switch (type) {
-        case "ubicacion":
-          newData = await getUbicaciones();
-          setManagementItems((prev) => ({ ...prev, ubicaciones: newData }));
-          setLocalLists((prev) => ({
-            ...prev,
-            ubicaciones: newData.map((item) => item.nombre),
-          }));
-          break;
-        case "categoria":
-          newData = await getCategorias();
-          setManagementItems((prev) => ({ ...prev, categorias: newData }));
-          setLocalLists((prev) => ({
-            ...prev,
-            categorias: newData.map((item) => item.nombre),
-          }));
-          break;
-        default:
-          return;
-      }
-    } catch (error) {
-      console.error(`Error actualizando lista ${type}:`, error);
-    }
-  };
-
-  const handleAddNewElement = async (name: string) => {
-    if (isAddingElement) return;
-
-    const type = addDialogState.type;
-    if (!type) return;
-
-    setIsAddingElement(true);
-
-    try {
-      switch (type) {
-        case "categoria":
-          await createCategoria({ nombre: name });
-          break;
-        case "ubicacion":
-          await createUbicacion({ nombre: name });
-          break;
-      }
-
-      await updateLocalList(type);
-
-      toast({
-        title: `${type.charAt(0).toUpperCase() + type.slice(1)} agregado`,
-        description: `El ${type} "${name}" ha sido agregado exitosamente.`,
-      });
-
-      if (onRefreshData) {
-        onRefreshData();
-      }
-
-      setAddDialogState({ open: false, type: null });
-    } catch (error) {
-      console.error(`Error agregando ${type}:`, error);
-      toast({
-        title: "Error",
-        description: `No se pudo agregar el ${type}`,
-        variant: "destructive",
-      });
-    } finally {
-      setIsAddingElement(false);
-    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
