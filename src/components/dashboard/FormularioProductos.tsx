@@ -1,5 +1,5 @@
 // src/components/dashboard/FormularioProductos.tsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,13 +49,14 @@ interface ProductFormData {
   productosSimilares?: number[];
   productosSimilaresData?: Array<{ idproducto: number; nombre: string }>;
   idbodega?: number;
+  idubicacion?: number;
 }
 
 interface FormularioProductosProps {
   product?: any;
   ubicaciones: string[];
   categorias: string[];
-  onSubmit: (productData: ProductFormData, isEditing: boolean) => void;
+  onSubmit: (productData: any, isEditing: boolean) => void;
   onCancel: () => void;
   onRefreshData?: () => void;
   idbodega?: number;
@@ -261,20 +262,27 @@ const ProductoSimilarSelect = ({
 };
 
 const base64ToFile = (base64String, fileName = "imagen.jpg") => {
-  const [metadata, data] = base64String.split(",");
-  const mime = metadata.match(/:(.*?);/)[1];
+  if (!base64String) return null;
+  
+  try {
+    const [metadata, data] = base64String.split(",");
+    const mime = metadata.match(/:(.*?);/)[1];
 
-  const byteCharacters = atob(data);
-  const byteArrays = [];
+    const byteCharacters = atob(data);
+    const byteArrays = [];
 
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteArrays.push(byteCharacters.charCodeAt(i));
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteArrays.push(byteCharacters.charCodeAt(i));
+    }
+
+    const byteArray = new Uint8Array(byteArrays);
+    const blob = new Blob([byteArray], { type: mime });
+
+    return new File([blob], fileName, { type: mime });
+  } catch (error) {
+    console.error("Error converting base64 to file:", error);
+    return null;
   }
-
-  const byteArray = new Uint8Array(byteArrays);
-  const blob = new Blob([byteArray], { type: mime });
-
-  return new File([blob], fileName, { type: mime });
 };
 
 export function FormularioProductos({
@@ -286,47 +294,55 @@ export function FormularioProductos({
   onRefreshData,
   idbodega,
 }: FormularioProductosProps) {
-  const [formData, setFormData] = useState<ProductFormData>(() => {
-    if (product) {
+  const getInitialFormData = (): ProductFormData => {
+    if (!product) {
       return {
-        id: product.idproducto?.toString(),
-        nombre: product.nombre,
-        categorias: product.categorias || [],
-        descripcion: product.descripcion || "",
-        ubicacion: product.ubicacion || "",
-        precioVenta: product.precio_venta?.toString() || "",
-        precioCompra: product.precio_compra?.toString() || "",
-        stock: product.stock?.toString() || "",
-        stockMinimo: product.stock_minimo?.toString() || "",
-        imagen: product.imagen || "",
-        imagenFile: product.imagen
-          ? base64ToFile(product.imagen, "producto.jpg")
-          : null,
-        codigoBarras: product.codigo_barras || "",
-        productosSimilares:
-          product.productos_similares?.map((p: any) => p.idproducto) || [],
-        productosSimilaresData: product.productos_similares || [],
-        idbodega: product.idbodega || idbodega || 1,
+        nombre: "",
+        categorias: [],
+        descripcion: "",
+        ubicacion: "",
+        precioVenta: "",
+        precioCompra: "",
+        stock: "",
+        stockMinimo: "",
+        imagen: "",
+        imagenFile: null,
+        codigoBarras: "",
+        productosSimilares: [],
+        productosSimilaresData: [],
+        idbodega: idbodega || 1,
       };
     }
-    return {
-      nombre: "",
-      categorias: [],
-      descripcion: "",
-      ubicacion: "",
-      precioVenta: "",
-      precioCompra: "",
-      stock: "",
-      stockMinimo: "",
-      imagen: "",
-      imagenFile: null,
-      codigoBarras: "",
-      productosSimilares: [],
-      productosSimilaresData: [],
-      idbodega: idbodega || 1,
-    };
-  });
 
+    let categoriasArray = [];
+    if (product.categorias) {
+      if (Array.isArray(product.categorias)) {
+        categoriasArray = product.categorias;
+      } else {
+        categoriasArray = [product.categorias];
+      }
+    }
+
+    return {
+      id: product.idproducto?.toString() || product.id?.toString(),
+      nombre: product.nombre || "",
+      categorias: categoriasArray,
+      descripcion: product.descripcion || "",
+      ubicacion: product.ubicacion || "",
+      precioVenta: product.precio_venta?.toString() || product.precio?.toString() || "",
+      precioCompra: product.precio_compra?.toString() || "",
+      stock: product.stock?.toString() || "",
+      stockMinimo: product.stock_minimo?.toString() || "",
+      imagen: product.imagen || "",
+      imagenFile: product.imagen ? base64ToFile(product.imagen, "producto.jpg") : null,
+      codigoBarras: product.codigo_barras || product.codigo || "",
+      productosSimilares: product.productos_similares?.map((p: any) => p.idproducto) || [],
+      productosSimilaresData: product.productos_similares || [],
+      idbodega: product.idbodega || idbodega || 1,
+    };
+  };
+
+  const [formData, setFormData] = useState<ProductFormData>(getInitialFormData);
   const [addDialogState, setAddDialogState] = useState<AddDialogState>({
     open: false,
     type: null,
@@ -354,7 +370,10 @@ export function FormularioProductos({
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
-  // Manejar historial del navegador para el escáner
+  useEffect(() => {
+    setFormData(getInitialFormData());
+  }, [product]);
+
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       if (showScanner) {
@@ -459,7 +478,7 @@ export function FormularioProductos({
 
     if (isSubmittingProduct) return;
 
-    if (!formData.nombre.trim()) {
+    if (!formData.nombre?.trim()) {
       toast({
         title: "Error",
         description: "El nombre del producto es obligatorio",
@@ -477,7 +496,7 @@ export function FormularioProductos({
       return;
     }
 
-    if (formData.categorias.length === 0) {
+    if (!formData.categorias || formData.categorias.length === 0) {
       toast({
         title: "Error",
         description: "Debe seleccionar al menos una categoría",
@@ -486,16 +505,17 @@ export function FormularioProductos({
       return;
     }
 
-    if (!formData.precioVenta || formData.precioVenta === "") {
+    const precioVentaNum = Number(formData.precioVenta);
+    if (isNaN(precioVentaNum) || precioVentaNum <= 0) {
       toast({
         title: "Error",
-        description: "El precio de venta es obligatorio",
+        description: "El precio de venta debe ser un número válido mayor a 0",
         variant: "destructive",
       });
       return;
     }
 
-    if (!formData.descripcion.trim()) {
+    if (!formData.descripcion?.trim()) {
       toast({
         title: "Error",
         description: "La descripción es obligatoria",
@@ -531,47 +551,32 @@ export function FormularioProductos({
       formDataToSend.append("nombre", formData.nombre);
       formDataToSend.append("descripcion", descripcionFormateada);
       formDataToSend.append("idubicacion", idubicacion.toString());
-      formDataToSend.append(
-        "categorias",
-        JSON.stringify(
-          formData.categorias.map((cat) =>
-            getItemIdByName(managementItems.categorias, cat),
-          ),
-        ),
-      );
       
-      const precioVentaValue = formData.precioVenta === "" || formData.precioVenta === null || formData.precioVenta === undefined 
-        ? 0 
-        : Number(formData.precioVenta);
-      formDataToSend.append("precio_venta", precioVentaValue.toString());
+      const categoriasIds = formData.categorias.map((cat) =>
+        getItemIdByName(managementItems.categorias, cat)
+      ).filter(id => id > 0);
       
-      const precioCompraValue = formData.precioCompra === "" || formData.precioCompra === null || formData.precioCompra === undefined 
-        ? 0 
-        : Number(formData.precioCompra);
-      formDataToSend.append("precio_compra", precioCompraValue.toString());
+      formDataToSend.append("categorias", JSON.stringify(categoriasIds));
       
-      const stockValue = formData.stock === "" || formData.stock === null || formData.stock === undefined 
-        ? 0 
-        : Number(formData.stock);
-      formDataToSend.append("stock", stockValue.toString());
+      formDataToSend.append("precio_venta", precioVentaNum.toString());
       
-      const stockMinimoValue = formData.stockMinimo === "" || formData.stockMinimo === null || formData.stockMinimo === undefined 
-        ? 0 
-        : Number(formData.stockMinimo);
-      formDataToSend.append("stock_minimo", stockMinimoValue.toString());
+      const precioCompraNum = Number(formData.precioCompra) || 0;
+      formDataToSend.append("precio_compra", precioCompraNum.toString());
+      
+      const stockNum = Number(formData.stock) || 0;
+      formDataToSend.append("stock", stockNum.toString());
+      
+      const stockMinimoNum = Number(formData.stockMinimo) || 0;
+      formDataToSend.append("stock_minimo", stockMinimoNum.toString());
 
-      // IMPORTANTE: Enviar idbodega para que el stock se guarde en producto_bodega
       const bodegaId = formData.idbodega || idbodega || 1;
       formDataToSend.append("idbodega", bodegaId.toString());
 
-      if (formData.codigoBarras && formData.codigoBarras.trim()) {
+      if (formData.codigoBarras && formData.codigoBarras.trim() !== "") {
         formDataToSend.append("codigo_barras", formData.codigoBarras.trim());
       }
 
-      if (
-        formData.productosSimilares &&
-        formData.productosSimilares.length > 0
-      ) {
+      if (formData.productosSimilares && formData.productosSimilares.length > 0) {
         formDataToSend.append(
           "productos_similares",
           JSON.stringify(formData.productosSimilares),
@@ -582,23 +587,33 @@ export function FormularioProductos({
         formDataToSend.append("imagen", formData.imagenFile);
       }
 
-      if (product && formData.id) {
-        // USAR updateProductoBodega en lugar de updateProducto
+      const isEditing = !!formData.id;
+
+      if (isEditing) {
         await updateProductoBodega(parseInt(formData.id), formDataToSend);
         toast({
           title: "Producto actualizado",
-          description: "El producto ha sido actualizado exitosamente.",
+          description: `${formData.nombre} ha sido actualizado exitosamente.`,
         });
       } else {
-        // USAR createProductoBodega en lugar de createProducto
         await createProductoBodega(formDataToSend);
         toast({
           title: "Producto creado",
-          description: "El producto ha sido creado exitosamente.",
+          description: `${formData.nombre} ha sido creado exitosamente.`,
         });
       }
 
-      onSubmit(formData, !!product);
+      const submitData = {
+        ...formData,
+        precio_venta: precioVentaNum,
+        precio_compra: precioCompraNum,
+        stock: stockNum,
+        stock_minimo: stockMinimoNum,
+        idubicacion: idubicacion,
+        categorias: categoriasIds,
+      };
+
+      onSubmit(submitData, isEditing);
     } catch (error: any) {
       console.error("Error al guardar el producto:", error);
       toast({
@@ -712,8 +727,6 @@ export function FormularioProductos({
 
       const previewUrl = URL.createObjectURL(file);
 
-      handleInputChange("imagen", previewUrl);
-      handleInputChange("imagenFile", file);
       setFormData((prev) => ({
         ...prev,
         imagen: previewUrl,
@@ -725,14 +738,13 @@ export function FormularioProductos({
   const removeImage = () => {
     setFormData((prev) => ({
       ...prev,
-      imagen: null,
+      imagen: "",
       imagenFile: null,
     }));
   };
 
   return (
     <>
-      {/* Escáner de código de barras - solo visible en móvil */}
       {showScanner && (
         <BarcodeScanner
           onScanSuccess={handleBarcodeScanned}
@@ -744,14 +756,13 @@ export function FormularioProductos({
       )}
 
       <form onSubmit={handleSubmit} className="w-full space-y-2">
-        {/* Nombre del producto */}
         <div className="space-y-1">
           <Label htmlFor="nombre" className="text-xs font-medium">
             Nombre <span className="text-red-500">*</span>
           </Label>
           <Input
             id="nombre"
-            value={formData.nombre}
+            value={formData.nombre || ""}
             onChange={(e) => handleInputChange("nombre", e.target.value)}
             placeholder="Ej: Laptop HP Pavilion"
             className="h-8 text-xs"
@@ -759,7 +770,6 @@ export function FormularioProductos({
           />
         </div>
 
-        {/* Imagen circular centrada */}
         <div className="flex justify-center py-1">
           <div className="relative">
             <div
@@ -800,14 +810,13 @@ export function FormularioProductos({
           </div>
         </div>
 
-        {/* Descripción */}
         <div className="space-y-1">
           <Label htmlFor="descripcion" className="text-xs font-medium">
             Descripción <span className="text-red-500">*</span>
           </Label>
           <Textarea
             id="descripcion"
-            value={formData.descripcion}
+            value={formData.descripcion || ""}
             onChange={(e) => handleInputChange("descripcion", e.target.value)}
             rows={2}
             placeholder="Describe tu producto..."
@@ -816,7 +825,6 @@ export function FormularioProductos({
           />
         </div>
 
-        {/* Ubicación y Categorías lado a lado */}
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <div className="flex items-center justify-between">
@@ -835,7 +843,7 @@ export function FormularioProductos({
               </Button>
             </div>
             <select
-              value={formData.ubicacion}
+              value={formData.ubicacion || ""}
               onChange={(e) => handleInputChange("ubicacion", e.target.value)}
               className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
               required
@@ -867,7 +875,7 @@ export function FormularioProductos({
             </div>
             <SearchSelect
               options={localLists.categorias}
-              selectedValues={formData.categorias}
+              selectedValues={formData.categorias || []}
               onSelectionChange={(values) =>
                 handleInputChange("categorias", values)
               }
@@ -877,7 +885,6 @@ export function FormularioProductos({
           </div>
         </div>
 
-        {/* Precio Venta y Precio Compra */}
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Label htmlFor="precioVenta" className="text-xs font-medium">
@@ -918,7 +925,6 @@ export function FormularioProductos({
           </div>
         </div>
 
-        {/* Stock y Stock Mínimo */}
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Label className="text-xs font-medium">
@@ -926,7 +932,7 @@ export function FormularioProductos({
             </Label>
             <Input
               type="number"
-              value={formData.stock}
+              value={formData.stock === "" ? "" : formData.stock}
               onChange={(e) => {
                 const value = e.target.value;
                 handleInputChange("stock", value === "" ? "" : Number(value));
@@ -942,7 +948,7 @@ export function FormularioProductos({
             <Label className="text-xs font-medium">Stock Mínimo</Label>
             <Input
               type="number"
-              value={formData.stockMinimo}
+              value={formData.stockMinimo === "" ? "" : formData.stockMinimo}
               onChange={(e) => {
                 const value = e.target.value;
                 handleInputChange("stockMinimo", value === "" ? "" : Number(value));
@@ -955,7 +961,6 @@ export function FormularioProductos({
           </div>
         </div>
 
-        {/* Código de Barras con escáner integrado */}
         <div className="space-y-1">
           <Label htmlFor="codigoBarras" className="text-xs font-medium">
             Código de Barras
@@ -968,7 +973,6 @@ export function FormularioProductos({
               placeholder="Escanea o escribe el código"
               className="h-8 text-xs"
             />
-            {/* Botón de escáner - SOLO para móvil */}
             {isMobile && (
               <Button
                 type="button"
@@ -983,7 +987,6 @@ export function FormularioProductos({
           </div>
         </div>
 
-        {/* Productos Similares */}
         <div className="space-y-1">
           <ProductoSimilarSelect
             productosDisponibles={todosProductos}
@@ -1000,7 +1003,6 @@ export function FormularioProductos({
           )}
         </div>
 
-        {/* Botones */}
         <div className="flex justify-end space-x-2 pt-2">
           <Button
             type="button"

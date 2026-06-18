@@ -58,12 +58,10 @@ import {
   updateProductoBodega,
   deleteProductoBodega,
   transferirProducto,
-  getMovimientosBodega,
   buscarProductosBodega,
   createBodega,
   ProductoBodega,
   Sucursal,
-  MovimientoBodega,
 } from "@/api/BodegaApi";
 
 // Componente para el carrusel de imágenes
@@ -238,7 +236,6 @@ export function BodegaView() {
   const [ubicaciones, setUbicaciones] = useState<string[]>([]);
   const [categorias, setCategorias] = useState<{ idcategoria: number; nombre: string }[]>([]);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
-  const [movimientos, setMovimientos] = useState<MovimientoBodega[]>([]);
   const [selectedBodega, setSelectedBodega] = useState<number | null>(null);
   const [bodegas, setBodegas] = useState<any[]>([]);
   const [newSucursalData, setNewSucursalData] = useState({
@@ -274,7 +271,6 @@ export function BodegaView() {
           }))
         );
 
-        // Cargar productos de la primera bodega activa
         if (bodegasData.length > 0) {
           const firstBodega = bodegasData[0];
           setSelectedBodega(firstBodega.idbodega);
@@ -284,10 +280,6 @@ export function BodegaView() {
           const allProducts = await getAllProductosBodega();
           setProductos(allProducts);
         }
-
-        // Cargar movimientos recientes
-        const movimientosData = await getMovimientosBodega(undefined, 5);
-        setMovimientos(movimientosData);
       } catch (error) {
         console.error("Error cargando datos iniciales:", error);
         toast({
@@ -303,7 +295,6 @@ export function BodegaView() {
     loadInitialData();
   }, [toast]);
 
-  // Cargar productos por bodega seleccionada
   const loadProductosByBodega = useCallback(async (idbodega: number) => {
     setLoadingAll(true);
     try {
@@ -322,7 +313,6 @@ export function BodegaView() {
     }
   }, [toast]);
 
-  // Cargar todos los productos
   const loadAllProductos = useCallback(async () => {
     setLoadingAll(true);
     try {
@@ -341,7 +331,6 @@ export function BodegaView() {
     }
   }, [toast]);
 
-  // Recargar bodegas después de crear una nueva
   const reloadBodegas = useCallback(async () => {
     try {
       const bodegasData = await getBodegasActivas();
@@ -358,7 +347,6 @@ export function BodegaView() {
     }
   }, []);
 
-  // Manejar cambio de bodega
   const handleBodegaChange = (idbodega: number) => {
     setSelectedBodega(idbodega);
     setSearchTerm("");
@@ -370,7 +358,6 @@ export function BodegaView() {
     }
   };
 
-  // Función de búsqueda
   const performSearch = useCallback(async (query: string) => {
     setSearching(true);
     try {
@@ -389,7 +376,6 @@ export function BodegaView() {
     }
   }, [selectedBodega, toast]);
 
-  // Efecto para búsqueda con debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchTerm.trim().length >= 2) {
@@ -404,23 +390,18 @@ export function BodegaView() {
     return () => clearTimeout(timer);
   }, [searchTerm, performSearch, showAllProducts, selectedBodega, loadProductosByBodega, loadAllProductos]);
 
-  // Filtrar productos (stock bajo)
   const filteredProducts = useMemo(() => {
     let result = productos;
-    
     if (filterBajoStock) {
       result = result.filter((p) => p.stock <= p.stockMinimo);
     }
-
     return result;
   }, [productos, filterBajoStock]);
 
-  // Calcular stock total
   const totalStock = useMemo(() => {
     return productos.reduce((sum, p) => sum + p.stock, 0);
   }, [productos]);
 
-  // Productos con stock bajo
   const productosBajoStock = useMemo(() => {
     return productos.filter((p) => p.stock <= p.stockMinimo);
   }, [productos]);
@@ -490,9 +471,6 @@ export function BodegaView() {
         await loadProductosByBodega(selectedBodega);
       }
 
-      const movimientosData = await getMovimientosBodega(undefined, 5);
-      setMovimientos(movimientosData);
-
       setIsTransferDialogOpen(false);
       setSelectedProduct(null);
       setSelectedSucursal("");
@@ -552,20 +530,22 @@ export function BodegaView() {
   const handleEdit = (product: ProductoBodega) => {
     if (isAssistant) return;
     
-    const categoriaEncontrada = categorias.find(c => c.nombre === product.categoria);
-    
-    setEditingProduct({
+    const productData = {
       idproducto: product.id,
-      nombre: product.nombre,
-      codigo_barras: product.codigo,
-      categorias: categoriaEncontrada ? [categoriaEncontrada.idcategoria] : [],
-      stock: product.stock,
-      ubicacion: product.ubicacion,
-      precio_venta: product.precio,
-      stock_minimo: product.stockMinimo,
+      nombre: product.nombre || "",
+      codigo_barras: product.codigo || "",
+      categorias: product.categoria ? [product.categoria] : [],
+      stock: product.stock ?? 0,
+      ubicacion: product.ubicacion || "",
+      precio_venta: product.precio ?? 0,
+      precio_compra: product.precio_compra ?? 0,
+      stock_minimo: product.stockMinimo ?? 0,
       idbodega: selectedBodega,
       descripcion: product.descripcion || "",
-    });
+      imagen: product.imagen || "",
+    };
+
+    setEditingProduct(productData);
     setIsFormOpen(true);
   };
 
@@ -606,8 +586,8 @@ export function BodegaView() {
       formData.append("stock", productData.stock?.toString() || "0");
       formData.append("stock_minimo", productData.stock_minimo?.toString() || "0");
       
-      if (productData.codigo_barras) {
-        formData.append("codigo_barras", productData.codigo_barras);
+      if (productData.codigo_barras && productData.codigo_barras.trim() !== "") {
+        formData.append("codigo_barras", productData.codigo_barras.trim());
       }
       
       if (selectedBodega) {
@@ -700,7 +680,6 @@ export function BodegaView() {
             value={selectedBodega || ""}
             onChange={(e) => handleBodegaChange(Number(e.target.value))}
           >
-            <option value="">Todas las bodegas</option>
             {bodegas.map((b) => (
               <option key={b.idbodega} value={b.idbodega}>
                 {b.nombre} {b.tipo === 'Principal' ? '⭐' : ''}
@@ -1115,51 +1094,7 @@ export function BodegaView() {
         </CardContent>
       </Card>
 
-      {/* Movimientos recientes */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Movimientos Recientes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {movimientos.length === 0 ? (
-              <div className="text-center text-muted-foreground py-4">
-                No hay movimientos recientes
-              </div>
-            ) : (
-              movimientos.map((mov) => (
-                <div
-                  key={mov.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-full ${mov.tipo === 'entrada' ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
-                      {mov.tipo === 'entrada' ? (
-                        <Package className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <ArrowRight className="h-4 w-4 text-red-500" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{mov.productoNombre || "Producto"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {mov.tipo === 'entrada' ? 'Ingreso' : 'Salida'} - {mov.cantidad || 0} unidades
-                        {mov.destino && ` → ${mov.destino}`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">{mov.fecha || ""}</p>
-                    <p className="text-xs text-muted-foreground">{mov.usuario || "Sistema"}</p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Dialog de transferencia con botón para crear nueva sucursal */}
+      {/* Dialog de transferencia */}
       <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>

@@ -56,30 +56,19 @@ export interface ProductoBodega {
   stockMinimo: number;
   ubicacion: string;
   precio: number;
+  precio_compra?: number;
   proveedor: string;
   imagen?: string;
   idbodega?: number;
   bodega_nombre?: string;
   descripcion?: string;
   estado?: number;
-  precio_compra?: number;
   bodegas_stock?: Array<{
     idbodega: number;
     bodega_nombre: string;
     stock: number;
     stock_minimo: number;
   }>;
-}
-
-export interface MovimientoBodega {
-  id: number;
-  productoId: number;
-  productoNombre: string;
-  tipo: "entrada" | "salida";
-  cantidad: number;
-  destino?: string;
-  fecha: string;
-  usuario: string;
 }
 
 export interface Sucursal {
@@ -242,22 +231,6 @@ export const transferirProducto = async (data: TransferenciaRequest): Promise<vo
   }
 };
 
-export const getMovimientosBodega = async (idbodega?: number, limit?: number): Promise<MovimientoBodega[]> => {
-  try {
-    let url = "/bodegas/movimientos";
-    const params = new URLSearchParams();
-    if (idbodega) params.append("idbodega", idbodega.toString());
-    if (limit) params.append("limit", limit.toString());
-    if (params.toString()) url += `?${params.toString()}`;
-    
-    const response = await api.get<MovimientoBodega[]>(url);
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching movimientos:", error);
-    throw new Error("No se pudieron cargar los movimientos");
-  }
-};
-
 export const buscarProductosBodega = async (termino: string, idbodega?: number): Promise<ProductoBodega[]> => {
   try {
     if (!termino || termino.trim().length < 2) {
@@ -329,7 +302,6 @@ function mapBackendProductoBodega(producto: BackendProductoBodega): ProductoBode
     }
   }
 
-  // Determinar la categoría principal
   let categoria = "Sin categoría";
   if (producto.categorias && producto.categorias.length > 0) {
     categoria = producto.categorias[0];
@@ -344,13 +316,13 @@ function mapBackendProductoBodega(producto: BackendProductoBodega): ProductoBode
     stockMinimo: producto.stock_minimo || 0,
     ubicacion: producto.ubicacion_nombre || "Sin ubicación",
     precio: parseFloat(producto.precio_venta) || 0,
+    precio_compra: parseFloat(producto.precio_compra) || 0,
     proveedor: "Laboratorios Andes",
     imagen: imagenBase64,
     idbodega: producto.idbodega,
     bodega_nombre: producto.bodega_nombre,
     descripcion: producto.descripcion,
     estado: producto.estado,
-    precio_compra: parseFloat(producto.precio_compra) || 0,
     bodegas_stock: producto.bodegas_stock,
   };
 }
