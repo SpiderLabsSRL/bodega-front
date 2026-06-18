@@ -323,6 +323,23 @@ export function FormularioProductos({
       }
     }
 
+    // CORRECCIÓN: Obtener productos similares correctamente
+    let similaresArray: number[] = [];
+    let similaresDataArray: Array<{ idproducto: number; nombre: string }> = [];
+    
+    if (product.productos_similares) {
+      if (Array.isArray(product.productos_similares)) {
+        // Si es un array de objetos con idproducto
+        if (product.productos_similares.length > 0 && typeof product.productos_similares[0] === 'object') {
+          similaresArray = product.productos_similares.map((p: any) => p.idproducto || p.id);
+          similaresDataArray = product.productos_similares;
+        } else {
+          // Si es un array de números
+          similaresArray = product.productos_similares;
+        }
+      }
+    }
+
     return {
       id: product.idproducto?.toString() || product.id?.toString(),
       nombre: product.nombre || "",
@@ -336,8 +353,8 @@ export function FormularioProductos({
       imagen: product.imagen || "",
       imagenFile: product.imagen ? base64ToFile(product.imagen, "producto.jpg") : null,
       codigoBarras: product.codigo_barras || product.codigo || "",
-      productosSimilares: product.productos_similares?.map((p: any) => p.idproducto) || [],
-      productosSimilaresData: product.productos_similares || [],
+      productosSimilares: similaresArray,
+      productosSimilaresData: similaresDataArray,
       idbodega: product.idbodega || idbodega || 1,
     };
   });
@@ -350,7 +367,6 @@ export function FormularioProductos({
   const [loadingProductos, setLoadingProductos] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
-  // Estado local para ubicaciones y categorías
   const [localLists, setLocalLists] = useState<{
     ubicaciones: string[];
     categorias: string[];
@@ -412,6 +428,21 @@ export function FormularioProductos({
       }
     }
 
+    // CORRECCIÓN: Obtener productos similares correctamente
+    let similaresArray: number[] = [];
+    let similaresDataArray: Array<{ idproducto: number; nombre: string }> = [];
+    
+    if (product.productos_similares) {
+      if (Array.isArray(product.productos_similares)) {
+        if (product.productos_similares.length > 0 && typeof product.productos_similares[0] === 'object') {
+          similaresArray = product.productos_similares.map((p: any) => p.idproducto || p.id);
+          similaresDataArray = product.productos_similares;
+        } else {
+          similaresArray = product.productos_similares;
+        }
+      }
+    }
+
     setFormData({
       id: product.idproducto?.toString() || product.id?.toString(),
       nombre: product.nombre || "",
@@ -425,8 +456,8 @@ export function FormularioProductos({
       imagen: product.imagen || "",
       imagenFile: product.imagen ? base64ToFile(product.imagen, "producto.jpg") : null,
       codigoBarras: product.codigo_barras || product.codigo || "",
-      productosSimilares: product.productos_similares?.map((p: any) => p.idproducto) || [],
-      productosSimilaresData: product.productos_similares || [],
+      productosSimilares: similaresArray,
+      productosSimilaresData: similaresDataArray,
       idbodega: product.idbodega || idbodega || 1,
     });
   }, [product, idbodega]);
@@ -527,7 +558,6 @@ export function FormularioProductos({
     return item?.id || 0;
   };
 
-  // Función para actualizar las listas después de agregar un nuevo elemento
   const updateLocalLists = async (type: string) => {
     try {
       let ubicacionesData: ManagementItem[] = [];
@@ -553,7 +583,6 @@ export function FormularioProductos({
         }));
       }
 
-      // Llamar a onRefreshData si existe para actualizar también en el padre
       if (onRefreshData) {
         await onRefreshData();
       }
@@ -580,10 +609,8 @@ export function FormularioProductos({
           break;
       }
 
-      // Actualizar las listas inmediatamente después de crear
       await updateLocalLists(type);
 
-      // Si se creó una ubicación, seleccionarla automáticamente
       if (type === "ubicacion") {
         handleInputChange("ubicacion", name);
       }
@@ -709,11 +736,16 @@ export function FormularioProductos({
         formDataToSend.append("codigo_barras", formData.codigoBarras.trim());
       }
 
+      // CORRECCIÓN: Asegurar que productos similares se envían correctamente
       if (formData.productosSimilares && formData.productosSimilares.length > 0) {
-        formDataToSend.append(
-          "productos_similares",
-          JSON.stringify(formData.productosSimilares),
-        );
+        const similaresIds = formData.productosSimilares
+          .map(id => typeof id === 'string' ? parseInt(id) : id)
+          .filter(id => !isNaN(id) && id > 0);
+        
+        if (similaresIds.length > 0) {
+          formDataToSend.append("productos_similares", JSON.stringify(similaresIds));
+          console.log("Enviando productos similares:", similaresIds);
+        }
       }
 
       if (formData.imagenFile instanceof File) {
@@ -744,6 +776,7 @@ export function FormularioProductos({
         stock_minimo: stockMinimoNum,
         idubicacion: idubicacion,
         categorias: categoriasIds,
+        productos_similares: formData.productosSimilares || [],
       };
 
       onSubmit(submitData, isEditing);
@@ -1049,6 +1082,7 @@ export function FormularioProductos({
           </div>
         </div>
 
+        {/* Productos Similares */}
         <div className="space-y-1">
           <ProductoSimilarSelect
             productosDisponibles={todosProductos}
