@@ -34,8 +34,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Ruta principal pública (sin protección) */}
-          <Route path="/" element={<Index />} />
+          {/* Redirigir a login por defecto */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
           
           {/* Ruta de login */}
           <Route path="/login" element={<Login />} />

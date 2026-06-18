@@ -41,7 +41,7 @@ const menuItems = [
     title: "Vender",
     url: "vender",
     icon: ShoppingCart,
-    roles: ["admin", "asistente"],
+    roles: ["asistente"], // Solo asistentes pueden ver "Vender"
   },
   {
     title: "Productos",
