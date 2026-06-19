@@ -80,14 +80,29 @@ const api = axios.create({
   },
 });
 
+// Función para obtener el ID de bodega del usuario
+const getUserBodega = (): number | null => {
+  try {
+    const bodegaId = localStorage.getItem("userBodega");
+    return bodegaId ? parseInt(bodegaId) : null;
+  } catch (error) {
+    console.error("Error getting user bodega:", error);
+    return null;
+  }
+};
+
 export const searchProducts = async (
   query: string,
   withoutStock: boolean = true,
 ): Promise<Product[]> => {
   try {
-    const response = await api.get<BackendProduct[]>(
-      `/sales/products/search?q=${encodeURIComponent(query)}&withoutStock=${encodeURIComponent(withoutStock)}`,
-    );
+    const idbodega = getUserBodega();
+    let url = `/sales/products/search?q=${encodeURIComponent(query)}&withoutStock=${encodeURIComponent(withoutStock)}`;
+    if (idbodega) {
+      url += `&bodega=${idbodega}`;
+    }
+    
+    const response = await api.get<BackendProduct[]>(url);
     return response.data.map(mapBackendProduct);
   } catch (error) {
     console.error("Error searching products:", error);
@@ -107,7 +122,9 @@ export const searchProducts = async (
 
 export const getCashStatus = async (): Promise<CashStatus> => {
   try {
-    const response = await api.get<BackendCashStatus>("/sales/cash-status");
+    const idbodega = getUserBodega();
+    const url = idbodega ? `/sales/cash-status?bodega=${idbodega}` : "/sales/cash-status";
+    const response = await api.get<BackendCashStatus>(url);
     return mapBackendCashStatus(response.data);
   } catch (error) {
     console.error("Error fetching cash status:", error);
@@ -120,9 +137,11 @@ export const processSale = async (
   userId: number,
 ): Promise<{ idventa: number }> => {
   try {
+    const idbodega = getUserBodega();
     const saleWithUser = {
       ...sale,
       userId: userId,
+      idbodega: idbodega,
     };
 
     const response = await api.post<{ idventa: number }>(
