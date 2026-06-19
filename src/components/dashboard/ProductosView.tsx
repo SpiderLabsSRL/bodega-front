@@ -457,7 +457,6 @@ export function ProductosView() {
                 <span className="sm:hidden">Agregar</span>
               </Button>
             </DialogTrigger>
-            {/* MODIFICADO: Cambiado max-w-4xl a max-w-md y eliminado overflow-y-auto para que entre sin scroll */}
             <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0">
               <DialogHeader className="px-6 pt-6">
                 <DialogTitle>
@@ -722,58 +721,6 @@ export function ProductosView() {
                                   <Package className="h-3 w-3 mr-1" />
                                   Añadir Stock
                                 </Button>
-                                {!isAssistant && (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleEdit(product)}
-                                      className="flex-1 h-8 text-xs"
-                                    >
-                                      <Edit className="h-3 w-3 mr-1" />
-                                      Editar
-                                    </Button>
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="flex-1 h-8 text-xs"
-                                        >
-                                          <Trash2 className="h-3 w-3 mr-1 text-destructive" />
-                                          Eliminar
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>
-                                            ¿Estás seguro?
-                                          </AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            Esta acción no se puede deshacer.
-                                            Esto eliminará permanentemente el
-                                            producto "{product.nombre}".
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>
-                                            Cancelar
-                                          </AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() =>
-                                              handleDelete(
-                                                product.idproducto,
-                                                product.nombre,
-                                              )
-                                            }
-                                          >
-                                            Eliminar
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
-                                  </>
-                                )}
                               </div>
                             </div>
                           </Card>
@@ -790,23 +737,20 @@ export function ProductosView() {
                               <TableRow>
                                 <TableHead className="w-[70px]">Img</TableHead>
                                 <TableHead>Producto</TableHead>
-                                <TableHead className="w-[100px]">
+                                <TableHead className="w-[120px]">
                                   Ubic.
                                 </TableHead>
-                                <TableHead className="w-[120px]">
-                                  Código
+                                <TableHead className="min-w-[150px]">
+                                  Código de Barras
                                 </TableHead>
                                 <TableHead className="min-w-[150px]">
                                   Similares
                                 </TableHead>
-                                <TableHead className="w-[80px]">
+                                <TableHead className="w-[100px]">
                                   Stock
                                 </TableHead>
                                 <TableHead className="w-[100px]">
                                   Precio
-                                </TableHead>
-                                <TableHead className="w-[100px] text-right">
-                                  Acciones
                                 </TableHead>
                               </TableRow>
                             </TableHeader>
@@ -859,13 +803,8 @@ export function ProductosView() {
                                     </TableCell>
                                     <TableCell>
                                       {product.codigo_barras ? (
-                                        <span className="text-xs font-mono">
-                                          {product.codigo_barras.length > 12
-                                            ? product.codigo_barras.substring(
-                                                0,
-                                                10,
-                                              ) + "..."
-                                            : product.codigo_barras}
+                                        <span className="text-sm font-mono break-all">
+                                          {product.codigo_barras}
                                         </span>
                                       ) : (
                                         <span className="text-xs text-muted-foreground">
@@ -934,61 +873,6 @@ export function ProductosView() {
                                         Bs{" "}
                                         {Number(product.precio_venta).toFixed(
                                           2,
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      <div className="flex justify-end space-x-1">
-                                        {!isAssistant && (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleEdit(product)}
-                                            className="h-8 w-8 p-0"
-                                          >
-                                            <Edit className="h-3.5 w-3.5" />
-                                          </Button>
-                                        )}
-                                        {!isAssistant && (
-                                          <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                              <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-8 w-8 p-0"
-                                              >
-                                                <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                              </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                              <AlertDialogHeader>
-                                                <AlertDialogTitle>
-                                                  ¿Estás seguro?
-                                                </AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                  Esta acción no se puede
-                                                  deshacer. Esto eliminará
-                                                  permanentemente el producto "
-                                                  {product.nombre}".
-                                                </AlertDialogDescription>
-                                              </AlertDialogHeader>
-                                              <AlertDialogFooter>
-                                                <AlertDialogCancel>
-                                                  Cancelar
-                                                </AlertDialogCancel>
-                                                <AlertDialogAction
-                                                  onClick={() =>
-                                                    handleDelete(
-                                                      product.idproducto,
-                                                      product.nombre,
-                                                    )
-                                                  }
-                                                >
-                                                  Eliminar
-                                                </AlertDialogAction>
-                                              </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                          </AlertDialog>
                                         )}
                                       </div>
                                     </TableCell>

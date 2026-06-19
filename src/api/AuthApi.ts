@@ -9,6 +9,8 @@ export interface User {
   usuario: string;
   rol: string;
   estado: number;
+  idbodega: number | null; // Añadir este campo
+  bodegaNombre?: string; // Opcional: para mostrar el nombre de la bodega
 }
 
 export interface LoginRequest {
@@ -55,6 +57,7 @@ api.interceptors.response.use(
       localStorage.removeItem("user");
       localStorage.removeItem("userId");
       localStorage.removeItem("userRole");
+      localStorage.removeItem("userBodega"); // Añadir limpieza
       window.location.href = "/login";
     }
     return Promise.reject(error);
@@ -72,6 +75,11 @@ export const login = async (credentials: LoginRequest): Promise<LoginResponse> =
       // Guardar ID del usuario y rol por separado para fácil acceso
       localStorage.setItem("userId", response.data.user.idUsuario.toString());
       localStorage.setItem("userRole", response.data.user.rol);
+      
+      // GUARDAR ID DE BODEGA
+      if (response.data.user.idbodega) {
+        localStorage.setItem("userBodega", response.data.user.idbodega.toString());
+      }
     }
     
     return response.data;
@@ -97,6 +105,7 @@ export const logout = async (): Promise<void> => {
     localStorage.removeItem("user");
     localStorage.removeItem("userId");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("userBodega"); // Añadir limpieza
   }
 };
 
@@ -115,6 +124,11 @@ export const verifyToken = async (): Promise<AuthStatus> => {
       localStorage.setItem("userId", response.data.user.idUsuario.toString());
       localStorage.setItem("userRole", response.data.user.rol);
       
+      // ACTUALIZAR ID DE BODEGA
+      if (response.data.user.idbodega) {
+        localStorage.setItem("userBodega", response.data.user.idbodega.toString());
+      }
+      
       return { isAuthenticated: true, user: response.data.user };
     }
     
@@ -125,6 +139,7 @@ export const verifyToken = async (): Promise<AuthStatus> => {
     localStorage.removeItem("user");
     localStorage.removeItem("userId");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("userBodega"); // Añadir limpieza
     return { isAuthenticated: false, user: null };
   }
 };
@@ -154,6 +169,17 @@ export const getUserRole = (): string | null => {
     return localStorage.getItem("userRole");
   } catch (error) {
     console.error("Error getting user role:", error);
+    return null;
+  }
+};
+
+// NUEVA FUNCIÓN: Obtener ID de bodega del usuario
+export const getUserBodega = (): number | null => {
+  try {
+    const bodegaId = localStorage.getItem("userBodega");
+    return bodegaId ? parseInt(bodegaId) : null;
+  } catch (error) {
+    console.error("Error getting user bodega:", error);
     return null;
   }
 };

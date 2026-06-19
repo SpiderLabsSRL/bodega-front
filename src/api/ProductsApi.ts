@@ -6,6 +6,7 @@ interface BackendUbicacion {
   idubicacion: number;
   nombre: string;
   estado: number;
+  idbodega: number | null;
 }
 
 interface BackendCategoria {
@@ -77,9 +78,22 @@ const api = axios.create({
   },
 });
 
+// Función para obtener el ID de bodega del usuario
+const getUserBodega = (): number | null => {
+  try {
+    const bodegaId = localStorage.getItem("userBodega");
+    return bodegaId ? parseInt(bodegaId) : null;
+  } catch (error) {
+    console.error("Error getting user bodega:", error);
+    return null;
+  }
+};
+
 export const getUbicaciones = async (): Promise<BackendUbicacion[]> => {
   try {
-    const response = await api.get<BackendUbicacion[]>("/ubicaciones");
+    const idbodega = getUserBodega();
+    const url = idbodega ? `/ubicaciones?bodega=${idbodega}` : "/ubicaciones";
+    const response = await api.get<BackendUbicacion[]>(url);
     return response.data;
   } catch (error) {
     console.error("Error fetching ubicaciones:", error);
@@ -101,7 +115,9 @@ export const getTodosProductosParaSelect = async (): Promise<
   { idproducto: number; nombre: string }[]
 > => {
   try {
-    const response = await api.get("/todos-select");
+    const idbodega = getUserBodega();
+    const url = idbodega ? `/todos-select?bodega=${idbodega}` : "/todos-select";
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error("Error fetching productos para select:", error);
@@ -115,9 +131,12 @@ export const buscarProductos = async (termino: string): Promise<Producto[]> => {
       return [];
     }
 
-    const response = await api.get<BackendProducto[]>(
-      `/buscar?termino=${encodeURIComponent(termino.trim())}`,
-    );
+    const idbodega = getUserBodega();
+    const url = idbodega 
+      ? `/buscar?termino=${encodeURIComponent(termino.trim())}&bodega=${idbodega}`
+      : `/buscar?termino=${encodeURIComponent(termino.trim())}`;
+
+    const response = await api.get<BackendProducto[]>(url);
     return response.data.map(mapBackendProducto);
   } catch (error) {
     console.error("Error buscando productos:", error);
@@ -125,10 +144,12 @@ export const buscarProductos = async (termino: string): Promise<Producto[]> => {
   }
 };
 
-// Obtener todos los productos
+// Obtener todos los productos (filtrados por bodega)
 export const getAllProductos = async (): Promise<Producto[]> => {
   try {
-    const response = await api.get<BackendProducto[]>("/todos");
+    const idbodega = getUserBodega();
+    const url = idbodega ? `/todos?bodega=${idbodega}` : "/todos";
+    const response = await api.get<BackendProducto[]>(url);
     return response.data.map(mapBackendProducto);
   } catch (error) {
     console.error("Error fetching todos los productos:", error);
@@ -153,7 +174,9 @@ export const getProductos = async (
 
 export const getProductoById = async (id: number): Promise<Producto> => {
   try {
-    const response = await api.get<BackendProducto>(`/productos/${id}`);
+    const idbodega = getUserBodega();
+    const url = idbodega ? `/productos/${id}?bodega=${idbodega}` : `/productos/${id}`;
+    const response = await api.get<BackendProducto>(url);
     return mapBackendProducto(response.data);
   } catch (error) {
     console.error("Error fetching producto:", error);
@@ -163,6 +186,11 @@ export const getProductoById = async (id: number): Promise<Producto> => {
 
 export const createProducto = async (formData: FormData): Promise<Producto> => {
   try {
+    const idbodega = getUserBodega();
+    if (idbodega) {
+      formData.append("idbodega", idbodega.toString());
+    }
+
     const response = await api.post<BackendProducto>("/productos", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
@@ -181,6 +209,11 @@ export const updateProducto = async (
   formData: FormData,
 ): Promise<Producto> => {
   try {
+    const idbodega = getUserBodega();
+    if (idbodega) {
+      formData.append("idbodega", idbodega.toString());
+    }
+
     const response = await api.put<BackendProducto>(
       `/productos/${id}`,
       formData,
@@ -212,8 +245,13 @@ export const updateStockProducto = async (
   cantidad: number,
 ): Promise<Producto> => {
   try {
+    const idbodega = getUserBodega();
+    const url = idbodega 
+      ? `/productos/${idproducto}/stock?bodega=${idbodega}`
+      : `/productos/${idproducto}/stock`;
+    
     const response = await api.patch<BackendProducto>(
-      `/productos/${idproducto}/stock`,
+      url,
       {
         cantidad,
       },
