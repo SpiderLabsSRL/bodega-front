@@ -18,16 +18,6 @@ export interface BackendProduct {
   }>;
 }
 
-interface BackendCashStatus {
-  idestado_caja: number;
-  estado: string;
-  monto_inicial: string;
-  monto_final: string;
-  idusuario: number;
-  fecha_apertura: string;
-  fecha_cierre: string | null;
-}
-
 export interface Product {
   idproducto: number;
   nombre: string;
@@ -60,16 +50,17 @@ export interface SaleRequest {
   descripcion_descuento: string;
   items: SaleItem[];
   userId?: number;
+  idcliente?: number | null;
 }
 
-export interface CashStatus {
-  idestado_caja: number;
-  estado: "abierta" | "cerrada";
-  monto_inicial: number;
-  monto_final: number;
-  idusuario: number;
-  fecha_apertura: string;
-  fecha_cierre: string | null;
+export interface ClienteSearchResult {
+  id: number;
+  nombres: string;
+  apellidos: string;
+  carnet: string;
+  celular: string;
+  nota: string;
+  estado: boolean;
 }
 
 const api = axios.create({
@@ -120,18 +111,30 @@ export const searchProducts = async (
   }
 };
 
-export const getCashStatus = async (): Promise<CashStatus> => {
+export const searchClientes = async (query: string): Promise<ClienteSearchResult[]> => {
   try {
-    const idbodega = getUserBodega();
-    const url = idbodega ? `/sales/cash-status?bodega=${idbodega}` : "/sales/cash-status";
-    const response = await api.get<BackendCashStatus>(url);
-    return mapBackendCashStatus(response.data);
+    console.log("🔍 searchClientes called with query:", query);
+    
+    if (!query || query.trim().length < 2) {
+      console.log("⚠️ Query too short, returning empty");
+      return [];
+    }
+    
+    const url = `/sales/clientes/search?q=${encodeURIComponent(query.trim())}`;
+    console.log("📡 Calling URL:", url);
+    
+    const response = await api.get<ClienteSearchResult[]>(url);
+    console.log("✅ Response data:", response.data);
+    
+    return response.data;
   } catch (error) {
-    console.error("Error fetching cash status:", error);
-    throw new Error("No se pudo obtener el estado de la caja");
+    console.error("❌ Error searching clients:", error);
+    if (axios.isAxiosError(error)) {
+      console.error("❌ Error response:", error.response?.data);
+    }
+    throw new Error("No se pudieron buscar los clientes");
   }
 };
-
 export const processSale = async (
   sale: SaleRequest,
   userId: number,
@@ -167,17 +170,5 @@ export function mapBackendProduct(product: BackendProduct): Product {
     precio_venta: parseFloat(product.precio_venta),
     stock: product.stock,
     productos_similares: product.productos_similares || [],
-  };
-}
-
-function mapBackendCashStatus(cashStatus: BackendCashStatus): CashStatus {
-  return {
-    idestado_caja: cashStatus.idestado_caja,
-    estado: cashStatus.estado as "abierta" | "cerrada",
-    monto_inicial: parseFloat(cashStatus.monto_inicial),
-    monto_final: parseFloat(cashStatus.monto_final),
-    idusuario: cashStatus.idusuario,
-    fecha_apertura: cashStatus.fecha_apertura,
-    fecha_cierre: cashStatus.fecha_cierre,
   };
 }

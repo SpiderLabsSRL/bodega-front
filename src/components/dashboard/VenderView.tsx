@@ -7,13 +7,15 @@ import {
   ChevronDown,
   ChevronUp,
   Camera,
+  User,
+  UserPlus,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -26,18 +28,29 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   searchProducts,
-  getCashStatus,
+  searchClientes,
   processSale,
   type Product,
   type SaleRequest,
+  type ClienteSearchResult,
 } from "@/api/SalesApi";
 import { getUserId, getCurrentUser } from "@/api/AuthApi";
+import { createCliente } from "@/api/clientesApi";
 import BarcodeScanner from "./BarcodeScanner";
 import { Textarea } from "../ui/textarea";
+import { cn } from "@/lib/utils";
 
 interface SaleItem extends Product {
   cantidad: number;
   ubicacion?: string;
+}
+
+interface ClienteFormData {
+  nombres: string;
+  apellidos: string;
+  carnet: string;
+  celular: string;
+  nota: string;
 }
 
 const formatBs = (value: number) => {
@@ -121,7 +134,6 @@ export function VenderView() {
   const [metodoPago, setMetodoPago] = useState<"Efectivo" | "QR">("Efectivo");
   const [montoPagado, setMontoPagado] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [cajaAbierta, setCajaAbierta] = useState(false);
   const [loading, setLoading] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null);
   const [similarProductsData, setSimilarProductsData] = useState<
@@ -133,6 +145,19 @@ export function VenderView() {
   const [showDiscountField, setShowDiscountField] = useState(false);
   const [discountReason, setDiscountReason] = useState('');
   const [showScanner, setShowScanner] = useState(false);
+  const [selectedCliente, setSelectedCliente] = useState<ClienteSearchResult | null>(null);
+  const [showClienteForm, setShowClienteForm] = useState(false);
+  const [clienteFormData, setClienteFormData] = useState<ClienteFormData>({
+    nombres: "",
+    apellidos: "",
+    carnet: "",
+    celular: "",
+    nota: "",
+  });
+  const [submittingCliente, setSubmittingCliente] = useState(false);
+  const [clienteSearchTerm, setClienteSearchTerm] = useState("");
+  const [clienteSearchResults, setClienteSearchResults] = useState<ClienteSearchResult[]>([]);
+  const [searchingClientes, setSearchingClientes] = useState(false);
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const cartRef = useRef<HTMLDivElement>(null);
@@ -141,17 +166,14 @@ export function VenderView() {
   const isSearchingRef = useRef<boolean>(false);
   const barcodeBufferRef = useRef<string>("");
   const barcodeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isScanningRef = useRef<boolean>(false); // Para controlar si estamos en medio de un escaneo
+  const isScanningRef = useRef<boolean>(false);
 
   const currentUser = getCurrentUser();
   const username = currentUser?.nombres || "Usuario";
   const userId = getUserId();
 
   const debouncedSearchQuery = useDebounce(searchQuery, 1000);
-
-  useEffect(() => {
-    loadCashStatus();
-  }, []);
+  const debouncedClienteSearch = useDebounce(clienteSearchTerm, 500);
 
   useEffect(() => {
     if (
@@ -168,7 +190,6 @@ export function VenderView() {
     }
   }, [debouncedSearchQuery]);
 
-  // Cargar productos similares cuando se expande un producto
   useEffect(() => {
     if (expandedProduct !== null) {
       const product = searchResults.find(
@@ -184,7 +205,6 @@ export function VenderView() {
     }
   }, [expandedProduct, searchResults]);
 
-  // Manejar historial del navegador para el escáner
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       if (showScanner) {
@@ -200,12 +220,33 @@ export function VenderView() {
     };
   }, [showScanner]);
 
+  // Buscar clientes cuando cambia el término de búsqueda
+  useEffect(() => {
+    if (debouncedClienteSearch.trim().length >= 2) {
+      searchClientesBackend(debouncedClienteSearch);
+    } else {
+      setClienteSearchResults([]);
+    }
+  }, [debouncedClienteSearch]);
+
+  const searchClientesBackend = async (term: string) => {
+    try {
+      setSearchingClientes(true);
+      const results = await searchClientes(term);
+      setClienteSearchResults(results);
+    } catch (error) {
+      console.error("Error searching clients:", error);
+      setClienteSearchResults([]);
+    } finally {
+      setSearchingClientes(false);
+    }
+  };
+
   const openScanner = () => {
     setShowScanner(true);
     window.history.pushState({ scanner: true }, '');
   };
 
-  // Función para verificar si un producto ya está en el carrito y su cantidad
   const getCantidadEnCarrito = (productId: number): number => {
     const item = ventaItems.find(item => item.idproducto === productId);
     return item ? item.cantidad : 0;
@@ -218,7 +259,6 @@ export function VenderView() {
       setLoading(true);
       isScanningRef.current = true;
       
-      // Limpiar el buscador y mostrar el nuevo código escaneado
       setSearchQuery(barcode);
       setSearchResults([]);
       setExpandedProduct(null);
@@ -230,22 +270,18 @@ export function VenderView() {
       if (results.length > 0) {
         const product = results[0];
         const cantidadEnCarrito = getCantidadEnCarrito(product.idproducto);
-        const stockDisponible = product.stock - cantidadEnCarrito;
+        const stockRestante = product.stock - cantidadEnCarrito;
         
-        // Mostrar resultados en el buscador
         setSearchResults(results);
         
-        // Si hay stock disponible, agregar automáticamente al carrito
-        if (stockDisponible > 0) {
-          // Agregar solo 1 unidad por escaneo
+        if (stockRestante > 0) {
           agregarProductoUnidad(product);
           toast({
             title: "Producto agregado",
-            description: `${product.nombre} agregado al carrito. Stock restante: ${stockDisponible - 1}`,
+            description: `${product.nombre} agregado al carrito. Stock restante: ${stockRestante - 1}`,
             duration: 2000,
           });
         } else {
-          // Si no hay stock disponible, mostrar mensaje y expandir similares
           toast({
             title: "Stock agotado",
             description: `${product.nombre} no tiene más stock disponible. Mostrando productos similares...`,
@@ -253,10 +289,8 @@ export function VenderView() {
             duration: 3000,
           });
           
-          // Expandir automáticamente para mostrar similares
           setExpandedProduct(product.idproducto);
           
-          // Cargar productos similares
           if (product.productos_similares && product.productos_similares.length > 0) {
             await loadSimilarProducts(product.idproducto, product.productos_similares);
           }
@@ -280,21 +314,18 @@ export function VenderView() {
       setSearchResults([]);
     } finally {
       setLoading(false);
-      // Resetear el flag después de un breve momento
       setTimeout(() => {
         isScanningRef.current = false;
       }, 100);
     }
   };
 
-  // Nueva función para agregar SOLO UNA unidad por escaneo
   const agregarProductoUnidad = (product: Product) => {
     const existingIndex = ventaItems.findIndex(
       (item) => item.idproducto === product.idproducto,
     );
 
     if (existingIndex !== -1) {
-      // Producto ya existe, verificar stock
       const item = ventaItems[existingIndex];
       if (item.cantidad < product.stock) {
         const newItems = [...ventaItems];
@@ -308,7 +339,6 @@ export function VenderView() {
         });
       }
     } else {
-      // Producto nuevo
       if (product.stock > 0) {
         const nuevoItem: SaleItem = {
           ...product,
@@ -388,13 +418,11 @@ export function VenderView() {
           barcodeTimeoutRef.current = null;
         }
 
-        // Buscar y agregar automáticamente el producto escaneado
         handleBarcodeScanned(barcode);
       }
       return;
     }
 
-    // Detectar caracteres (para código de barras)
     if (event.key.length === 1 && !isScanningRef.current) {
       if (barcodeTimeoutRef.current) {
         clearTimeout(barcodeTimeoutRef.current);
@@ -419,16 +447,7 @@ export function VenderView() {
     };
   }, [ventaItems]);
 
-  const loadCashStatus = async () => {
-    try {
-      const status = await getCashStatus();
-      setCajaAbierta(status.estado === "abierta");
-    } catch (error) {
-      console.error("Error loading cash status:", error);
-      setCajaAbierta(false);
-    }
-  };
-
+  // Función de búsqueda que mantiene el foco
   const performSearch = async (query: string) => {
     if (isSearchingRef.current) return;
 
@@ -439,7 +458,20 @@ export function VenderView() {
       const results = await searchProducts(query);
       setSearchResults(results);
       setSimilarProductsData(new Map());
+
+      // Mantener el foco después de la búsqueda
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          const currentPosition = searchInputRef.current.selectionStart;
+          searchInputRef.current.focus();
+          if (currentPosition !== null) {
+            searchInputRef.current.setSelectionRange(currentPosition, currentPosition);
+          }
+        }
+      }, 10);
+
     } catch (error) {
+      console.error("Error searching products:", error);
       toast({
         title: "Error",
         description: "No se pudieron cargar los productos",
@@ -452,20 +484,34 @@ export function VenderView() {
     }
   };
 
+  // HANDLER CLAVE - Mantiene el foco correctamente
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
+
+    if (searchInputRef.current) {
+      const currentPosition = e.target.selectionStart;
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          if (currentPosition !== null) {
+            searchInputRef.current.setSelectionRange(currentPosition, currentPosition);
+          }
+        }
+      }, 0);
+    }
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // No hacer nada especial, permitir que el evento normal fluya
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    }
   };
 
   const toggleProductExpansion = (productId: number) => {
     setExpandedProduct(expandedProduct === productId ? null : productId);
   };
 
-  // Función original para agregar producto (para los botones)
   const agregarProducto = (product: Product) => {
     const existingIndex = ventaItems.findIndex(
       (item) => item.idproducto === product.idproducto,
@@ -500,6 +546,16 @@ export function VenderView() {
         return;
       }
     }
+
+    // Limpiar búsqueda y mantener foco
+    setSearchQuery("");
+    setSearchResults([]);
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+        searchInputRef.current.select();
+      }
+    }, 50);
   };
 
   const actualizarCantidad = (index: number, nuevaCantidad: number) => {
@@ -574,16 +630,92 @@ export function VenderView() {
 
   const tieneItemsInvalidos = ventaItems.some((item) => item.cantidad < 1);
 
-  const procesarVenta = async () => {
-    if (!cajaAbierta) {
+  const validateClienteForm = (): boolean => {
+    if (!clienteFormData.nombres.trim()) {
+      toast({ title: "Error", description: "Los nombres son obligatorios", variant: "destructive" });
+      return false;
+    }
+    if (!clienteFormData.apellidos.trim()) {
+      toast({ title: "Error", description: "Los apellidos son obligatorios", variant: "destructive" });
+      return false;
+    }
+    if (!clienteFormData.carnet.trim()) {
+      toast({ title: "Error", description: "El carnet es obligatorio", variant: "destructive" });
+      return false;
+    }
+    if (clienteFormData.carnet.trim().length < 5 || clienteFormData.carnet.trim().length > 13) {
+      toast({ title: "Error", description: "El carnet debe tener entre 5 y 13 caracteres", variant: "destructive" });
+      return false;
+    }
+    if (!clienteFormData.celular.trim()) {
+      toast({ title: "Error", description: "El celular es obligatorio", variant: "destructive" });
+      return false;
+    }
+    const celularRegex = /^[0-9+]{6,12}$/;
+    if (!celularRegex.test(clienteFormData.celular.trim())) {
+      toast({ title: "Error", description: "El celular debe tener entre 6 y 12 caracteres (solo números y el signo +)", variant: "destructive" });
+      return false;
+    }
+    return true;
+  };
+
+  const handleCreateCliente = async () => {
+    if (!validateClienteForm()) return;
+
+    try {
+      setSubmittingCliente(true);
+      const newCliente = await createCliente({
+        nombres: clienteFormData.nombres.trim(),
+        apellidos: clienteFormData.apellidos.trim(),
+        carnet: clienteFormData.carnet.trim(),
+        celular: clienteFormData.celular.trim(),
+        nota: clienteFormData.nota.trim() || undefined,
+      });
+      
+      const newClienteResult: ClienteSearchResult = {
+        id: newCliente.id,
+        nombres: newCliente.nombres,
+        apellidos: newCliente.apellidos,
+        carnet: newCliente.carnet,
+        celular: newCliente.celular,
+        nota: newCliente.nota,
+        estado: newCliente.estado,
+      };
+      
+      setSelectedCliente(newClienteResult);
+      setShowClienteForm(false);
+      setClienteFormData({
+        nombres: "",
+        apellidos: "",
+        carnet: "",
+        celular: "",
+        nota: "",
+      });
+      setClienteSearchTerm("");
+      setClienteSearchResults([]);
+      
       toast({
-        title: "Caja Cerrada",
-        description: "No se puede procesar la venta. La caja está cerrada.",
+        title: "Cliente creado",
+        description: `${newCliente.nombres} ${newCliente.apellidos} ha sido agregado.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "No se pudo crear el cliente",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setSubmittingCliente(false);
     }
+  };
 
+  const clearSelectedCliente = () => {
+    setSelectedCliente(null);
+    setClienteSearchTerm("");
+    setClienteSearchResults([]);
+  };
+
+  const procesarVenta = async () => {
     if (ventaItems.length === 0) {
       toast({
         title: "Error",
@@ -614,7 +746,7 @@ export function VenderView() {
     if (descuento > 0 && !discountReason.trim()) {
       toast({
         title: "Error",
-        description: "Proporcione una razon para el descuento",
+        description: "Proporcione una razón para el descuento",
         variant: "destructive",
       });
       return;
@@ -658,6 +790,7 @@ export function VenderView() {
         total: total,
         metodo_pago: metodoPago,
         items: items,
+        idcliente: selectedCliente?.id || null,
       };
 
       await processSale(saleRequest, userId);
@@ -668,13 +801,13 @@ export function VenderView() {
       setShowConfirm(false);
       setDiscountReason('');
       setShowDiscountField(false);
+      setSelectedCliente(null);
 
       toast({
         title: "¡Venta procesada!",
         description: `Venta completada por Bs. ${formatBs(total)}`,
       });
 
-      await loadCashStatus();
     } catch (error) {
       toast({
         title: "Error",
@@ -695,7 +828,7 @@ export function VenderView() {
 
   return (
     <div className="space-y-6">
-      {/* Escáner de código de barras - solo visible en móvil */}
+      {/* Escáner de código de barras */}
       {showScanner && (
         <BarcodeScanner
           onScanSuccess={handleBarcodeScanned}
@@ -722,11 +855,8 @@ export function VenderView() {
           </div>
         </div>
         <div className="mt-2">
-          <Badge variant={cajaAbierta ? "default" : "destructive"}>
-            Caja: {cajaAbierta ? "Abierta" : "Cerrada"}
-          </Badge>
           {currentUser && (
-            <Badge variant="outline" className="ml-2">
+            <Badge variant="outline">
               {currentUser.rol}
             </Badge>
           )}
@@ -751,7 +881,6 @@ export function VenderView() {
                 disabled={loading}
                 autoFocus={true}
               />
-              {/* Botón de escáner - SOLO para móvil */}
               {isMobile && (
                 <Button
                   type="button"
@@ -849,7 +978,6 @@ export function VenderView() {
                         </Button>
                       </div>
 
-                      {/* Botón de "v" en la parte inferior derecha */}
                       {hasSimilares && (
                         <div className="flex justify-end">
                           <Button
@@ -862,7 +990,7 @@ export function VenderView() {
                           >
                             {isExpanded ? (
                               <>
-                                <ChevronUp className="h-3 w-3 mr-1" /> Ver menos
+                                <ChevronDown className="h-3 w-3 mr-1" /> Ver menos
                               </>
                             ) : (
                               <>
@@ -875,7 +1003,6 @@ export function VenderView() {
                         </div>
                       )}
 
-                      {/* Productos similares */}
                       {hasSimilares && isExpanded && (
                         <div className="pl-4 border-l-2 border-primary/30 space-y-2 mt-2">
                           <p className="text-xs font-medium text-muted-foreground">
@@ -992,6 +1119,207 @@ export function VenderView() {
             <CardTitle>Detalle de Venta</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Selector de Cliente con búsqueda */}
+            <div className="space-y-2">
+              <Label>Cliente (opcional)</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    placeholder="Buscar cliente por nombre, carnet o celular..."
+                    value={clienteSearchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setClienteSearchTerm(value);
+                      
+                      if (value.trim().length >= 2) {
+                        searchClientesBackend(value.trim());
+                      } else {
+                        setClienteSearchResults([]);
+                      }
+                    }}
+                    className="pr-10"
+                  />
+                  {searchingClientes && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                    </div>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowClienteForm(true)}
+                  className="h-10 px-3 flex-shrink-0"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </Button>
+                {selectedCliente && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedCliente(null);
+                      setClienteSearchTerm("");
+                      setClienteSearchResults([]);
+                    }}
+                    className="h-10 px-2 flex-shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+
+              {/* Resultados de búsqueda */}
+              {clienteSearchResults.length > 0 && (
+                <div className="border rounded-md overflow-hidden max-h-48 overflow-y-auto shadow-lg bg-white">
+                  {clienteSearchResults.map((cliente) => (
+                    <div
+                      key={cliente.id}
+                      className="p-3 hover:bg-primary/10 cursor-pointer border-b last:border-b-0 flex items-center justify-between transition-colors"
+                      onClick={() => {
+                        setSelectedCliente(cliente);
+                        setClienteSearchTerm("");
+                        setClienteSearchResults([]);
+                      }}
+                    >
+                      <div>
+                        <span className="font-medium">
+                          {cliente.nombres} {cliente.apellidos}
+                        </span>
+                        <span className="text-sm text-muted-foreground ml-2">
+                          {cliente.carnet}
+                        </span>
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {cliente.celular}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Mensaje de "No se encontraron clientes" */}
+              {clienteSearchTerm.trim().length >= 2 && 
+               clienteSearchResults.length === 0 && 
+               !searchingClientes && (
+                <div className="text-center py-3 text-sm text-muted-foreground border rounded-md bg-muted/20">
+                  No se encontraron clientes
+                </div>
+              )}
+
+              {/* Mensaje de "Buscando..." */}
+              {clienteSearchTerm.trim().length >= 2 && 
+               clienteSearchResults.length === 0 && 
+               searchingClientes && (
+                <div className="text-center py-3 text-sm text-muted-foreground border rounded-md bg-muted/20">
+                  Buscando clientes...
+                </div>
+              )}
+
+              {/* Cliente seleccionado */}
+              {selectedCliente && (
+                <div className="text-sm bg-primary/5 p-3 rounded-md flex items-center gap-2 border border-primary/20">
+                  <User className="h-4 w-4 text-primary" />
+                  <span className="font-medium">
+                    {selectedCliente.nombres} {selectedCliente.apellidos}
+                  </span>
+                  <span className="text-muted-foreground">- {selectedCliente.carnet}</span>
+                  <span className="text-muted-foreground">- {selectedCliente.celular}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Dialog para crear cliente */}
+            <Dialog open={showClienteForm} onOpenChange={setShowClienteForm}>
+              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Agregar Nuevo Cliente</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nombres">
+                      Nombre(s) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="nombres"
+                      placeholder="Ej: María"
+                      value={clienteFormData.nombres}
+                      onChange={(e) => setClienteFormData({...clienteFormData, nombres: e.target.value})}
+                      disabled={submittingCliente}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="apellidos">
+                      Apellido(s) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="apellidos"
+                      placeholder="Ej: González Ramírez"
+                      value={clienteFormData.apellidos}
+                      onChange={(e) => setClienteFormData({...clienteFormData, apellidos: e.target.value})}
+                      disabled={submittingCliente}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="carnet">
+                      Carnet <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="carnet"
+                      placeholder="Ej: 1234567"
+                      value={clienteFormData.carnet}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value.length <= 13) {
+                          setClienteFormData({...clienteFormData, carnet: value});
+                        }
+                      }}
+                      maxLength={13}
+                      disabled={submittingCliente}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="celular">
+                      Celular <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="celular"
+                      placeholder="Ej: 72123456"
+                      value={clienteFormData.celular}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9+]/g, "");
+                        if (value.length <= 12) {
+                          setClienteFormData({...clienteFormData, celular: value});
+                        }
+                      }}
+                      maxLength={12}
+                      disabled={submittingCliente}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nota">Nota</Label>
+                    <Input
+                      id="nota"
+                      placeholder="Observaciones adicionales..."
+                      value={clienteFormData.nota}
+                      onChange={(e) => setClienteFormData({...clienteFormData, nota: e.target.value})}
+                      disabled={submittingCliente}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setShowClienteForm(false)} disabled={submittingCliente}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleCreateCliente} disabled={submittingCliente}>
+                    {submittingCliente ? "Creando..." : "Crear Cliente"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             {ventaItems.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
                 No hay productos agregados
@@ -1113,14 +1441,13 @@ export function VenderView() {
                     className="w-20 h-8 number-input-no-scroll"
                     onWheel={(e) => e.currentTarget.blur()}
                   />
-                  <span className="text-sm whitespace-nowrap">
-                    -Bs {formatBs(descuento)}
-                  </span>
                 </div>
 
                 {showDiscountField && (
                   <div className="mt-2">
-                    <Label htmlFor="discountReason">Justificación del descuento *</Label>
+                    <Label htmlFor="discountReason">
+                      Justificación del descuento <span className="text-red-500">*</span>
+                    </Label>
                     <Textarea
                       id="discountReason"
                       value={discountReason}
@@ -1140,24 +1467,37 @@ export function VenderView() {
 
             <div className="space-y-3">
               <Label>Método de Pago:</Label>
-              <RadioGroup
-                value={metodoPago}
-                onValueChange={(value: "Efectivo" | "QR") =>
-                  setMetodoPago(value)
-                }
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Efectivo" id="efectivo" />
-                  <Label htmlFor="efectivo">Efectivo</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="QR" id="qr" />
-                  <Label htmlFor="qr">QR</Label>
-                </div>
-              </RadioGroup>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant={metodoPago === "Efectivo" ? "default" : "outline"}
+                  onClick={() => setMetodoPago("Efectivo")}
+                  className={cn(
+                    "h-12 text-base font-medium transition-all",
+                    metodoPago === "Efectivo" 
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                      : "hover:bg-muted"
+                  )}
+                >
+                  Efectivo
+                </Button>
+                <Button
+                  type="button"
+                  variant={metodoPago === "QR" ? "default" : "outline"}
+                  onClick={() => setMetodoPago("QR")}
+                  className={cn(
+                    "h-12 text-base font-medium transition-all",
+                    metodoPago === "QR" 
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                      : "hover:bg-muted"
+                  )}
+                >
+                  QR
+                </Button>
+              </div>
 
               {metodoPago === "Efectivo" && (
-                <div className="space-y-2">
+                <div className="space-y-2 pt-2">
                   <Label htmlFor="montoPagado">
                     Monto Pagado (opcional para calcular cambio):
                   </Label>
@@ -1183,21 +1523,6 @@ export function VenderView() {
                   )}
                 </div>
               )}
-
-              {metodoPago === "QR" && (
-                <div className="text-center">
-                  <div className="w-64 h-64 bg-white rounded-lg mx-auto flex items-center justify-center border-2 border-primary/20">
-                    <img
-                      src="/qr.jpg"
-                      alt="Código QR para pago"
-                      className="w-full h-full object-contain rounded-lg"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Escanea el código QR para pagar
-                  </p>
-                </div>
-              )}
             </div>
 
             <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
@@ -1206,15 +1531,12 @@ export function VenderView() {
                   className="w-full"
                   disabled={
                     ventaItems.length === 0 ||
-                    !cajaAbierta ||
                     tieneItemsInvalidos
                   }
                 >
-                  {!cajaAbierta
-                    ? "Caja Cerrada"
-                    : tieneItemsInvalidos
-                      ? "Cantidades inválidas"
-                      : "Procesar Venta"}
+                  {tieneItemsInvalidos
+                    ? "Cantidades inválidas"
+                    : "Procesar Venta"}
                 </Button>
               </DialogTrigger>
               <DialogContent>
