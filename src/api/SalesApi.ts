@@ -51,6 +51,7 @@ export interface SaleRequest {
   items: SaleItem[];
   userId?: number;
   idcliente?: number | null;
+  idbodega?: number | null;
 }
 
 export interface ClienteSearchResult {
@@ -135,18 +136,27 @@ export const searchClientes = async (query: string): Promise<ClienteSearchResult
     throw new Error("No se pudieron buscar los clientes");
   }
 };
+
 export const processSale = async (
   sale: SaleRequest,
   userId: number,
 ): Promise<{ idventa: number }> => {
   try {
     const idbodega = getUserBodega();
+    console.log("📦 ID Bodega para venta:", idbodega);
+    
+    if (!idbodega) {
+      throw new Error("No se pudo determinar la bodega del usuario");
+    }
+    
     const saleWithUser = {
       ...sale,
       userId: userId,
       idbodega: idbodega,
     };
 
+    console.log("📤 Enviando venta:", saleWithUser);
+    
     const response = await api.post<{ idventa: number }>(
       "/sales/process",
       saleWithUser,

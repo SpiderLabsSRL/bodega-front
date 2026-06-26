@@ -42,7 +42,7 @@ import {
   type SaleRequest,
   type ClienteSearchResult,
 } from "@/api/SalesApi";
-import { getUserId, getCurrentUser } from "@/api/AuthApi";
+import { getUserId, getCurrentUser, getUserBodega } from "@/api/AuthApi";
 import { createCliente } from "@/api/clientesApi";
 import BarcodeScanner from "./BarcodeScanner";
 import { Textarea } from "../ui/textarea";
@@ -59,6 +59,11 @@ interface ClienteFormData {
   carnet: string;
   celular: string;
   nota: string;
+}
+
+interface BodegaInfo {
+  id: number;
+  nombre: string;
 }
 
 const formatBs = (value: number) => {
@@ -167,6 +172,7 @@ export function VenderView() {
   const [clienteSearchResults, setClienteSearchResults] = useState<ClienteSearchResult[]>([]);
   const [searchingClientes, setSearchingClientes] = useState(false);
   const [showClienteNota, setShowClienteNota] = useState(false);
+  const [bodegaInfo, setBodegaInfo] = useState<BodegaInfo | null>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const cartRef = useRef<HTMLDivElement>(null);
@@ -181,6 +187,40 @@ export function VenderView() {
   const currentUser = getCurrentUser();
   const username = currentUser?.nombres || "Usuario";
   const userId = getUserId();
+  const userBodegaId = getUserBodega();
+
+  // Obtener información de la bodega del usuario
+  useEffect(() => {
+    const fetchBodegaInfo = async () => {
+      if (!userBodegaId) return;
+      
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/bodegas/${userBodegaId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setBodegaInfo({
+            id: data.idbodega,
+            nombre: data.nombre
+          });
+        } else {
+          setBodegaInfo({
+            id: userBodegaId,
+            nombre: `Bodega ${userBodegaId}`
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching bodega info:", error);
+        setBodegaInfo({
+          id: userBodegaId,
+          nombre: `Bodega ${userBodegaId}`
+        });
+      }
+    };
+
+    fetchBodegaInfo();
+  }, [userBodegaId]);
+
+  console.log("👤 Usuario actual:", { userId, userBodegaId, username, bodegaInfo });
 
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const debouncedClienteSearch = useDebounce(clienteSearchTerm, 500);
@@ -800,8 +840,16 @@ export function VenderView() {
     if (!userId) {
       toast({
         title: "Error",
-        description:
-          "No se encontró información del usuario. Por favor, inicie sesión nuevamente.",
+        description: "No se encontró información del usuario. Por favor, inicie sesión nuevamente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!userBodegaId) {
+      toast({
+        title: "Error",
+        description: "No se encontró la bodega del usuario. Por favor, inicie sesión nuevamente.",
         variant: "destructive",
       });
       return;
@@ -825,10 +873,7 @@ export function VenderView() {
       }));
 
       const saleRequest: SaleRequest = {
-        descripcion:
-          descripcion.length > 200
-            ? descripcion.substring(0, 200) + "..."
-            : descripcion,
+        descripcion: descripcion.length > 200 ? descripcion.substring(0, 200) + "..." : descripcion,
         sub_total: subtotal,
         descuento: descuento,
         descripcion_descuento: discountReason,
@@ -836,7 +881,10 @@ export function VenderView() {
         metodo_pago: metodoPago,
         items: items,
         idcliente: selectedCliente?.id || null,
+        idbodega: userBodegaId,
       };
+
+      console.log("📤 Enviando venta:", saleRequest);
 
       await processSale(saleRequest, userId);
 
@@ -855,10 +903,10 @@ export function VenderView() {
       });
 
     } catch (error) {
+      console.error("❌ Error en procesarVenta:", error);
       toast({
         title: "Error",
-        description:
-          error instanceof Error ? error.message : "Error al procesar la venta",
+        description: error instanceof Error ? error.message : "Error al procesar la venta",
         variant: "destructive",
       });
     } finally {
@@ -900,10 +948,15 @@ export function VenderView() {
             <p className="font-medium">{currentDate}</p>
           </div>
         </div>
-        <div className="mt-2">
+        <div className="mt-2 flex gap-2 flex-wrap">
           {currentUser && (
             <Badge variant="outline">
               {currentUser.rol}
+            </Badge>
+          )}
+          {bodegaInfo && (
+            <Badge variant="secondary">
+              {bodegaInfo.nombre}
             </Badge>
           )}
         </div>
