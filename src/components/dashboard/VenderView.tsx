@@ -10,6 +10,8 @@ import {
   User,
   UserPlus,
   X,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,6 +26,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -158,6 +166,7 @@ export function VenderView() {
   const [clienteSearchTerm, setClienteSearchTerm] = useState("");
   const [clienteSearchResults, setClienteSearchResults] = useState<ClienteSearchResult[]>([]);
   const [searchingClientes, setSearchingClientes] = useState(false);
+  const [showClienteNota, setShowClienteNota] = useState(false);
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const cartRef = useRef<HTMLDivElement>(null);
@@ -167,12 +176,13 @@ export function VenderView() {
   const barcodeBufferRef = useRef<string>("");
   const barcodeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isScanningRef = useRef<boolean>(false);
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
 
   const currentUser = getCurrentUser();
   const username = currentUser?.nombres || "Usuario";
   const userId = getUserId();
 
-  const debouncedSearchQuery = useDebounce(searchQuery, 1000);
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const debouncedClienteSearch = useDebounce(clienteSearchTerm, 500);
 
   useEffect(() => {
@@ -268,11 +278,12 @@ export function VenderView() {
       const results = await searchProducts(barcode);
       
       if (results.length > 0) {
-        const product = results[0];
+        const uniqueResults = filterUniqueProducts(results);
+        const product = uniqueResults[0];
         const cantidadEnCarrito = getCantidadEnCarrito(product.idproducto);
         const stockRestante = product.stock - cantidadEnCarrito;
         
-        setSearchResults(results);
+        setSearchResults(uniqueResults);
         
         if (stockRestante > 0) {
           agregarProductoUnidad(product);
@@ -318,6 +329,17 @@ export function VenderView() {
         isScanningRef.current = false;
       }, 100);
     }
+  };
+
+  const filterUniqueProducts = (products: Product[]): Product[] => {
+    const seen = new Set<number>();
+    return products.filter(product => {
+      if (seen.has(product.idproducto)) {
+        return false;
+      }
+      seen.add(product.idproducto);
+      return true;
+    });
   };
 
   const agregarProductoUnidad = (product: Product) => {
@@ -375,13 +397,16 @@ export function VenderView() {
 
     try {
       const similarProducts: Product[] = [];
+      const seen = new Set<number>();
+      
       for (const similar of similares) {
         try {
           const results = await searchProducts(similar.nombre);
           const found = results.find(
             (p) => p.idproducto === similar.idproducto,
           );
-          if (found) {
+          if (found && !seen.has(found.idproducto)) {
+            seen.add(found.idproducto);
             similarProducts.push(found);
           }
         } catch (error) {
@@ -447,8 +472,14 @@ export function VenderView() {
     };
   }, [ventaItems]);
 
-  // Función de búsqueda que mantiene el foco
   const performSearch = async (query: string) => {
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
     if (isSearchingRef.current) return;
 
     isSearchingRef.current = true;
@@ -456,12 +487,17 @@ export function VenderView() {
 
     try {
       const results = await searchProducts(query);
-      setSearchResults(results);
+      
+      if (abortController.signal.aborted) {
+        return;
+      }
+      
+      const uniqueResults = filterUniqueProducts(results);
+      setSearchResults(uniqueResults);
       setSimilarProductsData(new Map());
 
-      // Mantener el foco después de la búsqueda
       setTimeout(() => {
-        if (searchInputRef.current) {
+        if (searchInputRef.current && !abortController.signal.aborted) {
           const currentPosition = searchInputRef.current.selectionStart;
           searchInputRef.current.focus();
           if (currentPosition !== null) {
@@ -471,6 +507,9 @@ export function VenderView() {
       }, 10);
 
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       console.error("Error searching products:", error);
       toast({
         title: "Error",
@@ -481,10 +520,12 @@ export function VenderView() {
     } finally {
       setLoading(false);
       isSearchingRef.current = false;
+      if (searchAbortControllerRef.current === abortController) {
+        searchAbortControllerRef.current = null;
+      }
     }
   };
 
-  // HANDLER CLAVE - Mantiene el foco correctamente
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -547,7 +588,6 @@ export function VenderView() {
       }
     }
 
-    // Limpiar búsqueda y mantener foco
     setSearchQuery("");
     setSearchResults([]);
     setTimeout(() => {
@@ -713,6 +753,11 @@ export function VenderView() {
     setSelectedCliente(null);
     setClienteSearchTerm("");
     setClienteSearchResults([]);
+    setShowClienteNota(false);
+  };
+
+  const toggleClienteNota = () => {
+    setShowClienteNota(!showClienteNota);
   };
 
   const procesarVenta = async () => {
@@ -802,6 +847,7 @@ export function VenderView() {
       setDiscountReason('');
       setShowDiscountField(false);
       setSelectedCliente(null);
+      setShowClienteNota(false);
 
       toast({
         title: "¡Venta procesada!",
@@ -1159,11 +1205,7 @@ export function VenderView() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      setSelectedCliente(null);
-                      setClienteSearchTerm("");
-                      setClienteSearchResults([]);
-                    }}
+                    onClick={clearSelectedCliente}
                     className="h-10 px-2 flex-shrink-0"
                   >
                     <X className="h-4 w-4" />
@@ -1182,6 +1224,7 @@ export function VenderView() {
                         setSelectedCliente(cliente);
                         setClienteSearchTerm("");
                         setClienteSearchResults([]);
+                        setShowClienteNota(false);
                       }}
                     >
                       <div>
@@ -1218,15 +1261,55 @@ export function VenderView() {
                 </div>
               )}
 
-              {/* Cliente seleccionado */}
+              {/* Cliente seleccionado con botón de "ojito" */}
               {selectedCliente && (
-                <div className="text-sm bg-primary/5 p-3 rounded-md flex items-center gap-2 border border-primary/20">
-                  <User className="h-4 w-4 text-primary" />
-                  <span className="font-medium">
-                    {selectedCliente.nombres} {selectedCliente.apellidos}
-                  </span>
-                  <span className="text-muted-foreground">- {selectedCliente.carnet}</span>
-                  <span className="text-muted-foreground">- {selectedCliente.celular}</span>
+                <div className="text-sm bg-primary/5 p-3 rounded-md border border-primary/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <User className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span className="font-medium truncate">
+                        {selectedCliente.nombres} {selectedCliente.apellidos}
+                      </span>
+                      <span className="text-muted-foreground flex-shrink-0">- {selectedCliente.carnet}</span>
+                      <span className="text-muted-foreground flex-shrink-0">- {selectedCliente.celular}</span>
+                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={toggleClienteNota}
+                            className="h-7 w-7 p-0 flex-shrink-0"
+                          >
+                            {showClienteNota ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{showClienteNota ? "Ocultar nota" : "Ver nota"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  
+                  {/* Mostrar nota si está visible y existe */}
+                  {showClienteNota && (
+                    <div className="mt-2 pt-2 border-t border-primary/10">
+                      <p className="text-xs text-muted-foreground font-medium">Nota:</p>
+                      <p className="text-sm mt-0.5 break-words whitespace-pre-wrap">
+                        {selectedCliente.nota && selectedCliente.nota.trim() ? (
+                          selectedCliente.nota
+                        ) : (
+                          <span className="text-muted-foreground italic">Sin nota</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
