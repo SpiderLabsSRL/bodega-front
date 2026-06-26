@@ -40,6 +40,11 @@ export function GestionUsuariosView() {
   });
   const [mostrandoFormulario, setMostrandoFormulario] = useState(false);
   const [enviandoFormulario, setEnviandoFormulario] = useState(false);
+  const [erroresFormulario, setErroresFormulario] = useState<{
+    telefono?: string;
+    usuario?: string;
+    general?: string;
+  }>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -51,14 +56,12 @@ export function GestionUsuariosView() {
       setLoading(true);
       setCargandoBodegas(true);
       
-      // Cargar usuarios y bodegas en paralelo
       const [usuariosData, bodegasData] = await Promise.all([
         getUsuarios(),
         getBodegasActivas()
       ]);
       
       setUsuarios(usuariosData);
-      // Mapear los datos de bodega al formato esperado
       setBodegas(bodegasData.map(b => ({
         id: b.idbodega,
         nombre: b.nombre,
@@ -110,18 +113,21 @@ export function GestionUsuariosView() {
     setEditandoUsuario(null);
     setMostrandoFormulario(false);
     setEnviandoFormulario(false);
+    setErroresFormulario({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Limpiar errores anteriores
+    setErroresFormulario({});
+
     // Validar teléfono
     if (formData.telefono.length !== 8) {
-      toast({
-        title: "Error",
-        description: "El teléfono debe tener 8 dígitos",
-        variant: "destructive",
-      });
+      setErroresFormulario(prev => ({
+        ...prev,
+        telefono: "El teléfono debe tener exactamente 8 dígitos"
+      }));
       return;
     }
 
@@ -135,12 +141,20 @@ export function GestionUsuariosView() {
       return;
     }
 
+    // Validar usuario
+    if (formData.usuario.length < 3) {
+      setErroresFormulario(prev => ({
+        ...prev,
+        usuario: "El nombre de usuario debe tener al menos 3 caracteres"
+      }));
+      return;
+    }
+
     // Bloquear el botón para evitar doble clic
     setEnviandoFormulario(true);
     
     try {
       if (editandoUsuario) {
-        // Editar usuario existente
         const usuarioRequest: UsuarioRequest = {
           nombres: formData.nombres,
           apellidos: formData.apellidos,
@@ -156,7 +170,6 @@ export function GestionUsuariosView() {
           description: "Los datos del usuario han sido actualizados correctamente",
         });
       } else {
-        // Crear nuevo usuario
         const usuarioRequest: UsuarioRequest = {
           nombres: formData.nombres,
           apellidos: formData.apellidos,
@@ -177,13 +190,50 @@ export function GestionUsuariosView() {
       await cargarUsuarios();
     } catch (error) {
       console.error("Error guardando usuario:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al guardar el usuario",
-        variant: "destructive",
-      });
+      
+      // Manejar errores específicos del backend
+      let mensajeError = "Error al guardar el usuario";
+      
+      if (error instanceof Error) {
+        const errorMessage = error.message;
+        
+        // Identificar errores específicos
+        if (errorMessage.includes("nombre de usuario ya existe") || 
+            errorMessage.includes("usuario ya existe") ||
+            errorMessage.includes("Username already exists")) {
+          mensajeError = "El nombre de usuario ya está en uso. Por favor, elige otro.";
+          setErroresFormulario(prev => ({
+            ...prev,
+            usuario: "Este nombre de usuario ya está registrado"
+          }));
+        } else if (errorMessage.includes("teléfono") || errorMessage.includes("telefono")) {
+          mensajeError = "El número de teléfono ya está registrado para otro usuario.";
+          setErroresFormulario(prev => ({
+            ...prev,
+            telefono: "Este número de teléfono ya está registrado"
+          }));
+        } else if (errorMessage.includes("bodega")) {
+          mensajeError = "La bodega seleccionada no existe o no está activa.";
+        } else if (errorMessage.includes("contraseña") || errorMessage.includes("password")) {
+          mensajeError = "La contraseña debe tener al menos 6 caracteres.";
+        } else {
+          mensajeError = error.message;
+        }
+        
+        // Mostrar toast con el error específico
+        toast({
+          title: "Error",
+          description: mensajeError,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Ocurrió un error inesperado al guardar el usuario",
+          variant: "destructive",
+        });
+      }
     } finally {
-      // Siempre liberar el botón, tanto en éxito como en error
       setEnviandoFormulario(false);
     }
   };
@@ -195,10 +245,11 @@ export function GestionUsuariosView() {
       apellidos: usuario.apellidos,
       telefono: usuario.telefono ?? '',
       usuario: usuario.usuario,
-      contraseña: "", // No cargar la contraseña
+      contraseña: "",
       rol: usuario.rol,
       idbodega: usuario.idbodega ? String(usuario.idbodega) : ""
     });
+    setErroresFormulario({});
     setMostrandoFormulario(true);
   };
 
@@ -241,6 +292,19 @@ export function GestionUsuariosView() {
   const handleTelefonoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '').slice(0, 8);
     setFormData({ ...formData, telefono: value });
+    // Limpiar error de teléfono cuando el usuario corrige
+    if (erroresFormulario.telefono && value.length === 8) {
+      setErroresFormulario(prev => ({ ...prev, telefono: undefined }));
+    }
+  };
+
+  const handleUsuarioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData({ ...formData, usuario: value });
+    // Limpiar error de usuario cuando el usuario corrige
+    if (erroresFormulario.usuario && value.length >= 3) {
+      setErroresFormulario(prev => ({ ...prev, usuario: undefined }));
+    }
   };
 
   // Obtener el nombre de la bodega por ID
@@ -249,6 +313,9 @@ export function GestionUsuariosView() {
     const bodega = bodegas.find(b => b.id === idbodega);
     return bodega ? bodega.nombre : "Bodega no encontrada";
   };
+
+  // Componente para asterisco rojo
+  const RequiredAsterisk = () => <span className="text-red-500 ml-0.5">*</span>;
 
   if (loading && cargandoBodegas) {
     return (
@@ -277,7 +344,9 @@ export function GestionUsuariosView() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="nombres">Nombre(s) *</Label>
+                  <Label htmlFor="nombres">
+                    Nombre(s) <RequiredAsterisk />
+                  </Label>
                   <Input
                     id="nombres"
                     value={formData.nombres}
@@ -286,7 +355,9 @@ export function GestionUsuariosView() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="apellidos">Apellido(s) *</Label>
+                  <Label htmlFor="apellidos">
+                    Apellido(s) <RequiredAsterisk />
+                  </Label>
                   <Input
                     id="apellidos"
                     value={formData.apellidos}
@@ -295,31 +366,43 @@ export function GestionUsuariosView() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="telefono">Teléfono (8 dígitos) *</Label>
+                  <Label htmlFor="telefono">
+                    Teléfono (8 dígitos) <RequiredAsterisk />
+                  </Label>
                   <Input
                     id="telefono"
                     value={formData.telefono}
                     onChange={handleTelefonoChange}
                     maxLength={8}
                     pattern="[0-9]{8}"
+                    className={erroresFormulario.telefono ? "border-red-500" : ""}
                     required
                   />
-                  {formData.telefono.length !== 8 && formData.telefono.length > 0 && (
-                    <p className="text-sm text-red-500 mt-1">El teléfono debe tener 8 dígitos</p>
+                  {erroresFormulario.telefono && (
+                    <p className="text-sm text-red-500 mt-1">{erroresFormulario.telefono}</p>
+                  )}
+                  {formData.telefono.length !== 8 && formData.telefono.length > 0 && !erroresFormulario.telefono && (
+                    <p className="text-sm text-yellow-600 mt-1">El teléfono debe tener 8 dígitos</p>
                   )}
                 </div>
                 <div>
-                  <Label htmlFor="usuario">Usuario *</Label>
+                  <Label htmlFor="usuario">
+                    Usuario <RequiredAsterisk />
+                  </Label>
                   <Input
                     id="usuario"
                     value={formData.usuario}
-                    onChange={(e) => setFormData({ ...formData, usuario: e.target.value })}
+                    onChange={handleUsuarioChange}
+                    className={erroresFormulario.usuario ? "border-red-500" : ""}
                     required
                   />
+                  {erroresFormulario.usuario && (
+                    <p className="text-sm text-red-500 mt-1">{erroresFormulario.usuario}</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="contraseña">
-                    Contraseña {editandoUsuario ? "" : "*"}
+                    Contraseña {editandoUsuario ? "(opcional)" : <RequiredAsterisk />}
                   </Label>
                   <Input
                     id="contraseña"
@@ -331,7 +414,9 @@ export function GestionUsuariosView() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="rol">Rol *</Label>
+                  <Label htmlFor="rol">
+                    Rol <RequiredAsterisk />
+                  </Label>
                   <Select 
                     value={formData.rol} 
                     onValueChange={(value) => setFormData({ ...formData, rol: value as "admin" | "asistente" })}
@@ -347,7 +432,9 @@ export function GestionUsuariosView() {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="idbodega">Bodega *</Label>
+                  <Label htmlFor="idbodega">
+                    Bodega <RequiredAsterisk />
+                  </Label>
                   <Select 
                     value={formData.idbodega} 
                     onValueChange={(value) => setFormData({ ...formData, idbodega: value })}
@@ -375,10 +462,18 @@ export function GestionUsuariosView() {
                   )}
                 </div>
               </div>
+              
+              {/* Mensaje de error general */}
+              {erroresFormulario.general && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+                  {erroresFormulario.general}
+                </div>
+              )}
+              
               <div className="flex gap-2">
                 <Button 
                   type="submit" 
-                  disabled={enviandoFormulario || (formData.telefono.length !== 8 && formData.telefono.length > 0) || bodegas.length === 0}
+                  disabled={enviandoFormulario || bodegas.length === 0}
                 >
                   {enviandoFormulario ? "Procesando..." : (editandoUsuario ? "Actualizar" : "Crear")} Usuario
                 </Button>
