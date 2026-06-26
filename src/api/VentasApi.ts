@@ -9,6 +9,12 @@ export interface BackendUsuario {
   usuario: string;
 }
 
+export interface BackendBodega {
+  idbodega: number;
+  nombre: string;
+  tipo: string;
+}
+
 interface BackendDetalleVenta {
   iddetalle_venta: number;
   idproducto: number;
@@ -22,6 +28,7 @@ interface BackendVenta {
   idventa: number;
   fecha_hora: string;
   idusuario: number;
+  idbodega: number;
   descripcion: string;
   sub_total: string;
   descuento: string;
@@ -31,6 +38,7 @@ interface BackendVenta {
   usuario_nombre: string;
   usuario_apellidos: string;
   usuario_usuario: string;
+  bodega_nombre?: string;
   detalle: BackendDetalleVenta[];
 }
 
@@ -49,6 +57,8 @@ export interface Venta {
   usuario: string;
   usuario_completo: string;
   usuario_login: string;
+  idbodega?: number;
+  bodegaNombre?: string;
   descripcion: string;
   descripcion_descuento?: string;
   detalle: DetalleVenta[];
@@ -61,6 +71,7 @@ export interface Venta {
 export interface VentasFiltros {
   empleado?: string;
   metodo?: string;
+  bodega?: number;
   fechaEspecifica?: Date;
   fechaInicio?: Date;
   fechaFin?: Date;
@@ -80,6 +91,41 @@ const api = axios.create({
   },
 });
 
+// Interceptor para agregar token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Interceptor para manejar errores de autenticación
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("userBodega");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+
+export const getBodegas = async (): Promise<BackendBodega[]> => {
+  try {
+    const response = await api.get<BackendBodega[]>("/ventas/bodegas");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching bodegas:", error);
+    throw new Error("No se pudieron cargar las bodegas");
+  }
+};
+
 export const getUsuariosVentas = async (): Promise<BackendUsuario[]> => {
   try {
     const response = await api.get<BackendUsuario[]>("/ventas/usuarios");
@@ -90,7 +136,7 @@ export const getUsuariosVentas = async (): Promise<BackendUsuario[]> => {
   }
 };
 
-// Función principal para obtener ventas (compatibilidad)
+// Función principal para obtener ventas
 export const getVentas = async (filtros?: VentasFiltros): Promise<Venta[]> => {
   try {
     const params: any = {};
@@ -101,6 +147,10 @@ export const getVentas = async (filtros?: VentasFiltros): Promise<Venta[]> => {
     
     if (filtros?.metodo && filtros.metodo !== "Todos") {
       params.metodo = filtros.metodo;
+    }
+    
+    if (filtros?.bodega) {
+      params.bodega = filtros.bodega;
     }
     
     if (filtros?.fechaEspecifica) {
@@ -120,6 +170,8 @@ export const getVentas = async (filtros?: VentasFiltros): Promise<Venta[]> => {
       usuario: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_completo: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_login: venta.usuario_usuario,
+      idbodega: venta.idbodega,
+      bodegaNombre: venta.bodega_nombre || "N/A",
       descripcion: venta.descripcion,
       descripcion_descuento: venta.descripcion_descuento,
       detalle: venta.detalle.map((detalle) => ({
@@ -141,126 +193,6 @@ export const getVentas = async (filtros?: VentasFiltros): Promise<Venta[]> => {
   }
 };
 
-// Función para obtener ventas por fecha específica
-export const getVentasByFecha = async (fecha: string): Promise<Venta[]> => {
-  try {
-    const params: any = {
-      fechaEspecifica: fecha
-    };
-
-    const response = await api.get<BackendVenta[]>("/ventas/ventas", { params });
-    
-    return response.data.map((venta) => ({
-      id: venta.idventa,
-      fecha: venta.fecha_hora,
-      usuario: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
-      usuario_completo: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
-      usuario_login: venta.usuario_usuario,
-      descripcion: venta.descripcion,
-      detalle: venta.detalle.map((detalle) => ({
-        iddetalle_venta: detalle.iddetalle_venta,
-        idproducto: detalle.idproducto,
-        cantidad: detalle.cantidad,
-        precio_unitario: parseFloat(detalle.precio_unitario),
-        subtotal_linea: parseFloat(detalle.subtotal_linea),
-        producto: detalle.nombre_producto || "Producto sin nombre"
-      })),
-      subtotal: parseFloat(venta.sub_total),
-      descuento: parseFloat(venta.descuento),
-      total: parseFloat(venta.total),
-      metodo: venta.metodo_pago
-    }));
-  } catch (error) {
-    console.error("Error fetching ventas por fecha:", error);
-    throw new Error("No se pudieron cargar las ventas");
-  }
-};
-
-// Función para obtener ventas por rango de fechas
-export const getVentasByRango = async (fechaInicio: string, fechaFin: string): Promise<Venta[]> => {
-  try {
-    const params: any = {
-      fechaInicio: fechaInicio,
-      fechaFin: fechaFin
-    };
-
-    const response = await api.get<BackendVenta[]>("/ventas/ventas", { params });
-    
-    return response.data.map((venta) => ({
-      id: venta.idventa,
-      fecha: venta.fecha_hora,
-      usuario: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
-      usuario_completo: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
-      usuario_login: venta.usuario_usuario,
-      descripcion: venta.descripcion,
-      detalle: venta.detalle.map((detalle) => ({
-        iddetalle_venta: detalle.iddetalle_venta,
-        idproducto: detalle.idproducto,
-        cantidad: detalle.cantidad,
-        precio_unitario: parseFloat(detalle.precio_unitario),
-        subtotal_linea: parseFloat(detalle.subtotal_linea),
-        producto: detalle.nombre_producto || "Producto sin nombre"
-      })),
-      subtotal: parseFloat(venta.sub_total),
-      descuento: parseFloat(venta.descuento),
-      total: parseFloat(venta.total),
-      metodo: venta.metodo_pago
-    }));
-  } catch (error) {
-    console.error("Error fetching ventas por rango:", error);
-    throw new Error("No se pudieron cargar las ventas");
-  }
-};
-
-// Función para obtener totales por fecha específica
-export const getTotalesVentasByFecha = async (fecha: string): Promise<TotalesVentas> => {
-  try {
-    const params: any = {
-      fechaEspecifica: fecha
-    };
-
-    const response = await api.get<{
-      total_general: string;
-      total_efectivo: string;
-      total_qr: string;
-    }>("/ventas/totales", { params });
-    
-    return {
-      totalGeneral: parseFloat(response.data.total_general),
-      totalEfectivo: parseFloat(response.data.total_efectivo),
-      totalQR: parseFloat(response.data.total_qr)
-    };
-  } catch (error) {
-    console.error("Error fetching totales por fecha:", error);
-    throw new Error("No se pudieron cargar los totales");
-  }
-};
-
-// Función para obtener totales por rango de fechas
-export const getTotalesVentasByRango = async (fechaInicio: string, fechaFin: string): Promise<TotalesVentas> => {
-  try {
-    const params: any = {
-      fechaInicio: fechaInicio,
-      fechaFin: fechaFin
-    };
-
-    const response = await api.get<{
-      total_general: string;
-      total_efectivo: string;
-      total_qr: string;
-    }>("/ventas/totales", { params });
-    
-    return {
-      totalGeneral: parseFloat(response.data.total_general),
-      totalEfectivo: parseFloat(response.data.total_efectivo),
-      totalQR: parseFloat(response.data.total_qr)
-    };
-  } catch (error) {
-    console.error("Error fetching totales por rango:", error);
-    throw new Error("No se pudieron cargar los totales");
-  }
-};
-
 export const getTotalesVentas = async (filtros?: VentasFiltros): Promise<TotalesVentas> => {
   try {
     const params: any = {};
@@ -271,6 +203,10 @@ export const getTotalesVentas = async (filtros?: VentasFiltros): Promise<Totales
     
     if (filtros?.metodo && filtros.metodo !== "Todos") {
       params.metodo = filtros.metodo;
+    }
+    
+    if (filtros?.bodega) {
+      params.bodega = filtros.bodega;
     }
     
     if (filtros?.fechaEspecifica) {
@@ -309,7 +245,10 @@ export const getVentasHoyAsistente = async (username: string): Promise<Venta[]> 
       usuario: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_completo: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_login: venta.usuario_usuario,
+      idbodega: venta.idbodega,
+      bodegaNombre: venta.bodega_nombre || "N/A",
       descripcion: venta.descripcion,
+      descripcion_descuento: venta.descripcion_descuento,
       detalle: venta.detalle.map((detalle) => ({
         iddetalle_venta: detalle.iddetalle_venta,
         idproducto: detalle.idproducto,
@@ -336,3 +275,5 @@ const formatDateForAPI = (date: Date): string => {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+
+export default api;

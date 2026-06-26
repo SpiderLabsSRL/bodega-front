@@ -11,12 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { CalendarIcon, Download, Calendar as CalendarRangeIcon, Printer, Loader2, Check, X, Eye } from "lucide-react";
+import { CalendarIcon, Download, Calendar as CalendarRangeIcon, Printer, Loader2, Check, X, Eye, Building2 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { getVentas, getTotalesVentas, getUsuariosVentas, getVentasHoyAsistente, Venta, VentasFiltros, TotalesVentas, BackendUsuario } from "@/api/VentasApi";
-import { getUserRole, getCurrentUser } from "@/api/AuthApi";
+import { getVentas, getTotalesVentas, getUsuariosVentas, getVentasHoyAsistente, getBodegas, Venta, VentasFiltros, TotalesVentas, BackendUsuario, BackendBodega } from "@/api/VentasApi";
+import { getUserRole, getCurrentUser, getUserBodega } from "@/api/AuthApi";
 import { generateVentaPDF } from "./VentasPDF";
 import { VentasTablaPDF } from "./VentasTablaPDF";
 import { pdf } from "@react-pdf/renderer";
@@ -27,32 +27,29 @@ interface UsuarioOption {
   username: string;
 }
 
+interface BodegaOption {
+  value: number;
+  label: string;
+}
+
 // Función para obtener la fecha actual en Bolivia (GMT-4)
 const getFechaBolivia = () => {
   const now = new Date();
-  // Bolivia está en GMT-4, así que restamos 4 horas para obtener la hora boliviana
-  const boliviaOffset = -4 * 60; // -4 horas en minutos
-  const localOffset = now.getTimezoneOffset(); // offset local en minutos
-  const diff = boliviaOffset - localOffset; // diferencia en minutos
-  
-  // Ajustar la fecha a la zona horaria de Bolivia
+  const boliviaOffset = -4 * 60;
+  const localOffset = now.getTimezoneOffset();
+  const diff = boliviaOffset - localOffset;
   const fechaBolivia = new Date(now.getTime() + diff * 60000);
-  fechaBolivia.setHours(0, 0, 0, 0); // Inicio del día en Bolivia
-  
+  fechaBolivia.setHours(0, 0, 0, 0);
   return fechaBolivia;
 };
 
 // Función para formatear fecha para mostrar (sin conversiones UTC)
 const formatDateForDisplay = (dateInput: string | Date) => {
   try {
-    // Si es string, convertir a Date
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    
-    // Extraer partes de la fecha LOCAL (como se seleccionó)
-    const day = date.getDate(); // Día local
-    const month = date.getMonth() + 1; // Mes local
-    const year = date.getFullYear(); // Año local
-    
+    const day = date.getDate();
+    const month = date.getMonth() + 1;
+    const year = date.getFullYear();
     return `${day}/${month}/${year}`;
   } catch (error) {
     console.error("Error formatting date:", error);
@@ -64,8 +61,8 @@ const formatDateForDisplay = (dateInput: string | Date) => {
 const formatTimeForDisplay = (dateInput: string | Date) => {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    const hours = date.getHours(); // Hora local
-    const minutes = date.getMinutes(); // Minutos local
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
     const formattedHours = hours < 10 ? `0${hours}` : hours.toString();
     const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes.toString();
     return `${formattedHours}:${formattedMinutes}`;
@@ -93,12 +90,14 @@ export function VentasView() {
   const currentUser = getCurrentUser();
   const userRole = getUserRole() || "admin";
   const username = currentUser?.usuario || "";
+  const userBodegaId = getUserBodega();
   const isAssistant = userRole === "Asistente";
   
   // Configurar fecha actual de Bolivia por defecto
   const [fechaBoliviaHoy] = useState(() => getFechaBolivia());
   
   const [empleadosOptions, setEmpleadosOptions] = useState<UsuarioOption[]>([{ value: "Todos", label: "Todos", username: "" }]);
+  const [bodegasOptions, setBodegasOptions] = useState<BodegaOption[]>([]);
   const [ventasFiltradas, setVentasFiltradas] = useState<Venta[]>([]);
   const [totales, setTotales] = useState<TotalesVentas>({ totalGeneral: 0, totalEfectivo: 0, totalQR: 0 });
   const [loading, setLoading] = useState(false);
@@ -110,6 +109,7 @@ export function VentasView() {
   // Estados para filtros
   const [filtroEmpleado, setFiltroEmpleado] = useState("Todos");
   const [filtroMetodo, setFiltroMetodo] = useState("Todos");
+  const [filtroBodega, setFiltroBodega] = useState<number | "todos">("todos");
   
   // Estados para fecha específica
   const [fechaBusqueda, setFechaBusqueda] = useState<Date | undefined>(fechaBoliviaHoy);
@@ -138,12 +138,12 @@ export function VentasView() {
     cargarDatosIniciales();
   }, []);
 
-  // Efecto para buscar datos cuando cambian los filtros O cuando se terminan de cargar los datos iniciales
+  // Efecto para buscar datos cuando cambian los filtros
   useEffect(() => {
     if (datosCargados) {
       buscarDatos();
     }
-  }, [filtroEmpleado, filtroMetodo, fechaBusqueda, fechaRangoAplicado, datosCargados]);
+  }, [filtroEmpleado, filtroMetodo, filtroBodega, fechaBusqueda, fechaRangoAplicado, datosCargados]);
 
   const cargarDatosIniciales = async () => {
     try {
@@ -151,8 +151,27 @@ export function VentasView() {
       setDatosCargados(false);
       setError(null);
 
+      // Cargar bodegas para el filtro (solo admin)
       if (!isAssistant) {
-        // Cargar usuarios para el filtro de empleados
+        try {
+          const bodegas = await getBodegas();
+          const opcionesBodegas: BodegaOption[] = bodegas.map(b => ({
+            value: b.idbodega,
+            label: b.nombre
+          }));
+          setBodegasOptions(opcionesBodegas);
+          
+          // Si el admin tiene una bodega asignada, seleccionarla por defecto
+          if (userBodegaId) {
+            setFiltroBodega(userBodegaId);
+          }
+        } catch (err) {
+          console.error("Error cargando bodegas:", err);
+        }
+      }
+
+      // Cargar usuarios para el filtro de empleados (solo admin)
+      if (!isAssistant) {
         const usuariosBackend: BackendUsuario[] = await getUsuariosVentas();
         const opcionesUsuarios: UsuarioOption[] = usuariosBackend.map(user => ({
           value: user.usuario,
@@ -198,22 +217,15 @@ export function VentasView() {
         const totalQR = ventas.filter(v => v.metodo === "QR").reduce((sum, venta) => sum + venta.total, 0);
         totalesData = { totalGeneral, totalEfectivo, totalQR };
       } else {
-        // Para admin: aplicar filtros normales
+        // Para admin: aplicar filtros normales + bodega
         const filtros: VentasFiltros = {
           empleado: filtroEmpleado !== "Todos" ? filtroEmpleado : undefined,
           metodo: filtroMetodo !== "Todos" ? filtroMetodo : undefined,
+          bodega: filtroBodega !== "todos" ? filtroBodega : undefined,
           fechaEspecifica: fechaBusqueda,
           fechaInicio: fechaRangoAplicado.from,
           fechaFin: fechaRangoAplicado.to
         };
-        
-        console.log("Filtros enviados al backend:", {
-          empleado: filtros.empleado,
-          metodo: filtros.metodo,
-          fechaEspecifica: fechaBusqueda ? format(fechaBusqueda, "yyyy-MM-dd") : "null",
-          fechaInicio: fechaRangoAplicado.from ? format(fechaRangoAplicado.from, "yyyy-MM-dd") : "null",
-          fechaFin: fechaRangoAplicado.to ? format(fechaRangoAplicado.to, "yyyy-MM-dd") : "null"
-        });
         
         ventas = await getVentas(filtros);
         totalesData = await getTotalesVentas(filtros);
@@ -250,16 +262,25 @@ export function VentasView() {
       
       if (filtroEmpleado !== "Todos") {
         const empleadoLabel = empleadosOptions.find(e => e.value === filtroEmpleado)?.label || filtroEmpleado;
-        nombreArchivo += `_${empleadoLabel.replace(/\s+/g, '_')}`;
+        // Usar String() para evitar errores de replace en números
+        const empleadoLabelStr = String(empleadoLabel);
+        nombreArchivo += `_${empleadoLabelStr.replace(/\s+/g, '_')}`;
       }
       
       if (filtroMetodo !== "Todos") {
         nombreArchivo += `_${filtroMetodo}`;
       }
       
+      if (filtroBodega !== "todos") {
+        const bodegaLabel = bodegasOptions.find(b => b.value === filtroBodega)?.label || String(filtroBodega);
+        // Usar String() para evitar errores de replace en números
+        const bodegaLabelStr = String(bodegaLabel);
+        nombreArchivo += `_${bodegaLabelStr.replace(/\s+/g, '_')}`;
+      }
+      
       nombreArchivo += ".pdf";
       
-      // Crear el documento PDF
+      // Crear el documento PDF - usando un objeto con las propiedades correctas
       const pdfDocument = (
         <VentasTablaPDF
           ventas={ventasFiltradas}
@@ -291,7 +312,6 @@ export function VentasView() {
   };
 
   const limpiarFiltros = () => {
-    // Usar la fecha de Bolivia actual
     const hoyBolivia = getFechaBolivia();
     setFechaBusqueda(hoyBolivia);
     setFechaRangoTemp({ from: undefined, to: undefined });
@@ -299,6 +319,11 @@ export function VentasView() {
     
     if (userRole === "Admin") {
       setFiltroEmpleado("Todos");
+      if (userBodegaId) {
+        setFiltroBodega(userBodegaId);
+      } else {
+        setFiltroBodega("todos");
+      }
     } else {
       setFiltroEmpleado(currentUser.usuario);
     }
@@ -309,9 +334,7 @@ export function VentasView() {
   // Manejar cambio en filtro de fecha específica
   const handleFechaBusquedaChange = async (date: Date | undefined) => {
     if (date) {
-      // Usar la fecha exacta como está (sin ajustes de zona horaria)
       setFechaBusqueda(date);
-      // Limpiar completamente el rango
       setFechaRangoAplicado({ from: undefined, to: undefined });
       setFechaRangoTemp({ from: undefined, to: undefined });
       setMostrarCalendario(false);
@@ -330,7 +353,6 @@ export function VentasView() {
         from: fechaRangoTemp.from,
         to: fechaRangoTemp.to
       });
-      // Limpiar completamente la fecha específica
       setFechaBusqueda(undefined);
       setMostrarRango(false);
     }
@@ -345,7 +367,7 @@ export function VentasView() {
     setMostrarRango(false);
   };
 
-  const abrirDetalleVenta = (venta: Venta, imprimir : boolean = true) => {
+  const abrirDetalleVenta = (venta: Venta, imprimir: boolean = true) => {
     setMostrarDetallesImpresion(imprimir);
     setVentaSeleccionada(venta);
     setMostrarDetalle(true);
@@ -358,7 +380,6 @@ export function VentasView() {
       return;
     }
     
-    // Generar PDF en lugar de imprimir
     if (ventaSeleccionada) {
       generateVentaPDF({
         venta: ventaSeleccionada,
@@ -366,6 +387,15 @@ export function VentasView() {
         fileName: `Venta_${ventaSeleccionada.id}_${nombreCliente.replace(/\s+/g, '_')}.pdf`
       });
     }
+  };
+
+  // Obtener el nombre de la bodega del usuario actual
+  const getBodegaNombre = () => {
+    if (userBodegaId) {
+      const bodega = bodegasOptions.find(b => b.value === userBodegaId);
+      return bodega?.label || "No asignada";
+    }
+    return "No asignada";
   };
 
   if (initialLoading) {
@@ -443,7 +473,7 @@ export function VentasView() {
             <CardTitle>Filtros</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
               <div>
                 <label className="text-sm font-medium">Empleado</label>
                 <Select value={filtroEmpleado} onValueChange={setFiltroEmpleado}>
@@ -470,6 +500,26 @@ export function VentasView() {
                     <SelectItem value="Todos">Todos</SelectItem>
                     <SelectItem value="Efectivo">Efectivo</SelectItem>
                     <SelectItem value="QR">QR</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Sucursal</label>
+                <Select 
+                  value={filtroBodega === "todos" ? "todos" : String(filtroBodega)} 
+                  onValueChange={(value) => setFiltroBodega(value === "todos" ? "todos" : parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas las sucursales</SelectItem>
+                    {bodegasOptions.map(bodega => (
+                      <SelectItem key={bodega.value} value={String(bodega.value)}>
+                        {bodega.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -551,31 +601,41 @@ export function VentasView() {
             
             {/* Indicador de filtros activos */}
             <div className="mt-4 pt-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                Filtros activos:
+              <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
+                <span>Filtros activos:</span>
                 {fechaBusqueda && (
-                  <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
                     Fecha: {format(fechaBusqueda, "dd/MM/yyyy", { locale: es })}
                   </span>
                 )}
                 {fechaRangoAplicado.from && fechaRangoAplicado.to && (
-                  <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
                     Rango: {format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - {format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}
                   </span>
                 )}
                 {filtroEmpleado !== "Todos" && (
-                  <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
                     Empleado: {empleadosOptions.find(e => e.value === filtroEmpleado)?.label}
                   </span>
                 )}
                 {filtroMetodo !== "Todos" && (
-                  <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
                     Método: {filtroMetodo}
                   </span>
                 )}
-                {!fechaBusqueda && !fechaRangoAplicado.from && !fechaRangoAplicado.to && filtroEmpleado === "Todos" && filtroMetodo === "Todos" && (
-                  <span className="ml-2 px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded">
-                    Ventas de hoy
+                {filtroBodega !== "todos" && (
+                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
+                    Sucursal: {bodegasOptions.find(b => b.value === filtroBodega)?.label}
+                  </span>
+                )}
+                {!fechaBusqueda && !fechaRangoAplicado.from && !fechaRangoAplicado.to && filtroEmpleado === "Todos" && filtroMetodo === "Todos" && filtroBodega === "todos" && (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded">
+                    Ventas de hoy - Todas las sucursales
+                  </span>
+                )}
+                {!fechaBusqueda && !fechaRangoAplicado.from && !fechaRangoAplicado.to && filtroEmpleado === "Todos" && filtroMetodo === "Todos" && filtroBodega !== "todos" && (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded">
+                    Ventas de hoy - {bodegasOptions.find(b => b.value === filtroBodega)?.label}
                   </span>
                 )}
               </div>
@@ -591,7 +651,6 @@ export function VentasView() {
             <div className="text-center text-muted-foreground">
               <p className="text-lg font-medium">Mostrando tus ventas de hoy</p>
               <p className="text-sm">{formatDateForDisplay(fechaBoliviaHoy)}</p>
-              <p className="text-sm mt-2">Usuario: {currentUser?.nombres} {currentUser?.apellidos}</p>
             </div>
           </CardContent>
         </Card>
@@ -620,6 +679,7 @@ export function VentasView() {
                   <TableRow>
                     <TableHead className="w-[140px]">Fecha y Hora</TableHead>
                     <TableHead className="w-[150px]">Usuario</TableHead>
+                    {!isAssistant && <TableHead className="w-[130px]">Sucursal</TableHead>}
                     <TableHead className="min-w-[300px]">Descripción</TableHead>
                     <TableHead className="w-[100px] text-right">Subtotal</TableHead>
                     <TableHead className="w-[100px] text-right">Descuento</TableHead>
@@ -632,7 +692,7 @@ export function VentasView() {
                 <TableBody>
                   {ventasFiltradas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={10} className="text-center py-8">
                         <div className="flex flex-col items-center">
                           <p className="text-muted-foreground mb-2">No se encontraron ventas</p>
                           <p className="text-sm text-muted-foreground">
@@ -641,6 +701,7 @@ export function VentasView() {
                               `En el rango: ${format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - ${format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}`}
                             {filtroEmpleado !== "Todos" && ` - Empleado: ${empleadosOptions.find(e => e.value === filtroEmpleado)?.label}`}
                             {filtroMetodo !== "Todos" && ` - Método: ${filtroMetodo}`}
+                            {filtroBodega !== "todos" && ` - Sucursal: ${bodegasOptions.find(b => b.value === filtroBodega)?.label}`}
                           </p>
                         </div>
                       </TableCell>
@@ -666,12 +727,27 @@ export function VentasView() {
                           </div>
                         </TableCell>
                         
+                        {/* Sucursal - Solo para Admin */}
+                        {!isAssistant && (
+                          <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
+                            <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">SUCURSAL</div>
+                            <div className="text-sm">
+                              {venta.bodegaNombre || "N/A"}
+                            </div>
+                          </TableCell>
+                        )}
+                        
                         {/* Descripción */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
                           <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">DESCRIPCIÓN</div>
                           <div className="text-sm leading-relaxed">
                             {venta.descripcion}
                           </div>
+                          {venta.descripcion_descuento && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Descuento: {venta.descripcion_descuento}
+                            </div>
+                          )}
                         </TableCell>
                         
                         {/* Subtotal */}
@@ -690,7 +766,7 @@ export function VentasView() {
                           </div>
                         </TableCell>
                         
-                        {/* Total - Con más espacio */}
+                        {/* Total */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0 font-medium">
                           <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">TOTAL</div>
                           <div className="text-lg font-bold text-primary text-right md:text-right md:pr-4">
@@ -698,7 +774,7 @@ export function VentasView() {
                           </div>
                         </TableCell>
                         
-                        {/* Método de Pago - Con más espacio */}
+                        {/* Método de Pago */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
                           <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">MÉTODO</div>
                           <div className="flex justify-start md:justify-start md:pl-4">
@@ -787,19 +863,23 @@ export function VentasView() {
               <p><strong>Fecha:</strong> {ventaSeleccionada ? `${formatDateForDisplay(ventaSeleccionada.fecha)} ${formatTimeForDisplay(ventaSeleccionada.fecha)}` : ""}</p>
               <p><strong>Dirección:</strong> Av. Heroinas esq. Hamiraya #316</p>
               <p><strong>Números:</strong> 77950297 - 77918672</p>
+              {ventaSeleccionada?.bodegaNombre && (
+                <p><strong>Sucursal:</strong> {ventaSeleccionada.bodegaNombre}</p>
+              )}
+              <p><strong>Vendedor:</strong> {ventaSeleccionada?.usuario}</p>
             </div>
 
             {/* Descripción completa de la venta */}
             <div className="descripcion-venta bg-muted/50 p-4 rounded-lg">
               <h3 className="font-semibold mb-2">Descripción de la Venta:</h3>
               <p className="text-sm">{ventaSeleccionada?.descripcion}</p>
+              {ventaSeleccionada?.descripcion_descuento && (
+                <div className="mt-2">
+                  <h3 className="font-semibold mb-1">Descripción del descuento:</h3>
+                  <p className="text-sm">{ventaSeleccionada?.descripcion_descuento}</p>
+                </div>
+              )}
             </div>
-            {ventaSeleccionada?.descripcion_descuento && (
-              <div className="descripcion-venta bg-muted/50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-2">Descripción del descuento:</h3>
-                <p className="text-sm">{ventaSeleccionada?.descripcion_descuento}</p>
-              </div>
-            )}
 
             {/* Tabla de productos y totales - Solo si hay productos */}
             {ventaSeleccionada?.detalle && ventaSeleccionada.detalle.length > 0 && (
