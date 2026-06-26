@@ -9,12 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { getPagosPendientes, procesarPago, actualizarEntregas, marcarComoEntregado, eliminarPago, PagoPendiente, ProductoCotizado } from "@/api/PagosPendientesApi";
+import { getPagosPendientes, procesarPago, actualizarEntregas, marcarComoEntregado, eliminarPago, PagoPendiente } from "@/api/PagosPendientesApi";
+import { getUserId, getUserRole, getCurrentUser } from "@/api/AuthApi";
 
-// Simular usuario (en una app real esto vendría de auth context)
+// Obtener usuario actual desde AuthApi
 const USUARIO_ACTUAL = {
-  id: 1,
-  nombre: "Usuario Demo"
+  id: getUserId() || 1,
+  nombre: getCurrentUser()?.nombres || "Usuario Demo",
+  rol: getUserRole() || "Asistente"
 };
 
 const formatBs = (value: number) => {
@@ -40,6 +42,8 @@ export function PagosPendientesView() {
   const [entregasTemporales, setEntregasTemporales] = useState<{[key: string]: number}>({});
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const isAdmin = USUARIO_ACTUAL.rol === 'Admin';
 
   useEffect(() => {
     cargarPagosPendientes();
@@ -98,7 +102,8 @@ export function PagosPendientesView() {
   const filteredPagos = pagosPendientes.filter(pago =>
     pago.cliente.toLowerCase().includes(searchQuery.toLowerCase()) ||
     pago.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pago.telefono.includes(searchQuery)
+    pago.telefono.includes(searchQuery) ||
+    (isAdmin && pago.usuarioNombre?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const verDetalle = (pago: PagoPendiente) => {
@@ -269,7 +274,6 @@ export function PagosPendientesView() {
     setProcessingAction(`eliminar-pago-${pago.id}`);
     
     try {
-      // Usar la función real de la API para eliminar
       await eliminarPago(pago.id);
       
       setPagosPendientes(prev => prev.filter(p => p.id !== pago.id));
@@ -327,9 +331,16 @@ export function PagosPendientesView() {
 
   return (
     <div className="space-y-4 sm:space-y-6 p-2 sm:p-4">
-      <div className="flex items-center gap-2">
-        <CreditCard className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-        <h1 className="text-xl sm:text-2xl font-bold text-primary">Pagos Pendientes</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <CreditCard className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+          <h1 className="text-xl sm:text-2xl font-bold text-primary">Pagos Pendientes</h1>
+        </div>
+        {isAdmin && (
+          <div className="text-sm text-muted-foreground bg-primary/10 px-3 py-1 rounded-full">
+            Vista de Administrador
+          </div>
+        )}
       </div>
 
       {/* Buscador */}
@@ -341,7 +352,7 @@ export function PagosPendientesView() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="Buscar por cliente, teléfono o número de cotización..."
+              placeholder={isAdmin ? "Buscar por cliente, teléfono, número de cotización o usuario..." : "Buscar por cliente, teléfono o número de cotización..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -391,6 +402,20 @@ export function PagosPendientesView() {
                     <span className="text-muted-foreground">Pendiente:</span>
                     <span className="font-bold text-orange-600">Bs {formatBs(pago.saldo)}</span>
                   </div>
+                  
+                  {isAdmin && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Usuario:</span>
+                      <span className="font-medium">{pago.usuarioNombre || "Desconocido"}</span>
+                    </div>
+                  )}
+                  
+                  {isAdmin && pago.bodegaNombre && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Sucursal:</span>
+                      <span className="font-medium">{pago.bodegaNombre}</span>
+                    </div>
+                  )}
                   
                   <div className="grid grid-cols-2 gap-2 pt-2">
                     <Button
@@ -505,6 +530,8 @@ export function PagosPendientesView() {
                   <TableHead>Fecha</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Teléfono</TableHead>
+                  {isAdmin && <TableHead>Usuario</TableHead>}
+                  {isAdmin && <TableHead>Sucursal</TableHead>}
                   <TableHead>Tipo de Pago</TableHead>
                   <TableHead className="text-right">Monto Total</TableHead>
                   <TableHead className="text-right">Saldo Pendiente</TableHead>
@@ -517,6 +544,18 @@ export function PagosPendientesView() {
                     <TableCell>{new Date(pago.fecha).toLocaleDateString('es-BO')}</TableCell>
                     <TableCell className="font-medium">{pago.cliente}</TableCell>
                     <TableCell>{pago.telefono}</TableCell>
+                    {isAdmin && (
+                      <TableCell>
+                        <span className="text-sm" title={pago.usuarioLogin}>
+                          {pago.usuarioNombre || "Desconocido"}
+                        </span>
+                      </TableCell>
+                    )}
+                    {isAdmin && (
+                      <TableCell>
+                        <span className="text-sm">{pago.bodegaNombre || "N/A"}</span>
+                      </TableCell>
+                    )}
                     <TableCell>
                       {pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}
                     </TableCell>
@@ -684,10 +723,18 @@ export function PagosPendientesView() {
                       {pagoParaDetalle.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}
                     </p>
                   </div>
-                  <div>
-                    <span className="font-medium text-muted-foreground">Ubicación:</span>
-                    <p className="font-semibold">Cochabamba, Bolivia</p>
-                  </div>
+                  {isAdmin && (
+                    <>
+                      <div>
+                        <span className="font-medium text-muted-foreground">Usuario:</span>
+                        <p className="font-semibold">{pagoParaDetalle.usuarioNombre || "Desconocido"}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-muted-foreground">Sucursal:</span>
+                        <p className="font-semibold">{pagoParaDetalle.bodegaNombre || "N/A"}</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -909,7 +956,6 @@ export function PagosPendientesView() {
                         Escanea el código QR para pagar
                       </p>
                     </div>
-
                   )}
                 </div>
               </div>
