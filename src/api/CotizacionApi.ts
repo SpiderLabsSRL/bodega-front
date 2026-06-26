@@ -17,6 +17,7 @@ interface BackendCotizacion {
   saldo: string;
   estado: number;
   idusuario: number;
+  idcliente?: number;
   fecha_creacion: string;
   usuario_nombre?: string;
   usuario_apellido?: string;
@@ -34,7 +35,7 @@ interface BackendDetalleCotizacion {
 
 export interface Cotizacion {
   idcotizacion: number;
-  vigencia: string; // Cambiado a string para mostrar formato legible
+  vigencia: string;
   cliente_nombre: string;
   cliente_telefono: string;
   cliente_direccion: string;
@@ -46,6 +47,7 @@ export interface Cotizacion {
   saldo: number;
   estado: number;
   idusuario: number;
+  idcliente?: number;
   fecha_creacion: string;
   usuario_nombre?: string;
   usuario_apellido?: string;
@@ -61,7 +63,6 @@ export interface DetalleCotizacion {
   producto_nombre?: string;
 }
 
-// MODIFICADO: Actualizado para incluir "Contra Entrega"
 export interface CotizacionRequest {
   vigencia: string;
   cliente_nombre: string;
@@ -79,6 +80,9 @@ export interface CotizacionRequest {
     precio_unitario: number;
     subtotal_linea: number;
   }>;
+  // Campos adicionales para manejo de cliente (opcionales)
+  carnet?: string;
+  cliente_nota?: string;
 }
 
 const api = axios.create({
@@ -89,9 +93,7 @@ const api = axios.create({
   },
 });
 
-// Mapeador CORREGIDO para cotizaciones - maneja correctamente la vigencia
 function mapBackendCotizacion(cotizacion: BackendCotizacion): Cotizacion {
-  // Convertir vigencia a formato legible
   let vigenciaLegible = "No definida";
   
   if (cotizacion.vigencia && cotizacion.vigencia !== "0") {
@@ -103,7 +105,6 @@ function mapBackendCotizacion(cotizacion: BackendCotizacion): Cotizacion {
     }
   }
 
-  // Formatear fecha de creación
   let fechaCreacionLegible = "Fecha no disponible";
   if (cotizacion.fecha_creacion) {
     try {
@@ -118,7 +119,7 @@ function mapBackendCotizacion(cotizacion: BackendCotizacion): Cotizacion {
 
   return {
     idcotizacion: cotizacion.idcotizacion,
-    vigencia: vigenciaLegible, // Usamos el string formateado
+    vigencia: vigenciaLegible,
     cliente_nombre: cotizacion.cliente_nombre,
     cliente_telefono: cotizacion.cliente_telefono,
     cliente_direccion: cotizacion.cliente_direccion,
@@ -130,6 +131,7 @@ function mapBackendCotizacion(cotizacion: BackendCotizacion): Cotizacion {
     saldo: parseFloat(cotizacion.saldo),
     estado: cotizacion.estado,
     idusuario: cotizacion.idusuario,
+    idcliente: cotizacion.idcliente,
     fecha_creacion: fechaCreacionLegible,
     usuario_nombre: cotizacion.usuario_nombre,
     usuario_apellido: cotizacion.usuario_apellido
@@ -164,14 +166,12 @@ export const getCotizaciones = async (): Promise<Cotizacion[]> => {
   }
 };
 
-// Buscar cotizaciones por nombre o teléfono - CORREGIDO
 export const searchCotizaciones = async (query: string): Promise<Cotizacion[]> => {
   try {
     const response = await api.get<BackendCotizacion[]>(`/cotizaciones/search?q=${encodeURIComponent(query)}`);
     return response.data.map(mapBackendCotizacion);
   } catch (error) {
     console.error("Error searching quotations:", error);
-    // En lugar de throw, retornar array vacío
     return [];
   }
 };

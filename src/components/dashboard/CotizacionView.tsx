@@ -311,10 +311,48 @@ export function CotizacionView() {
     toast({ title: "Producto agregado", description: `${product.nombre} agregado a la cotización` });
   }, [toast]);
 
+  // Función para actualizar cantidad desde el input manual
   const actualizarCantidad = useCallback((uniqueId: string, nuevaCantidad: number) => {
+    if (nuevaCantidad < 0) return;
+    
     setCotizacionItems(prevItems =>
-      prevItems.map(item => item.uniqueId === uniqueId ? { ...item, cantidad: Math.max(0, nuevaCantidad) } : item)
+      prevItems.map(item => 
+        item.uniqueId === uniqueId ? { ...item, cantidad: nuevaCantidad } : item
+      )
     );
+  }, []);
+
+  // Función para manejar cambio en input de cantidad
+  const handleCantidadInputChange = useCallback((uniqueId: string, value: string) => {
+    if (value === "") {
+      setCotizacionItems(prevItems =>
+        prevItems.map(item => 
+          item.uniqueId === uniqueId ? { ...item, cantidad: 0 } : item
+        )
+      );
+      return;
+    }
+
+    const numericValue = parseInt(value);
+    if (isNaN(numericValue) || numericValue < 0) {
+      return;
+    }
+
+    setCotizacionItems(prevItems =>
+      prevItems.map(item => 
+        item.uniqueId === uniqueId ? { ...item, cantidad: numericValue } : item
+      )
+    );
+  }, []);
+
+  // Función para manejar blur en input de cantidad
+  const handleCantidadInputBlur = useCallback((uniqueId: string, value: string) => {
+    if (value === "" || parseInt(value) === 0) {
+      // Si el valor es 0 o vacío, eliminamos el item
+      setCotizacionItems(prevItems => 
+        prevItems.filter(item => item.uniqueId !== uniqueId)
+      );
+    }
   }, []);
 
   const eliminarItem = useCallback((uniqueId: string) => {
@@ -515,7 +553,7 @@ export function CotizacionView() {
     }
 
     // Si el cliente es manual (no seleccionado de la BD), solo generamos la cotización sin guardar
-    if (clienteManual || !selectedCliente) {
+    if (clienteManual && !selectedCliente) {
       toast({ title: "Cotización generada", description: "La cotización ha sido generada exitosamente (cliente no registrado)" });
       setCotizacionGenerada(true);
       return;
@@ -537,14 +575,23 @@ export function CotizacionView() {
         vigencia: datosCliente.vigencia.toString(),
         cliente_nombre: datosCliente.nombre,
         cliente_telefono: datosCliente.telefono,
-        cliente_direccion: datosCliente.direccion,
+        cliente_direccion: datosCliente.direccion || '',
         tipo_pago: tipoPagoBackend,
         sub_total: subtotal,
         descuento: descuentoTotal,
         total: totalFinal,
         abono: 0,
         saldo: totalFinal,
-        items: cotizacionItems.map(item => ({ idproducto: item.idproducto, cantidad: item.cantidad, precio_unitario: item.precio_venta, subtotal_linea: item.precio_venta * item.cantidad }))
+        items: cotizacionItems.map(item => ({ 
+          idproducto: item.idproducto, 
+          cantidad: item.cantidad, 
+          precio_unitario: item.precio_venta, 
+          subtotal_linea: item.precio_venta * item.cantidad 
+        })),
+        ...(selectedCliente ? {
+          carnet: selectedCliente.carnet || '',
+          cliente_nota: selectedCliente.nota || '',
+        } : {})
       };
 
       await createCotizacion(cotizacionRequest);
@@ -608,7 +655,23 @@ export function CotizacionView() {
     setLoading(true);
     try {
       const { cotizacion, detalles } = await getCotizacionById(idcotizacion);
-      const items: CotizacionItem[] = detalles.map(detalle => ({ idproducto: detalle.idproducto, nombre: detalle.producto_nombre, precio_venta: detalle.precio_unitario, precio_compra: 0, stock: 0, stock_minimo: 0, estado: 0, idubicacion: 0, nombre_ubicacion: '', imagen: '', descripcion: "", cantidad: detalle.cantidad, uniqueId: generateUniqueId(), imagenUrl: '' }));
+      const items: CotizacionItem[] = detalles.map(detalle => ({ 
+        ...detalle,
+        idproducto: detalle.idproducto,
+        nombre: detalle.producto_nombre || '',
+        precio_venta: detalle.precio_unitario,
+        precio_compra: 0,
+        stock: 0,
+        stock_minimo: 0,
+        estado: 0,
+        idubicacion: 0,
+        nombre_ubicacion: '',
+        imagen: '',
+        descripcion: "",
+        cantidad: detalle.cantidad,
+        uniqueId: generateUniqueId(),
+        imagenUrl: '' 
+      }));
 
       let tipoPagoFrontend: "contra-entrega" | "pago-adelantado" | "mitad-adelanto" | "" = "";
       if (cotizacion.tipo_pago === "Pago por Adelantado") tipoPagoFrontend = "pago-adelantado";
@@ -616,7 +679,14 @@ export function CotizacionView() {
       else if (cotizacion.tipo_pago === "Contra Entrega") tipoPagoFrontend = "contra-entrega";
 
       setCotizacionItems(items);
-      setDatosCliente({ nombre: cotizacion.cliente_nombre, telefono: cotizacion.cliente_telefono, direccion: cotizacion.cliente_direccion, tipoPago: tipoPagoFrontend, vigencia: parseInt(cotizacion.vigencia) as 5 | 10 | 15 | 30 | 0, descuento: cotizacion.descuento });
+      setDatosCliente({ 
+        nombre: cotizacion.cliente_nombre, 
+        telefono: cotizacion.cliente_telefono, 
+        direccion: cotizacion.cliente_direccion, 
+        tipoPago: tipoPagoFrontend, 
+        vigencia: parseInt(cotizacion.vigencia) as 5 | 10 | 15 | 30 | 0, 
+        descuento: cotizacion.descuento 
+      });
       setCotizacionGenerada(true);
       setShowCotizacionesDialog(false);
       setSearchCotizacionQuery("");
@@ -706,7 +776,7 @@ export function CotizacionView() {
                     </TableRow>
                   ))}
                   <TableRow className="border-t-2"><TableCell colSpan={3} className="bg-gray-50 font-medium">Subtotal</TableCell><TableCell className="text-center bg-gray-50"></TableCell><TableCell className="text-right bg-gray-50"></TableCell><TableCell className="text-right bg-gray-50 font-medium">Bs {formatBs(subtotal)}</TableCell></TableRow>
-                  {descuentoTotal > 0 && (<TableRow><TableCell colSpan={3} className="font-medium text-red-600">Descuento</TableCell><TableCell className="text-center"></TableCell><TableCell className="text-right"></TableCell><TableCell className="text-right font-medium text-red-600">-Bs {formatBs(descuentoTotal)}</TableCell></TableRow>)}
+                  {descuentoTotal > 0 && (<TableRow><TableCell colSpan={3} className="font-medium text-red-600">Descuento</TableCell><TableCell className="text-center"></TableCell><TableCell className="text-right"></TableCell></TableRow>)}
                   <TableRow className="border-t-2"><TableCell colSpan={3} className="bg-gray-50 font-bold">Total</TableCell><TableCell className="text-center bg-gray-50"></TableCell><TableCell className="text-right bg-gray-50"></TableCell><TableCell className="text-right bg-gray-50 font-bold">Bs {formatBs(totalFinal)}</TableCell></TableRow>
                   <TableRow><TableCell colSpan={6} className="border-t-2 border-gray-300 h-2"></TableCell></TableRow>
                   <TableRow><TableCell colSpan={3} className="bg-gray-50 font-medium">Abono</TableCell><TableCell className="text-center bg-gray-50"></TableCell><TableCell className="text-right bg-gray-50"></TableCell><TableCell className="text-right bg-gray-50 font-medium">Bs {formatBs(abono)}</TableCell></TableRow>
@@ -777,8 +847,39 @@ export function CotizacionView() {
                         <div className="flex-1 min-w-0"><h5 className="font-bold text-base break-words whitespace-normal leading-tight">{item.nombre}</h5><p className="text-sm font-medium text-green-600 mt-1">Bs {formatBs(item.precio_venta)} c/u</p></div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2"><Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => actualizarCantidad(item.uniqueId, item.cantidad - 1)}><Minus className="h-3 w-3" /></Button><span className="w-12 text-center font-medium">{item.cantidad}</span><Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => actualizarCantidad(item.uniqueId, item.cantidad + 1)}><Plus className="h-3 w-3" /></Button></div>
-                        <div className="flex items-center gap-2"><p className="text-sm font-bold whitespace-nowrap">Bs {formatBs(item.precio_venta * item.cantidad)}</p><Button size="sm" variant="destructive" className="h-8 w-8 p-0" onClick={() => eliminarItem(item.uniqueId)}><Trash2 className="h-3 w-3" /></Button></div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-8 p-0"
+                            onClick={() => actualizarCantidad(item.uniqueId, item.cantidad - 1)}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={item.cantidad === 0 ? "" : item.cantidad}
+                            onChange={(e) => handleCantidadInputChange(item.uniqueId, e.target.value)}
+                            onBlur={(e) => handleCantidadInputBlur(item.uniqueId, e.target.value)}
+                            className="w-12 h-8 text-center text-sm font-medium number-input-no-scroll"
+                            onWheel={(e) => e.currentTarget.blur()}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-8 p-0"
+                            onClick={() => actualizarCantidad(item.uniqueId, item.cantidad + 1)}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold whitespace-nowrap">Bs {formatBs(item.precio_venta * item.cantidad)}</p>
+                          <Button size="sm" variant="destructive" className="h-8 w-8 p-0" onClick={() => eliminarItem(item.uniqueId)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -786,7 +887,23 @@ export function CotizacionView() {
               )}
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between text-sm"><span>Subtotal:</span><span>Bs {formatBs(subtotal)}</span></div>
-                <div className="flex items-center gap-2 flex-wrap"><Label htmlFor="descuento" className="text-sm whitespace-nowrap">Descuento (monto Bs):</Label><Input id="descuento" type="number" min="0" step="0.01" value={datosCliente.descuento || ""} onChange={(e) => { const descuento = Number(e.target.value) || 0; setDatosCliente(prev => ({ ...prev, descuento: Math.min(descuento, subtotal) })); }} placeholder="0" className="w-24 h-8" onWheel={(e) => e.currentTarget.blur()} /><span className="text-sm whitespace-nowrap">-Bs {formatBs(datosCliente.descuento)}</span></div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Label htmlFor="descuento" className="text-sm whitespace-nowrap">Descuento (monto Bs):</Label>
+                  <Input 
+                    id="descuento" 
+                    type="number" 
+                    min="0" 
+                    step="0.01" 
+                    value={datosCliente.descuento || ""} 
+                    onChange={(e) => { 
+                      const descuento = Number(e.target.value) || 0; 
+                      setDatosCliente(prev => ({ ...prev, descuento: Math.min(descuento, subtotal) })); 
+                    }} 
+                    placeholder="0" 
+                    className="w-24 h-8 number-input-no-scroll" 
+                    onWheel={(e) => e.currentTarget.blur()} 
+                  />
+                </div>
                 <div className="flex justify-between text-lg font-bold"><span>Total:</span><span>Bs {formatBs(totalFinal)}</span></div>
               </div>
             </CardContent>
@@ -907,7 +1024,7 @@ export function CotizacionView() {
               )}
             </div>
 
-            {/* Mostrar nota del cliente seleccionado (debajo del nombre) */}
+            {/* Mostrar nota del cliente seleccionado */}
             {selectedCliente && showClienteNota && (
               <div className="mb-4 p-3 bg-muted/30 rounded-md border">
                 <p className="text-xs text-muted-foreground font-medium">Nota del cliente:</p>
