@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Search, Plus, Minus, Trash2, FileText, History } from "lucide-react";
+import { Search, Plus, Minus, Trash2, FileText, History, User, UserPlus, X, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { CotizacionItemPDF, DatosClientePDF } from "./CotizacionPDF";
 import { downloadCotizacionAsPDF } from "./cotizacionPdfUtils";
 import { createCotizacion, getCotizacionById, deleteCotizacion, searchCotizaciones, CotizacionRequest } from "@/api/CotizacionApi";
-import { Product, searchProducts } from "@/api/SalesApi";
+import { Product, searchProducts, searchClientes, type ClienteSearchResult } from "@/api/SalesApi";
+import { createCliente } from "@/api/clientesApi";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getImageUrl } from "./VenderView";
 
@@ -71,9 +73,29 @@ interface AlertState {
   message: string;
 }
 
+interface ClienteFormData {
+  nombres: string;
+  apellidos: string;
+  carnet: string;
+  celular: string;
+  nota: string;
+}
+
 const formatBs = (value: number) => {
   const v = Math.abs(value) < 0.005 ? 0 : value;
   return v.toFixed(2);
+};
+
+// Función para filtrar productos duplicados
+const filterUniqueProducts = (products: Product[]): Product[] => {
+  const seen = new Set<number>();
+  return products.filter(product => {
+    if (seen.has(product.idproducto)) {
+      return false;
+    }
+    seen.add(product.idproducto);
+    return true;
+  });
 };
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -123,6 +145,24 @@ export function CotizacionView() {
   const [showCotizacionesDialog, setShowCotizacionesDialog] = useState(false);
   const [loadingCotizaciones, setLoadingCotizaciones] = useState(false);
   const [alert, setAlert] = useState<AlertState>({ show: false, title: "", message: "" });
+  
+  // Estados para clientes
+  const [clienteSearchTerm, setClienteSearchTerm] = useState("");
+  const [clienteSearchResults, setClienteSearchResults] = useState<ClienteSearchResult[]>([]);
+  const [searchingClientes, setSearchingClientes] = useState(false);
+  const [selectedCliente, setSelectedCliente] = useState<ClienteSearchResult | null>(null);
+  const [showClienteForm, setShowClienteForm] = useState(false);
+  const [clienteFormData, setClienteFormData] = useState<ClienteFormData>({
+    nombres: "",
+    apellidos: "",
+    carnet: "",
+    celular: "",
+    nota: "",
+  });
+  const [submittingCliente, setSubmittingCliente] = useState(false);
+  const [showClienteNota, setShowClienteNota] = useState(false);
+  const [clienteManual, setClienteManual] = useState(false);
+  
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
@@ -131,8 +171,9 @@ export function CotizacionView() {
   const isSearchingRef = useRef<boolean>(false);
   const itemCounterRef = useRef(0);
 
-  const debouncedSearchQuery = useDebounce(searchQuery, 1000);
-  const debouncedCotizacionSearchQuery = useDebounce(searchCotizacionQuery, 1000);
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+  const debouncedCotizacionSearchQuery = useDebounce(searchCotizacionQuery, 500);
+  const debouncedClienteSearch = useDebounce(clienteSearchTerm, 500);
 
   useEffect(() => {
     if (debouncedSearchQuery.trim().length >= 2 && debouncedSearchQuery !== lastSearchQueryRef.current) {
@@ -152,6 +193,27 @@ export function CotizacionView() {
     }
   }, [debouncedCotizacionSearchQuery, showCotizacionesDialog]);
 
+  useEffect(() => {
+    if (debouncedClienteSearch.trim().length >= 2) {
+      searchClientesBackend(debouncedClienteSearch);
+    } else {
+      setClienteSearchResults([]);
+    }
+  }, [debouncedClienteSearch]);
+
+  const searchClientesBackend = async (term: string) => {
+    try {
+      setSearchingClientes(true);
+      const results = await searchClientes(term);
+      setClienteSearchResults(results);
+    } catch (error) {
+      console.error("Error searching clients:", error);
+      setClienteSearchResults([]);
+    } finally {
+      setSearchingClientes(false);
+    }
+  };
+
   const generateUniqueId = () => {
     itemCounterRef.current += 1;
     return `item-${Date.now()}-${itemCounterRef.current}`;
@@ -170,9 +232,10 @@ export function CotizacionView() {
 
     try {
       const results = await searchProducts(query, false);
-      setSearchResults(results);
+      // Filtrar duplicados
+      const uniqueResults = filterUniqueProducts(results);
+      setSearchResults(uniqueResults);
 
-      // Mantener el foco después de la búsqueda
       setTimeout(() => {
         if (searchInputRef.current) {
           const currentPosition = searchInputRef.current.selectionStart;
@@ -193,7 +256,6 @@ export function CotizacionView() {
     }
   };
 
-  // HANDLER CLAVE - Este es el que mantiene el foco correctamente
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -266,6 +328,140 @@ export function CotizacionView() {
   const abono = 0;
   const saldo = totalFinal;
 
+  // Función para seleccionar un cliente de la búsqueda
+  const seleccionarCliente = (cliente: ClienteSearchResult) => {
+    setSelectedCliente(cliente);
+    setDatosCliente(prev => ({
+      ...prev,
+      nombre: `${cliente.nombres} ${cliente.apellidos}`,
+      telefono: cliente.celular,
+    }));
+    setClienteSearchTerm("");
+    setClienteSearchResults([]);
+    setShowClienteNota(false);
+    setClienteManual(false);
+  };
+
+  // Función para limpiar el cliente seleccionado
+  const limpiarCliente = () => {
+    setSelectedCliente(null);
+    setDatosCliente(prev => ({
+      ...prev,
+      nombre: "",
+      telefono: "",
+    }));
+    setClienteSearchTerm("");
+    setClienteSearchResults([]);
+    setShowClienteNota(false);
+    setClienteManual(false);
+  };
+
+  // Función para alternar la nota del cliente
+  const toggleClienteNota = () => {
+    setShowClienteNota(!showClienteNota);
+  };
+
+  // Función para cuando el usuario escribe manualmente el nombre
+  const handleNombreManualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setDatosCliente(prev => ({ ...prev, nombre: value }));
+    setClienteManual(true);
+    // Si había un cliente seleccionado y el nombre cambia, lo deseleccionamos
+    if (selectedCliente) {
+      setSelectedCliente(null);
+      setShowClienteNota(false);
+    }
+  };
+
+  const handleTelefonoManualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setDatosCliente(prev => ({ ...prev, telefono: value }));
+    setClienteManual(true);
+    if (selectedCliente) {
+      setSelectedCliente(null);
+      setShowClienteNota(false);
+    }
+  };
+
+  // Validación del formulario de cliente
+  const validateClienteForm = (): boolean => {
+    if (!clienteFormData.nombres.trim()) {
+      toast({ title: "Error", description: "Los nombres son obligatorios", variant: "destructive" });
+      return false;
+    }
+    if (!clienteFormData.apellidos.trim()) {
+      toast({ title: "Error", description: "Los apellidos son obligatorios", variant: "destructive" });
+      return false;
+    }
+    if (!clienteFormData.carnet.trim()) {
+      toast({ title: "Error", description: "El carnet es obligatorio", variant: "destructive" });
+      return false;
+    }
+    if (clienteFormData.carnet.trim().length < 5 || clienteFormData.carnet.trim().length > 13) {
+      toast({ title: "Error", description: "El carnet debe tener entre 5 y 13 caracteres", variant: "destructive" });
+      return false;
+    }
+    if (!clienteFormData.celular.trim()) {
+      toast({ title: "Error", description: "El celular es obligatorio", variant: "destructive" });
+      return false;
+    }
+    const celularRegex = /^[0-9+]{6,12}$/;
+    if (!celularRegex.test(clienteFormData.celular.trim())) {
+      toast({ title: "Error", description: "El celular debe tener entre 6 y 12 caracteres (solo números y el signo +)", variant: "destructive" });
+      return false;
+    }
+    return true;
+  };
+
+  // Crear cliente desde el formulario
+  const handleCreateCliente = async () => {
+    if (!validateClienteForm()) return;
+
+    try {
+      setSubmittingCliente(true);
+      const newCliente = await createCliente({
+        nombres: clienteFormData.nombres.trim(),
+        apellidos: clienteFormData.apellidos.trim(),
+        carnet: clienteFormData.carnet.trim(),
+        celular: clienteFormData.celular.trim(),
+        nota: clienteFormData.nota.trim() || undefined,
+      });
+      
+      const newClienteResult: ClienteSearchResult = {
+        id: newCliente.id,
+        nombres: newCliente.nombres,
+        apellidos: newCliente.apellidos,
+        carnet: newCliente.carnet,
+        celular: newCliente.celular,
+        nota: newCliente.nota,
+        estado: newCliente.estado,
+      };
+      
+      seleccionarCliente(newClienteResult);
+      setShowClienteForm(false);
+      setClienteFormData({
+        nombres: "",
+        apellidos: "",
+        carnet: "",
+        celular: "",
+        nota: "",
+      });
+      
+      toast({
+        title: "Cliente creado",
+        description: `${newCliente.nombres} ${newCliente.apellidos} ha sido agregado.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "No se pudo crear el cliente",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingCliente(false);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     const itemsPDF: CotizacionItemPDF[] = cotizacionItems.map(item => ({
       id: item.idproducto.toString(),
@@ -318,56 +514,60 @@ export function CotizacionView() {
       return;
     }
 
-    if (datosCliente.tipoPago !== "contra-entrega") {
-      try {
-        setLoading(true);
-        let tipoPagoBackend: "Pago por Adelantado" | "Mitad de Pago" | "Contra Entrega";
-        if (datosCliente.tipoPago === "pago-adelantado") {
-          tipoPagoBackend = "Pago por Adelantado";
-        } else if (datosCliente.tipoPago === "mitad-adelanto") {
-          tipoPagoBackend = "Mitad de Pago";
-        } else {
-          tipoPagoBackend = "Contra Entrega";
-        }
+    // Si el cliente es manual (no seleccionado de la BD), solo generamos la cotización sin guardar
+    if (clienteManual || !selectedCliente) {
+      toast({ title: "Cotización generada", description: "La cotización ha sido generada exitosamente (cliente no registrado)" });
+      setCotizacionGenerada(true);
+      return;
+    }
 
-        const cotizacionRequest: CotizacionRequest = {
-          vigencia: datosCliente.vigencia.toString(),
-          cliente_nombre: datosCliente.nombre,
-          cliente_telefono: datosCliente.telefono,
-          cliente_direccion: datosCliente.direccion,
-          tipo_pago: tipoPagoBackend,
-          sub_total: subtotal,
-          descuento: descuentoTotal,
-          total: totalFinal,
-          abono: 0,
-          saldo: totalFinal,
-          items: cotizacionItems.map(item => ({ idproducto: item.idproducto, cantidad: item.cantidad, precio_unitario: item.precio_venta, subtotal_linea: item.precio_venta * item.cantidad }))
-        };
-
-        await createCotizacion(cotizacionRequest);
-
-        let mensajeAlerta = "";
-        if (datosCliente.tipoPago === "pago-adelantado") {
-          mensajeAlerta = "Recuerde registrar el PAGO COMPLETO y los PRODUCTOS ENTREGADOS en la sección de Pagos Pendientes";
-        } else if (datosCliente.tipoPago === "mitad-adelanto") {
-          mensajeAlerta = "Recuerde registrar el PAGO PARCIAL y los PRODUCTOS ENTREGADOS en la sección de Pagos Pendientes";
-        }
-
-        toast({ title: "Cotización guardada", description: "La cotización ha sido guardada" });
-
-        if (datosCliente.tipoPago === "pago-adelantado" || datosCliente.tipoPago === "mitad-adelanto") {
-          setAlert({ show: true, title: "⚠️ IMPORTANTE", message: mensajeAlerta });
-        }
-
-      } catch (error) {
-        console.error("Error saving quotation:", error);
-        toast({ title: "Error", description: "No se pudo guardar la cotización", variant: "destructive" });
-        return;
-      } finally {
-        setLoading(false);
+    // Si el cliente está registrado, guardamos la cotización
+    try {
+      setLoading(true);
+      let tipoPagoBackend: "Pago por Adelantado" | "Mitad de Pago" | "Contra Entrega";
+      if (datosCliente.tipoPago === "pago-adelantado") {
+        tipoPagoBackend = "Pago por Adelantado";
+      } else if (datosCliente.tipoPago === "mitad-adelanto") {
+        tipoPagoBackend = "Mitad de Pago";
+      } else {
+        tipoPagoBackend = "Contra Entrega";
       }
-    } else {
-      toast({ title: "Cotización generada", description: "La cotización ha sido generada exitosamente" });
+
+      const cotizacionRequest: CotizacionRequest = {
+        vigencia: datosCliente.vigencia.toString(),
+        cliente_nombre: datosCliente.nombre,
+        cliente_telefono: datosCliente.telefono,
+        cliente_direccion: datosCliente.direccion,
+        tipo_pago: tipoPagoBackend,
+        sub_total: subtotal,
+        descuento: descuentoTotal,
+        total: totalFinal,
+        abono: 0,
+        saldo: totalFinal,
+        items: cotizacionItems.map(item => ({ idproducto: item.idproducto, cantidad: item.cantidad, precio_unitario: item.precio_venta, subtotal_linea: item.precio_venta * item.cantidad }))
+      };
+
+      await createCotizacion(cotizacionRequest);
+
+      let mensajeAlerta = "";
+      if (datosCliente.tipoPago === "pago-adelantado") {
+        mensajeAlerta = "Recuerde registrar el PAGO COMPLETO y los PRODUCTOS ENTREGADOS en la sección de Pagos Pendientes";
+      } else if (datosCliente.tipoPago === "mitad-adelanto") {
+        mensajeAlerta = "Recuerde registrar el PAGO PARCIAL y los PRODUCTOS ENTREGADOS en la sección de Pagos Pendientes";
+      }
+
+      toast({ title: "Cotización guardada", description: "La cotización ha sido guardada" });
+
+      if (datosCliente.tipoPago === "pago-adelantado" || datosCliente.tipoPago === "mitad-adelanto") {
+        setAlert({ show: true, title: "⚠️ IMPORTANTE", message: mensajeAlerta });
+      }
+
+    } catch (error) {
+      console.error("Error saving quotation:", error);
+      toast({ title: "Error", description: "No se pudo guardar la cotización", variant: "destructive" });
+      return;
+    } finally {
+      setLoading(false);
     }
 
     setCotizacionGenerada(true);
@@ -377,6 +577,9 @@ export function CotizacionView() {
     setCotizacionItems([]);
     setDatosCliente({ nombre: "", telefono: "", direccion: "", tipoPago: "", vigencia: 0, descuento: 0 });
     setCotizacionGenerada(false);
+    setSelectedCliente(null);
+    setClienteManual(false);
+    setShowClienteNota(false);
     setTimeout(() => { if (searchInputRef.current) searchInputRef.current.focus(); }, 100);
   }, []);
 
@@ -593,16 +796,300 @@ export function CotizacionView() {
         <Card>
           <CardHeader><CardTitle>Información del Cliente</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="space-y-2"><Label htmlFor="nombre">Nombre del Cliente *</Label><Input id="nombre" value={datosCliente.nombre} onChange={(e) => setDatosCliente(prev => ({ ...prev, nombre: e.target.value }))} placeholder="Ingrese el nombre completo" /></div>
-              <div className="space-y-2"><Label htmlFor="telefono">Teléfono *</Label><Input id="telefono" value={datosCliente.telefono} onChange={(e) => setDatosCliente(prev => ({ ...prev, telefono: e.target.value }))} placeholder="Número de teléfono" /></div>
-              <div className="space-y-2"><Label htmlFor="direccion">Dirección</Label><Input id="direccion" value={datosCliente.direccion} onChange={(e) => setDatosCliente(prev => ({ ...prev, direccion: e.target.value }))} placeholder="Dirección completa" /></div>
-              <div className="space-y-2"><Label htmlFor="tipoPago">Tipo de Pago *</Label><Select value={datosCliente.tipoPago} onValueChange={(value: "contra-entrega" | "pago-adelantado" | "mitad-adelanto") => setDatosCliente(prev => ({ ...prev, tipoPago: value }))}><SelectTrigger><SelectValue placeholder="Seleccione tipo de pago" /></SelectTrigger><SelectContent><SelectItem value="contra-entrega">Contra Entrega</SelectItem><SelectItem value="pago-adelantado">Pago por Adelantado</SelectItem><SelectItem value="mitad-adelanto">Mitad de Adelanto</SelectItem></SelectContent></Select></div>
-              {datosCliente.tipoPago !== "pago-adelantado" && (<div className="space-y-2"><Label htmlFor="vigencia">Vigencia *</Label><Select value={datosCliente.vigencia.toString()} onValueChange={(value) => setDatosCliente(prev => ({ ...prev, vigencia: parseInt(value) as 5 | 10 | 15 | 30 }))}><SelectTrigger><SelectValue placeholder="Seleccione vigencia" /></SelectTrigger><SelectContent><SelectItem value="5">5 días</SelectItem><SelectItem value="10">10 días</SelectItem><SelectItem value="15">15 días</SelectItem><SelectItem value="30">30 días</SelectItem></SelectContent></Select></div>)}
-              <div className="flex items-end"><Button onClick={generarCotizacion} className="w-full" disabled={cotizacionItems.length === 0 || loading || tieneItemsInvalidos}>{loading ? "Generando..." : tieneItemsInvalidos ? "Cantidades inválidas" : "Generar Cotización"}</Button></div>
+            {/* Búsqueda de cliente con "ojito" arriba */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm font-medium">Buscar cliente registrado</Label>
+                {selectedCliente && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={toggleClienteNota}
+                          className="h-7 px-2 flex-shrink-0"
+                        >
+                          {showClienteNota ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                          <span className="text-xs ml-1">
+                            {showClienteNota ? "Ocultar nota" : "Ver nota"}
+                          </span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{showClienteNota ? "Ocultar nota" : "Ver nota"}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
+              <div className="flex gap-2 mt-1">
+                <div className="relative flex-1">
+                  <Input
+                    placeholder="Buscar por nombre, carnet o celular..."
+                    value={clienteSearchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setClienteSearchTerm(value);
+                      if (value.trim().length >= 2) {
+                        searchClientesBackend(value.trim());
+                      } else {
+                        setClienteSearchResults([]);
+                      }
+                    }}
+                    className="pr-10"
+                  />
+                  {searchingClientes && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                    </div>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowClienteForm(true)}
+                  className="h-10 px-3 flex-shrink-0"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </Button>
+                {selectedCliente && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={limpiarCliente}
+                    className="h-10 px-2 flex-shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+
+              {/* Resultados de búsqueda de clientes */}
+              {clienteSearchResults.length > 0 && (
+                <div className="border rounded-md overflow-hidden max-h-48 overflow-y-auto shadow-lg bg-white mt-2">
+                  {clienteSearchResults.map((cliente) => (
+                    <div
+                      key={cliente.id}
+                      className="p-3 hover:bg-primary/10 cursor-pointer border-b last:border-b-0 flex items-center justify-between transition-colors"
+                      onClick={() => seleccionarCliente(cliente)}
+                    >
+                      <div>
+                        <span className="font-medium">
+                          {cliente.nombres} {cliente.apellidos}
+                        </span>
+                        <span className="text-sm text-muted-foreground ml-2">
+                          {cliente.carnet}
+                        </span>
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {cliente.celular}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Mensaje de "No se encontraron clientes" */}
+              {clienteSearchTerm.trim().length >= 2 && 
+               clienteSearchResults.length === 0 && 
+               !searchingClientes && (
+                <div className="text-center py-2 text-sm text-muted-foreground border rounded-md bg-muted/20 mt-2">
+                  No se encontraron clientes. Puede escribir el nombre manualmente.
+                </div>
+              )}
             </div>
+
+            {/* Mostrar nota del cliente seleccionado (debajo del nombre) */}
+            {selectedCliente && showClienteNota && (
+              <div className="mb-4 p-3 bg-muted/30 rounded-md border">
+                <p className="text-xs text-muted-foreground font-medium">Nota del cliente:</p>
+                <p className="text-sm mt-0.5 break-words whitespace-pre-wrap">
+                  {selectedCliente.nota && selectedCliente.nota.trim() ? (
+                    selectedCliente.nota
+                  ) : (
+                    <span className="text-muted-foreground italic">Sin nota</span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* Cliente seleccionado o manual */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="nombre">Nombre del Cliente *</Label>
+                <Input 
+                  id="nombre" 
+                  value={datosCliente.nombre} 
+                  onChange={handleNombreManualChange} 
+                  placeholder="Ingrese el nombre completo" 
+                  className={selectedCliente ? "border-green-500 bg-green-50" : ""}
+                />
+                {selectedCliente && (
+                  <p className="text-xs text-green-600">✓ Cliente registrado</p>
+                )}
+                {clienteManual && !selectedCliente && datosCliente.nombre && (
+                  <p className="text-xs text-amber-600">ℹ Cliente no registrado (solo para esta cotización)</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="telefono">Teléfono *</Label>
+                <Input 
+                  id="telefono" 
+                  value={datosCliente.telefono} 
+                  onChange={handleTelefonoManualChange} 
+                  placeholder="Número de teléfono"
+                  className={selectedCliente ? "border-green-500 bg-green-50" : ""}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="direccion">Dirección</Label>
+                <Input 
+                  id="direccion" 
+                  value={datosCliente.direccion} 
+                  onChange={(e) => setDatosCliente(prev => ({ ...prev, direccion: e.target.value }))} 
+                  placeholder="Dirección completa" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tipoPago">Tipo de Pago *</Label>
+                <Select value={datosCliente.tipoPago} onValueChange={(value: "contra-entrega" | "pago-adelantado" | "mitad-adelanto") => setDatosCliente(prev => ({ ...prev, tipoPago: value }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccione tipo de pago" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contra-entrega">Contra Entrega</SelectItem>
+                    <SelectItem value="pago-adelantado">Pago por Adelantado</SelectItem>
+                    <SelectItem value="mitad-adelanto">Mitad de Adelanto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {datosCliente.tipoPago !== "pago-adelantado" && (
+                <div className="space-y-2">
+                  <Label htmlFor="vigencia">Vigencia *</Label>
+                  <Select value={datosCliente.vigencia.toString()} onValueChange={(value) => setDatosCliente(prev => ({ ...prev, vigencia: parseInt(value) as 5 | 10 | 15 | 30 }))}>
+                    <SelectTrigger><SelectValue placeholder="Seleccione vigencia" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 días</SelectItem>
+                      <SelectItem value="10">10 días</SelectItem>
+                      <SelectItem value="15">15 días</SelectItem>
+                      <SelectItem value="30">30 días</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="flex items-end">
+                <Button onClick={generarCotizacion} className="w-full" disabled={cotizacionItems.length === 0 || loading || tieneItemsInvalidos}>
+                  {loading ? "Generando..." : tieneItemsInvalidos ? "Cantidades inválidas" : "Generar Cotización"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Indicador de cliente no registrado */}
+            {clienteManual && !selectedCliente && datosCliente.nombre && (
+              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-md">
+                <p className="text-xs text-amber-700">
+                  <span className="font-medium">ℹ Cliente no registrado:</span> Esta cotización se generará sin guardar en la base de datos.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {/* Dialog para crear cliente */}
+        <Dialog open={showClienteForm} onOpenChange={setShowClienteForm}>
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Agregar Nuevo Cliente</DialogTitle>
+              <DialogDescription>Complete los datos para registrar un nuevo cliente</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="nombres">
+                  Nombre(s) <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="nombres"
+                  placeholder="Ej: María"
+                  value={clienteFormData.nombres}
+                  onChange={(e) => setClienteFormData({...clienteFormData, nombres: e.target.value})}
+                  disabled={submittingCliente}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="apellidos">
+                  Apellido(s) <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="apellidos"
+                  placeholder="Ej: González Ramírez"
+                  value={clienteFormData.apellidos}
+                  onChange={(e) => setClienteFormData({...clienteFormData, apellidos: e.target.value})}
+                  disabled={submittingCliente}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="carnet">
+                  Carnet <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="carnet"
+                  placeholder="Ej: 1234567"
+                  value={clienteFormData.carnet}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= 13) {
+                      setClienteFormData({...clienteFormData, carnet: value});
+                    }
+                  }}
+                  maxLength={13}
+                  disabled={submittingCliente}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="celular">
+                  Celular <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="celular"
+                  placeholder="Ej: 72123456"
+                  value={clienteFormData.celular}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9+]/g, "");
+                    if (value.length <= 12) {
+                      setClienteFormData({...clienteFormData, celular: value});
+                    }
+                  }}
+                  maxLength={12}
+                  disabled={submittingCliente}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nota">Nota</Label>
+                <Input
+                  id="nota"
+                  placeholder="Observaciones adicionales..."
+                  value={clienteFormData.nota}
+                  onChange={(e) => setClienteFormData({...clienteFormData, nota: e.target.value})}
+                  disabled={submittingCliente}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowClienteForm(false)} disabled={submittingCliente}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreateCliente} disabled={submittingCliente}>
+                {submittingCliente ? "Creando..." : "Crear Cliente"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </ErrorBoundary>
   );
