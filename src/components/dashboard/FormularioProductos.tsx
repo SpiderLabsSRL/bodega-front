@@ -26,6 +26,7 @@ import {
   createCategoria,
   getUbicaciones,
   getCategorias,
+  UbicacionItem,
 } from "@/api/ManagementSectionApi";
 import {
   createProductoBodega,
@@ -60,6 +61,7 @@ interface FormularioProductosProps {
   onCancel: () => void;
   onRefreshData?: () => void;
   idbodega?: number;
+  ubicacionesConBodega?: Array<{ idubicacion: number; nombre: string; idbodega: number | null }>;
 }
 
 interface AddDialogState {
@@ -293,6 +295,7 @@ export function FormularioProductos({
   onCancel,
   onRefreshData,
   idbodega,
+  ubicacionesConBodega,
 }: FormularioProductosProps) {
   const [formData, setFormData] = useState<ProductFormData>(() => {
     if (!product) {
@@ -310,7 +313,7 @@ export function FormularioProductos({
         codigoBarras: "",
         productosSimilares: [],
         productosSimilaresData: [],
-        idbodega: idbodega || 1,
+        idbodega: 1,
       };
     }
 
@@ -323,18 +326,15 @@ export function FormularioProductos({
       }
     }
 
-    // CORRECCIÓN: Obtener productos similares correctamente
     let similaresArray: number[] = [];
     let similaresDataArray: Array<{ idproducto: number; nombre: string }> = [];
     
     if (product.productos_similares) {
       if (Array.isArray(product.productos_similares)) {
-        // Si es un array de objetos con idproducto
         if (product.productos_similares.length > 0 && typeof product.productos_similares[0] === 'object') {
-          similaresArray = product.productos_similares.map((p: any) => p.idproducto || p.id);
+          similaresArray = product.productos_similares.map((p: any) => p.idproducto_similar || p.idproducto || p.id);
           similaresDataArray = product.productos_similares;
         } else {
-          // Si es un array de números
           similaresArray = product.productos_similares;
         }
       }
@@ -345,7 +345,7 @@ export function FormularioProductos({
       nombre: product.nombre || "",
       categorias: categoriasArray,
       descripcion: product.descripcion || "",
-      ubicacion: product.ubicacion || "",
+      ubicacion: product.ubicacion_nombre || product.ubicacion || "",
       precioVenta: product.precio_venta?.toString() || product.precio?.toString() || "",
       precioCompra: product.precio_compra?.toString() || "",
       stock: product.stock?.toString() || "",
@@ -355,7 +355,7 @@ export function FormularioProductos({
       codigoBarras: product.codigo_barras || product.codigo || "",
       productosSimilares: similaresArray,
       productosSimilaresData: similaresDataArray,
-      idbodega: product.idbodega || idbodega || 1,
+      idbodega: product.idbodega || 1,
     };
   });
 
@@ -366,6 +366,10 @@ export function FormularioProductos({
   const [todosProductos, setTodosProductos] = useState<ProductoSelect[]>([]);
   const [loadingProductos, setLoadingProductos] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+
+  // Estado para ubicaciones filtradas por bodega (SOLO idbodega = 1 para formulario de productos)
+  const [ubicacionesFiltradas, setUbicacionesFiltradas] = useState<string[]>([]);
+  const [ubicacionesCompletas, setUbicacionesCompletas] = useState<Array<{ idubicacion: number; nombre: string; idbodega: number | null }>>([]);
 
   const [localLists, setLocalLists] = useState<{
     ubicaciones: string[];
@@ -388,6 +392,33 @@ export function FormularioProductos({
 
   const { toast } = useToast();
   const isMobile = useIsMobile();
+
+  // Cargar ubicaciones filtradas por bodega (SIEMPRE idbodega = 1 para productos)
+  useEffect(() => {
+    const loadUbicacionesFiltradas = async () => {
+      try {
+        // SIEMPRE usar idbodega = 1 para el formulario de productos
+        const bodegaId = 1;
+        const ubicaciones = await getUbicaciones(bodegaId);
+        const nombres = ubicaciones.map(u => u.nombre);
+        setUbicacionesFiltradas(nombres);
+        setUbicacionesCompletas(ubicaciones.map(u => ({
+          idubicacion: u.id,
+          nombre: u.nombre,
+          idbodega: u.idbodega
+        })));
+        
+        // Si el producto tiene una ubicación y no está en la lista filtrada, agregarla
+        if (formData.ubicacion && !nombres.includes(formData.ubicacion)) {
+          setUbicacionesFiltradas(prev => [...prev, formData.ubicacion]);
+        }
+      } catch (error) {
+        console.error("Error cargando ubicaciones filtradas:", error);
+      }
+    };
+
+    loadUbicacionesFiltradas();
+  }, []);
 
   // Actualizar listas locales cuando cambian las props
   useEffect(() => {
@@ -414,7 +445,7 @@ export function FormularioProductos({
         codigoBarras: "",
         productosSimilares: [],
         productosSimilaresData: [],
-        idbodega: idbodega || 1,
+        idbodega: 1,
       });
       return;
     }
@@ -428,14 +459,13 @@ export function FormularioProductos({
       }
     }
 
-    // CORRECCIÓN: Obtener productos similares correctamente
     let similaresArray: number[] = [];
     let similaresDataArray: Array<{ idproducto: number; nombre: string }> = [];
     
     if (product.productos_similares) {
       if (Array.isArray(product.productos_similares)) {
         if (product.productos_similares.length > 0 && typeof product.productos_similares[0] === 'object') {
-          similaresArray = product.productos_similares.map((p: any) => p.idproducto || p.id);
+          similaresArray = product.productos_similares.map((p: any) => p.idproducto_similar || p.idproducto || p.id);
           similaresDataArray = product.productos_similares;
         } else {
           similaresArray = product.productos_similares;
@@ -448,7 +478,7 @@ export function FormularioProductos({
       nombre: product.nombre || "",
       categorias: categoriasArray,
       descripcion: product.descripcion || "",
-      ubicacion: product.ubicacion || "",
+      ubicacion: product.ubicacion_nombre || product.ubicacion || "",
       precioVenta: product.precio_venta?.toString() || product.precio?.toString() || "",
       precioCompra: product.precio_compra?.toString() || "",
       stock: product.stock?.toString() || "",
@@ -458,9 +488,9 @@ export function FormularioProductos({
       codigoBarras: product.codigo_barras || product.codigo || "",
       productosSimilares: similaresArray,
       productosSimilaresData: similaresDataArray,
-      idbodega: product.idbodega || idbodega || 1,
+      idbodega: product.idbodega || 1,
     });
-  }, [product, idbodega]);
+  }, [product]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -507,12 +537,13 @@ export function FormularioProductos({
     loadTodosProductos();
   }, []);
 
-  // Cargar elementos de gestión iniciales
+  // Cargar elementos de gestión iniciales (SOLO ubicaciones con idbodega = 1)
   useEffect(() => {
     const loadManagementItems = async () => {
       try {
+        // Cargar SOLO ubicaciones con idbodega = 1
         const [ubicacionesData, categoriasData] = await Promise.all([
-          getUbicaciones(),
+          getUbicaciones(1),
           getCategorias(),
         ]);
 
@@ -520,7 +551,7 @@ export function FormularioProductos({
         const categoriasNombres = categoriasData.map((item) => item.nombre);
 
         setManagementItems({
-          ubicaciones: ubicacionesData,
+          ubicaciones: ubicacionesData.map(u => ({ id: u.id, nombre: u.nombre, estado: u.estado })),
           categorias: categoriasData,
         });
 
@@ -560,17 +591,28 @@ export function FormularioProductos({
 
   const updateLocalLists = async (type: string) => {
     try {
-      let ubicacionesData: ManagementItem[] = [];
+      let ubicacionesData: UbicacionItem[] = [];
       let categoriasData: ManagementItem[] = [];
 
       if (type === "ubicacion" || type === "all") {
-        ubicacionesData = await getUbicaciones();
+        // SIEMPRE cargar ubicaciones con idbodega = 1
+        ubicacionesData = await getUbicaciones(1);
+        
         const ubicacionesNombres = ubicacionesData.map((item) => item.nombre);
-        setManagementItems((prev) => ({ ...prev, ubicaciones: ubicacionesData }));
+        setManagementItems((prev) => ({ 
+          ...prev, 
+          ubicaciones: ubicacionesData.map(u => ({ id: u.id, nombre: u.nombre, estado: u.estado }))
+        }));
         setLocalLists((prev) => ({
           ...prev,
           ubicaciones: ubicacionesNombres,
         }));
+        setUbicacionesFiltradas(ubicacionesNombres);
+        setUbicacionesCompletas(ubicacionesData.map(u => ({
+          idubicacion: u.id,
+          nombre: u.nombre,
+          idbodega: u.idbodega
+        })));
       }
 
       if (type === "categoria" || type === "all") {
@@ -605,7 +647,11 @@ export function FormularioProductos({
           await createCategoria({ nombre: name });
           break;
         case "ubicacion":
-          await createUbicacion({ nombre: name });
+          // SIEMPRE usar idbodega = 1 para ubicaciones de productos
+          await createUbicacion({ 
+            nombre: name, 
+            idbodega: 1 
+          });
           break;
       }
 
@@ -687,10 +733,9 @@ export function FormularioProductos({
     setIsSubmittingProduct(true);
 
     try {
-      const idubicacion = getItemIdByName(
-        managementItems.ubicaciones,
-        formData.ubicacion,
-      );
+      // Obtener el ID de la ubicación seleccionada (de las ubicaciones filtradas)
+      const ubicacionSeleccionada = ubicacionesCompletas.find(u => u.nombre === formData.ubicacion);
+      const idubicacion = ubicacionSeleccionada?.idubicacion || 0;
 
       if (idubicacion === 0) {
         toast({
@@ -729,14 +774,14 @@ export function FormularioProductos({
       const stockMinimoNum = Number(formData.stockMinimo) || 0;
       formDataToSend.append("stock_minimo", stockMinimoNum.toString());
 
-      const bodegaId = formData.idbodega || idbodega || 1;
+      // SIEMPRE usar idbodega = 1 para productos
+      const bodegaId = 1;
       formDataToSend.append("idbodega", bodegaId.toString());
 
       if (formData.codigoBarras && formData.codigoBarras.trim() !== "") {
         formDataToSend.append("codigo_barras", formData.codigoBarras.trim());
       }
 
-      // CORRECCIÓN: Asegurar que productos similares se envían correctamente
       if (formData.productosSimilares && formData.productosSimilares.length > 0) {
         const similaresIds = formData.productosSimilares
           .map(id => typeof id === 'string' ? parseInt(id) : id)
@@ -744,7 +789,6 @@ export function FormularioProductos({
         
         if (similaresIds.length > 0) {
           formDataToSend.append("productos_similares", JSON.stringify(similaresIds));
-          console.log("Enviando productos similares:", similaresIds);
         }
       }
 
@@ -944,12 +988,15 @@ export function FormularioProductos({
               required
             >
               <option value="">Seleccionar</option>
-              {localLists.ubicaciones.map((ubicacion) => (
+              {ubicacionesFiltradas.map((ubicacion) => (
                 <option key={ubicacion} value={ubicacion}>
                   {ubicacion}
                 </option>
               ))}
             </select>
+            <p className="text-[10px] text-muted-foreground">
+              Ubicaciones de la bodega principal
+            </p>
           </div>
 
           <div className="space-y-1">
@@ -1082,7 +1129,6 @@ export function FormularioProductos({
           </div>
         </div>
 
-        {/* Productos Similares */}
         <div className="space-y-1">
           <ProductoSimilarSelect
             productosDisponibles={todosProductos}

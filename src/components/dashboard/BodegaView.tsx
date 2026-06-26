@@ -45,6 +45,7 @@ import {
   Warehouse,
   Filter,
   Building2,
+  MapPin,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FormularioProductos } from "./FormularioProductos";
@@ -60,9 +61,13 @@ import {
   transferirProducto,
   buscarProductosBodega,
   createBodega,
+  getUbicaciones as getUbicacionesPorBodega,
   ProductoBodega,
   Sucursal,
 } from "@/api/BodegaApi";
+import {
+  createUbicacion,
+} from "@/api/ManagementSectionApi";
 
 // Componente para el carrusel de imágenes
 interface ImageCarouselProps {
@@ -218,12 +223,20 @@ export const getImageUrl = (imagen: string | undefined | null | any): string => 
   return fallbackImage;
 };
 
+interface UbicacionConBodega {
+  idubicacion: number;
+  nombre: string;
+  idbodega: number | null;
+}
+
 export function BodegaView() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [isNewSucursalDialogOpen, setIsNewSucursalDialogOpen] = useState(false);
+  const [isNewUbicacionDialogOpen, setIsNewUbicacionDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductoBodega | null>(null);
   const [selectedSucursal, setSelectedSucursal] = useState<string>("");
+  const [selectedSucursalUbicacion, setSelectedSucursalUbicacion] = useState<string>("");
   const [cantidadTransferir, setCantidadTransferir] = useState<string>("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
@@ -234,6 +247,7 @@ export function BodegaView() {
   const [searching, setSearching] = useState(false);
   const [showAllProducts, setShowAllProducts] = useState(false);
   const [ubicaciones, setUbicaciones] = useState<string[]>([]);
+  const [ubicacionesConBodega, setUbicacionesConBodega] = useState<UbicacionConBodega[]>([]);
   const [categorias, setCategorias] = useState<{ idcategoria: number; nombre: string }[]>([]);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [selectedBodega, setSelectedBodega] = useState<number | null>(null);
@@ -243,7 +257,12 @@ export function BodegaView() {
     direccion: "",
     telefono: "",
   });
+  const [newUbicacionData, setNewUbicacionData] = useState({
+    nombre: "",
+  });
   const [isCreatingSucursal, setIsCreatingSucursal] = useState(false);
+  const [isCreatingUbicacion, setIsCreatingUbicacion] = useState(false);
+  const [ubicacionesPorSucursal, setUbicacionesPorSucursal] = useState<Array<{ idubicacion: number; nombre: string }>>([]);
   const { toast } = useToast();
 
   const userRole = localStorage.getItem("userRole") || "admin";
@@ -252,11 +271,17 @@ export function BodegaView() {
   // Función para refrescar ubicaciones y categorías
   const refreshUbicacionesYCategorias = useCallback(async () => {
     try {
+      const bodegaId = 1; // SIEMPRE usar idbodega = 1 para productos
       const [ubicacionesData, categoriasData] = await Promise.all([
-        getUbicaciones(),
+        getUbicacionesPorBodega(bodegaId),
         getCategorias(),
       ]);
       setUbicaciones(ubicacionesData.map((item) => item.nombre));
+      setUbicacionesConBodega(ubicacionesData.map((item) => ({
+        idubicacion: item.idubicacion,
+        nombre: item.nombre,
+        idbodega: item.idbodega
+      })));
       setCategorias(categoriasData);
     } catch (error) {
       console.error("Error refrescando ubicaciones y categorías:", error);
@@ -268,13 +293,19 @@ export function BodegaView() {
     const loadInitialData = async () => {
       setLoading(true);
       try {
+        const bodegaId = 1; // SIEMPRE usar idbodega = 1 para productos
         const [ubicacionesData, categoriasData, bodegasData] = await Promise.all([
-          getUbicaciones(),
+          getUbicacionesPorBodega(bodegaId),
           getCategorias(),
           getBodegasActivas(),
         ]);
 
         setUbicaciones(ubicacionesData.map((item) => item.nombre));
+        setUbicacionesConBodega(ubicacionesData.map((item) => ({
+          idubicacion: item.idubicacion,
+          nombre: item.nombre,
+          idbodega: item.idbodega
+        })));
         setCategorias(categoriasData);
         setBodegas(bodegasData);
         setSucursales(
@@ -308,6 +339,42 @@ export function BodegaView() {
 
     loadInitialData();
   }, [toast]);
+
+  // Cargar ubicaciones cuando cambia la bodega seleccionada (SIEMPRE idbodega = 1)
+  useEffect(() => {
+    refreshUbicacionesYCategorias();
+  }, [refreshUbicacionesYCategorias]);
+
+  // Cargar ubicaciones de la sucursal seleccionada para transferencia
+  useEffect(() => {
+    const loadUbicacionesSucursal = async () => {
+      if (!selectedSucursal) {
+        setUbicacionesPorSucursal([]);
+        return;
+      }
+      
+      const sucursal = sucursales.find(s => s.nombre === selectedSucursal);
+      if (!sucursal) {
+        setUbicacionesPorSucursal([]);
+        return;
+      }
+
+      try {
+        // Usar el id de la sucursal para filtrar ubicaciones
+        const ubicaciones = await getUbicacionesPorBodega(sucursal.id);
+        setUbicacionesPorSucursal(ubicaciones.map(u => ({
+          idubicacion: u.idubicacion,
+          nombre: u.nombre
+        })));
+        setSelectedSucursalUbicacion("");
+      } catch (error) {
+        console.error("Error cargando ubicaciones de sucursal:", error);
+        setUbicacionesPorSucursal([]);
+      }
+    };
+
+    loadUbicacionesSucursal();
+  }, [selectedSucursal, sucursales]);
 
   const loadProductosByBodega = useCallback(async (idbodega: number) => {
     setLoadingAll(true);
@@ -423,8 +490,69 @@ export function BodegaView() {
   const handleTransferir = (product: ProductoBodega) => {
     setSelectedProduct(product);
     setSelectedSucursal("");
+    setSelectedSucursalUbicacion("");
     setCantidadTransferir("");
+    setUbicacionesPorSucursal([]);
     setIsTransferDialogOpen(true);
+  };
+
+  const handleCrearUbicacionEnTransferencia = async () => {
+    if (!newUbicacionData.nombre.trim()) {
+      toast({
+        title: "Error",
+        description: "El nombre de la ubicación es obligatorio",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const sucursal = sucursales.find(s => s.nombre === selectedSucursal);
+    if (!sucursal) {
+      toast({
+        title: "Error",
+        description: "Primero selecciona una sucursal destino",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingUbicacion(true);
+    try {
+      // Usar el idbodega de la sucursal seleccionada
+      await createUbicacion({ 
+        nombre: newUbicacionData.nombre.trim(), 
+        idbodega: sucursal.id 
+      });
+
+      toast({
+        title: "Ubicación creada",
+        description: `La ubicación "${newUbicacionData.nombre}" ha sido creada en ${selectedSucursal}.`,
+      });
+
+      // Recargar ubicaciones de la sucursal
+      const ubicaciones = await getUbicacionesPorBodega(sucursal.id);
+      setUbicacionesPorSucursal(ubicaciones.map(u => ({
+        idubicacion: u.idubicacion,
+        nombre: u.nombre
+      })));
+      
+      // Seleccionar automáticamente la nueva ubicación
+      setSelectedSucursalUbicacion(newUbicacionData.nombre.trim());
+      setNewUbicacionData({ nombre: "" });
+      setIsNewUbicacionDialogOpen(false);
+      
+      // También refrescar las ubicaciones generales (idbodega = 1)
+      await refreshUbicacionesYCategorias();
+    } catch (error: any) {
+      console.error("Error creando ubicación:", error);
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo crear la ubicación",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingUbicacion(false);
+    }
   };
 
   const confirmarTransferencia = async () => {
@@ -488,6 +616,7 @@ export function BodegaView() {
       setIsTransferDialogOpen(false);
       setSelectedProduct(null);
       setSelectedSucursal("");
+      setSelectedSucursalUbicacion("");
       setCantidadTransferir("");
     } catch (error: any) {
       toast({
@@ -554,9 +683,10 @@ export function BodegaView() {
       precio_venta: product.precio ?? 0,
       precio_compra: product.precio_compra ?? 0,
       stock_minimo: product.stockMinimo ?? 0,
-      idbodega: selectedBodega,
+      idbodega: 1, // SIEMPRE idbodega = 1 para productos
       descripcion: product.descripcion || "",
       imagen: product.imagen || "",
+      ubicacion_nombre: product.ubicacion || "",
     };
 
     setEditingProduct(productData);
@@ -604,9 +734,8 @@ export function BodegaView() {
         formData.append("codigo_barras", productData.codigo_barras.trim());
       }
       
-      if (selectedBodega) {
-        formData.append("idbodega", selectedBodega.toString());
-      }
+      // SIEMPRE usar idbodega = 1 para productos
+      formData.append("idbodega", "1");
       
       let categoriasIds: number[] = [];
       if (productData.categorias && productData.categorias.length > 0) {
@@ -648,7 +777,6 @@ export function BodegaView() {
         });
       }
 
-      // Refrescar ubicaciones y categorías después de crear/editar
       await refreshUbicacionesYCategorias();
 
       if (showAllProducts) {
@@ -749,6 +877,8 @@ export function BodegaView() {
                     onSubmit={handleFormSubmit}
                     onCancel={handleFormCancel}
                     onRefreshData={refreshUbicacionesYCategorias}
+                    idbodega={1}
+                    ubicacionesConBodega={ubicacionesConBodega}
                   />
                 </div>
               </DialogContent>
@@ -1154,6 +1284,42 @@ export function BodegaView() {
               </select>
             </div>
 
+            {selectedSucursal && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Ubicación en la sucursal</label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsNewUbicacionDialogOpen(true);
+                    }}
+                    className="h-7 text-xs"
+                  >
+                    <MapPin className="h-3 w-3 mr-1" />
+                    Nueva Ubicación
+                  </Button>
+                </div>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={selectedSucursalUbicacion}
+                  onChange={(e) => setSelectedSucursalUbicacion(e.target.value)}
+                >
+                  <option value="">Seleccionar ubicación...</option>
+                  {ubicacionesPorSucursal.map((u) => (
+                    <option key={u.idubicacion} value={u.nombre}>
+                      {u.nombre}
+                    </option>
+                  ))}
+                </select>
+                {ubicacionesPorSucursal.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Esta sucursal no tiene ubicaciones registradas
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Cantidad a transferir</label>
               <Input
@@ -1185,6 +1351,69 @@ export function BodegaView() {
               disabled={!selectedSucursal || !cantidadTransferir || parseInt(cantidadTransferir) <= 0}
             >
               Confirmar Transferencia
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para crear nueva ubicación (desde transferencia) */}
+      <Dialog open={isNewUbicacionDialogOpen} onOpenChange={setIsNewUbicacionDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              Crear Nueva Ubicación
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Nombre de la Ubicación <span className="text-red-500">*</span>
+              </label>
+              <Input
+                placeholder="Ej: Pasillo A, Estante 3"
+                value={newUbicacionData.nombre}
+                onChange={(e) => setNewUbicacionData({ ...newUbicacionData, nombre: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Sucursal</label>
+              <div className="p-2 bg-muted rounded-md text-sm font-medium">
+                {selectedSucursal || "Selecciona una sucursal primero"}
+              </div>
+              {!selectedSucursal && (
+                <p className="text-xs text-red-500">
+                  Debes seleccionar una sucursal destino antes de crear una ubicación
+                </p>
+              )}
+            </div>
+            <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
+              <p>La ubicación se creará en la sucursal seleccionada y estará activa por defecto.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsNewUbicacionDialogOpen(false);
+                setNewUbicacionData({ nombre: "" });
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCrearUbicacionEnTransferencia}
+              className="bg-primary hover:bg-primary/90"
+              disabled={!newUbicacionData.nombre.trim() || !selectedSucursal || isCreatingUbicacion}
+            >
+              {isCreatingUbicacion ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                'Crear Ubicación'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

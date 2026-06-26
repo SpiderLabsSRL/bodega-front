@@ -6,6 +6,7 @@ interface BackendUbicacion {
   idubicacion: number;
   nombre: string;
   estado: number;
+  idbodega: number | null;
 }
 
 interface BackendCategoria {
@@ -133,9 +134,10 @@ export const createBodega = async (data: BodegaRequest): Promise<BackendBodega> 
   }
 };
 
-export const getUbicaciones = async (): Promise<BackendUbicacion[]> => {
+export const getUbicaciones = async (idbodega?: number): Promise<BackendUbicacion[]> => {
   try {
-    const response = await api.get<BackendUbicacion[]>("/ubicaciones");
+    const url = idbodega ? `/ubicaciones?bodega=${idbodega}` : "/ubicaciones";
+    const response = await api.get<BackendUbicacion[]>(url);
     return response.data;
   } catch (error) {
     console.error("Error fetching ubicaciones:", error);
@@ -321,7 +323,7 @@ function mapBackendProductoBodega(producto: BackendProductoBodega): ProductoBode
     ubicacion: producto.ubicacion_nombre || "Sin ubicación",
     precio: parseFloat(producto.precio_venta) || 0,
     precio_compra: parseFloat(producto.precio_compra) || 0,
-    proveedor: "", // Quitamos "Laboratorios Andes"
+    proveedor: "",
     imagen: imagenBase64,
     idbodega: producto.idbodega,
     bodega_nombre: producto.bodega_nombre,
