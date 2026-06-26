@@ -27,13 +27,12 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { DashboardView } from "@/pages/Dashboard";
 import { logout, getCurrentUser } from "@/api/AuthApi";
 import { useEffect } from "react";
 
 interface AppSidebarProps {
-  currentView: DashboardView;
-  onViewChange: (view: DashboardView) => void;
+  currentView: string;
+  onViewChange: (view: string) => void;
 }
 
 const menuItems = [
@@ -41,15 +40,21 @@ const menuItems = [
     title: "Vender",
     url: "vender",
     icon: ShoppingCart,
-    roles: ["asistente"], // Solo asistentes pueden ver "Vender"
+    roles: ["asistente"],
   },
   {
     title: "Productos",
     url: "productos",
     icon: Package,
-    roles: ["admin", "asistente"],
+    roles: ["asistente"],
   },
   { 
+    title: "Bodega", 
+    url: "bodega", 
+    icon: Warehouse, 
+    roles: ["admin"] 
+  },
+  {
     title: "Inventario", 
     url: "inventario", 
     icon: Package2, 
@@ -74,22 +79,10 @@ const menuItems = [
     roles: ["admin", "asistente"],
   },
   {
-    title: "Bodega",
-    url: "bodega",
-    icon: Warehouse,
-    roles: ["admin"],
-  },
-  {
     title: "Clientes",
     url: "clientes",
     icon: User,
     roles: ["admin", "asistente"],
-  },
-  {
-    title: "Configuración",
-    url: "configuracion",
-    icon: Settings,
-    roles: ["admin"],
   },
   {
     title: "Gestión de Usuarios",
@@ -135,7 +128,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
 
   const isActive = (view: string) => currentView === view;
 
-  const handleMenuItemClick = (view: DashboardView) => {
+  const handleMenuItemClick = (view: string) => {
     const isMobile = window.innerWidth < 768;
     if (isMobile) {
       setOpenMobile(false);
@@ -173,7 +166,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     onClick={() =>
-                      handleMenuItemClick(item.url as DashboardView)
+                      handleMenuItemClick(item.url)
                     }
                     className={`
                       py-3 px-4 h-auto min-h-[48px]
