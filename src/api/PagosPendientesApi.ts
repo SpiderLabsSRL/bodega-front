@@ -86,34 +86,21 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
-    console.log(`🔑 [${config.method?.toUpperCase()} ${config.url}] Token:`, token ? "✅ Presente" : "❌ No encontrado");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log(`✅ Token agregado a ${config.url}`);
-    } else {
-      console.warn(`⚠️ No hay token para ${config.url}`);
     }
     return config;
   },
   (error) => {
-    console.error("❌ Error en interceptor de request:", error);
     return Promise.reject(error);
   }
 );
 
 // Interceptor para manejar errores de autenticación
 api.interceptors.response.use(
-  (response) => {
-    console.log(`✅ Respuesta exitosa: ${response.status} - ${response.config.url}`);
-    return response;
-  },
+  (response) => response,
   (error) => {
-    console.error(`❌ Error en respuesta: ${error.response?.status} - ${error.response?.config?.url}`);
-    console.error("Detalles del error:", error.response?.data);
-    
-    // Si es error 401 y no estamos en login, redirigir
     if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
-      console.warn("🔒 Sesión expirada, redirigiendo a login");
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       localStorage.removeItem("userId");
@@ -127,49 +114,30 @@ api.interceptors.response.use(
 
 export const getPagosPendientes = async (): Promise<PagoPendiente[]> => {
   try {
-    console.log("🚀 Iniciando getPagosPendientes");
-    
-    // Verificar que tenemos token
     const token = localStorage.getItem("token");
-    console.log("🔑 Token en localStorage:", token ? `✅ ${token.substring(0, 20)}...` : "❌ No encontrado");
     
     if (!token) {
-      console.warn("⚠️ No hay token, redirigiendo a login");
       window.location.href = "/login";
       throw new Error("No hay token de autenticación");
     }
 
-    // Obtener información del usuario usando tus funciones de AuthApi
     const idusuario = getUserId();
     const rol = getUserRole();
     const idbodega = getUserBodega();
     const user = getCurrentUser();
     
-    console.log("👤 Información del usuario:");
-    console.log("  - ID:", idusuario);
-    console.log("  - Rol:", rol);
-    console.log("  - Bodega:", idbodega);
-    console.log("  - User completo:", user);
-    
-    // Construir URL con filtro de bodega (solo si es Admin)
     let url = "/pagos/pendientes";
     const params = new URLSearchParams();
     
-    // Si es Admin y tiene bodega, enviar el filtro
     if (rol === 'Admin' && idbodega) {
       params.append('bodega', idbodega.toString());
-      console.log(`🏢 Filtrando por bodega: ${idbodega}`);
     }
     
     if (params.toString()) {
       url += `?${params.toString()}`;
     }
     
-    console.log(`📤 Haciendo request GET a: ${url}`);
-    
     const response = await api.get<BackendPagoPendiente[]>(url);
-    
-    console.log(`✅ Pagos pendientes encontrados: ${response.data.length}`);
     
     return response.data.map((pago) => ({
       id: `COT-${pago.idcotizacion.toString().padStart(3, '0')}`,
@@ -195,10 +163,6 @@ export const getPagosPendientes = async (): Promise<PagoPendiente[]> => {
       usuarioLogin: pago.usuario_login || "usuario"
     }));
   } catch (error: any) {
-    console.error("❌ Error en getPagosPendientes:", error);
-    console.error("Detalles:", error.response?.data || error.message);
-    
-    // Si el error es 401, redirigir a login
     if (error.response?.status === 401) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
@@ -216,11 +180,8 @@ export const getPagosPendientes = async (): Promise<PagoPendiente[]> => {
 export const procesarPago = async (cotizacionId: string, pagoRequest: PagoRequest): Promise<void> => {
   try {
     const idcotizacion = parseInt(cotizacionId.replace('COT-', ''));
-    console.log(`💳 Procesando pago - Cotización: ${idcotizacion}, Monto: ${pagoRequest.monto}`);
     await api.post(`/pagos/procesar-pago/${idcotizacion}`, pagoRequest);
-    console.log(`✅ Pago procesado exitosamente`);
   } catch (error: any) {
-    console.error("❌ Error processing payment:", error);
     throw new Error(error.response?.data?.message || "No se pudo procesar el pago");
   }
 };
@@ -228,11 +189,8 @@ export const procesarPago = async (cotizacionId: string, pagoRequest: PagoReques
 export const actualizarEntregas = async (cotizacionId: string, entregaRequest: EntregaRequest): Promise<void> => {
   try {
     const idcotizacion = parseInt(cotizacionId.replace('COT-', ''));
-    console.log(`📦 Actualizando entregas - Cotización: ${idcotizacion}`);
     await api.put(`/pagos/actualizar-entregas/${idcotizacion}`, entregaRequest);
-    console.log(`✅ Entregas actualizadas exitosamente`);
   } catch (error: any) {
-    console.error("❌ Error updating deliveries:", error);
     throw new Error(error.response?.data?.message || "No se pudieron actualizar las entregas");
   }
 };
@@ -240,11 +198,8 @@ export const actualizarEntregas = async (cotizacionId: string, entregaRequest: E
 export const marcarComoEntregado = async (cotizacionId: string): Promise<void> => {
   try {
     const idcotizacion = parseInt(cotizacionId.replace('COT-', ''));
-    console.log(`✅ Marcando como entregado - Cotización: ${idcotizacion}`);
     await api.patch(`/pagos/marcar-entregado/${idcotizacion}`);
-    console.log(`✅ Cotización marcada como entregada`);
   } catch (error: any) {
-    console.error("❌ Error marking as delivered:", error);
     throw new Error(error.response?.data?.message || "No se pudo marcar como entregado");
   }
 };
@@ -252,11 +207,8 @@ export const marcarComoEntregado = async (cotizacionId: string): Promise<void> =
 export const eliminarPago = async (cotizacionId: string): Promise<void> => {
   try {
     const idcotizacion = parseInt(cotizacionId.replace('COT-', ''));
-    console.log(`🗑️ Eliminando cotización - ID: ${idcotizacion}`);
     await api.delete(`/pagos/eliminar/${idcotizacion}`);
-    console.log(`✅ Cotización eliminada exitosamente`);
   } catch (error: any) {
-    console.error("❌ Error deleting payment:", error);
     throw new Error(error.response?.data?.message || "No se pudo eliminar el pago");
   }
 };

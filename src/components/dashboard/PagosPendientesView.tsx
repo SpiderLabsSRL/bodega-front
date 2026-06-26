@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, CreditCard, FileText, Eye, Package, Plus, Minus, Check, Trash2 } from "lucide-react";
+import { Search, CreditCard, FileText, Eye, Package, Plus, Minus, Check, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,11 @@ export function PagosPendientesView() {
   const [pagoParaEliminar, setPagoParaEliminar] = useState<PagoPendiente | null>(null);
   const [entregasTemporales, setEntregasTemporales] = useState<{[key: string]: number}>({});
   const [processingAction, setProcessingAction] = useState<string | null>(null);
+  
+  // Nuevos estados para el filtro de usuario
+  const [filtroUsuario, setFiltroUsuario] = useState<string>("todos");
+  const [usuariosUnicos, setUsuariosUnicos] = useState<string[]>([]);
+  
   const { toast } = useToast();
 
   const isAdmin = USUARIO_ACTUAL.rol === 'Admin';
@@ -48,6 +53,17 @@ export function PagosPendientesView() {
   useEffect(() => {
     cargarPagosPendientes();
   }, []);
+
+  // Efecto para obtener usuarios únicos cuando cambian los pagos
+  useEffect(() => {
+    if (isAdmin && pagosPendientes.length > 0) {
+      const usuarios = [...new Set(pagosPendientes
+        .map(p => p.usuarioNombre || "Desconocido")
+        .filter(Boolean)
+      )];
+      setUsuariosUnicos(usuarios);
+    }
+  }, [pagosPendientes, isAdmin]);
 
   // Manejar el botón "atrás" del navegador
   useEffect(() => {
@@ -98,13 +114,20 @@ export function PagosPendientesView() {
     }
   };
 
-  // Filtrar pagos por búsqueda
-  const filteredPagos = pagosPendientes.filter(pago =>
-    pago.cliente.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pago.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pago.telefono.includes(searchQuery) ||
-    (isAdmin && pago.usuarioNombre?.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Filtrar pagos por búsqueda y usuario
+  const filteredPagos = pagosPendientes.filter(pago => {
+    // Filtro de búsqueda
+    const matchesSearch = pago.cliente.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      pago.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      pago.telefono.includes(searchQuery) ||
+      (isAdmin && pago.usuarioNombre?.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    // Filtro de usuario (solo para admin)
+    const matchesUsuario = !isAdmin || filtroUsuario === "todos" || 
+      (pago.usuarioNombre && pago.usuarioNombre === filtroUsuario);
+    
+    return matchesSearch && matchesUsuario;
+  });
 
   const verDetalle = (pago: PagoPendiente) => {
     setPagoParaDetalle(pago);
@@ -343,20 +366,52 @@ export function PagosPendientesView() {
         )}
       </div>
 
-      {/* Buscador */}
+      {/* Buscador y Filtros */}
       <Card>
         <CardHeader>
           <CardTitle>Buscar Cotizaciones</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-            <Input
-              placeholder={isAdmin ? "Buscar por cliente, teléfono, número de cotización o usuario..." : "Buscar por cliente, teléfono o número de cotización..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder={isAdmin ? "Buscar por cliente, teléfono, número de cotización o usuario..." : "Buscar por cliente, teléfono o número de cotización..."}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            
+            {/* Filtro de Usuario - Solo visible para Admin */}
+            {isAdmin && usuariosUnicos.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Label className="text-sm font-medium text-muted-foreground">Filtrar por usuario:</Label>
+                <select
+                  value={filtroUsuario}
+                  onChange={(e) => setFiltroUsuario(e.target.value)}
+                  className="px-3 py-1.5 border rounded-md text-sm bg-background"
+                >
+                  <option value="todos">Todos los usuarios</option>
+                  {usuariosUnicos.map(usuario => (
+                    <option key={usuario} value={usuario}>
+                      {usuario}
+                    </option>
+                  ))}
+                </select>
+                {filtroUsuario !== "todos" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFiltroUsuario("todos")}
+                    className="h-7 px-2 text-xs"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Limpiar filtro
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -405,7 +460,7 @@ export function PagosPendientesView() {
                   
                   {isAdmin && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Usuario:</span>
+                      <span className="text-muted-foreground">Usuario Registro:</span>
                       <span className="font-medium">{pago.usuarioNombre || "Desconocido"}</span>
                     </div>
                   )}
@@ -530,7 +585,7 @@ export function PagosPendientesView() {
                   <TableHead>Fecha</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Teléfono</TableHead>
-                  {isAdmin && <TableHead>Usuario</TableHead>}
+                  {isAdmin && <TableHead>Usuario Registro</TableHead>}
                   {isAdmin && <TableHead>Sucursal</TableHead>}
                   <TableHead>Tipo de Pago</TableHead>
                   <TableHead className="text-right">Monto Total</TableHead>
@@ -726,7 +781,7 @@ export function PagosPendientesView() {
                   {isAdmin && (
                     <>
                       <div>
-                        <span className="font-medium text-muted-foreground">Usuario:</span>
+                        <span className="font-medium text-muted-foreground">Usuario Registro:</span>
                         <p className="font-semibold">{pagoParaDetalle.usuarioNombre || "Desconocido"}</p>
                       </div>
                       <div>
