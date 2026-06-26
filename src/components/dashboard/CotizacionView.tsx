@@ -810,85 +810,209 @@ export function CotizacionView() {
           </Dialog>
         </div>
 
+        {/* Nueva distribución: Izquierda - Información del Cliente, Derecha - Buscar Productos y Productos Agregados */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Columna Izquierda: Información del Cliente */}
           <Card className="lg:col-span-1">
-            <CardHeader><CardTitle>Buscar Productos</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input ref={searchInputRef} placeholder="Buscar por nombre o descripción... (mín. 2 caracteres)" value={searchQuery} onChange={handleSearchChange} onKeyDown={handleSearchKeyDown} className="pl-10" disabled={loading} autoFocus />
-              </div>
-              {loading && <div className="text-center py-4"><p className="text-muted-foreground">Buscando productos...</p></div>}
-              {!loading && searchResults.length > 0 && (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {searchResults.map((product) => (
-                    <div key={product.idproducto} className="border rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        {product.imagen ? <img src={getProductImageUrl(product.imagen)} alt={product.nombre} className="w-16 h-16 rounded-md object-cover" onError={(e) => { (e.target as HTMLImageElement).src = "https://via.placeholder.com/64x64/f3f4f6/000000?text=Sin+imagen"; }} /> : <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center"><span className="text-xs text-muted-foreground">Sin imagen</span></div>}
-                        <div className="flex-1 min-w-0"><h4 className="font-semibold text-sm">{product.nombre}</h4><p className="text-xs text-muted-foreground line-clamp-2">{product.descripcion}</p><div className="flex items-center gap-2 mt-1 flex-wrap"><Badge variant="outline" className="text-xs">{product.nombre_ubicacion}</Badge></div><p className="text-xs font-medium">Bs {formatBs(product.precio_venta)} | Stock: {product.stock}</p></div>
-                        <Button size="sm" onClick={() => agregarProducto(product)} disabled={product.stock === 0}>{product.stock === 0 ? "Sin Stock" : "Agregar"}</Button>
-                      </div>
-                    </div>
-                  ))}
+            <CardHeader><CardTitle>Información del Cliente</CardTitle></CardHeader>
+            <CardContent>
+              {/* Búsqueda de cliente con "ojito" arriba */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-sm font-medium">Buscar cliente registrado</Label>
+                  {selectedCliente && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={toggleClienteNota}
+                            className="h-7 px-2 flex-shrink-0"
+                          >
+                            {showClienteNota ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                            <span className="text-xs ml-1">
+                              {showClienteNota ? "Ocultar nota" : "Ver nota"}
+                            </span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{showClienteNota ? "Ocultar nota" : "Ver nota"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                <div className="flex gap-2 mt-1">
+                  <div className="relative flex-1">
+                    <Input
+                      placeholder="Buscar por nombre, carnet o celular..."
+                      value={clienteSearchTerm}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setClienteSearchTerm(value);
+                        if (value.trim().length >= 2) {
+                          searchClientesBackend(value.trim());
+                        } else {
+                          setClienteSearchResults([]);
+                        }
+                      }}
+                      className="pr-10"
+                    />
+                    {searchingClientes && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowClienteForm(true)}
+                    className="h-10 px-3 flex-shrink-0"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                  </Button>
+                  {selectedCliente && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={limpiarCliente}
+                      className="h-10 px-2 flex-shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
 
-          <Card className="lg:col-span-1">
-            <CardHeader><CardTitle>Productos Agregados</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {cotizacionItems.length === 0 ? (<p className="text-muted-foreground text-center py-8">No hay productos agregados</p>) : (
-                <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {cotizacionItems.map((item) => (
-                    <div key={item.uniqueId} className="border rounded-lg p-3 bg-card">
-                      <div className="flex items-start gap-3 mb-3">
-                        {(item.imagenUrl || getProductImageUrl(item.imagen)) ? <img src={item.imagenUrl || getProductImageUrl(item.imagen)} alt={item.nombre} className="w-12 h-12 rounded object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).src = "https://via.placeholder.com/50x50/f3f4f6/000000?text=Producto"; }} /> : <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0"><span className="text-xs text-muted-foreground">Sin img</span></div>}
-                        <div className="flex-1 min-w-0"><h5 className="font-bold text-base break-words whitespace-normal leading-tight">{item.nombre}</h5><p className="text-sm font-medium text-green-600 mt-1">Bs {formatBs(item.precio_venta)} c/u</p></div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 w-8 p-0"
-                            onClick={() => actualizarCantidad(item.uniqueId, item.cantidad - 1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <Input
-                            type="number"
-                            min="0"
-                            value={item.cantidad === 0 ? "" : item.cantidad}
-                            onChange={(e) => handleCantidadInputChange(item.uniqueId, e.target.value)}
-                            onBlur={(e) => handleCantidadInputBlur(item.uniqueId, e.target.value)}
-                            className="w-12 h-8 text-center text-sm font-medium number-input-no-scroll"
-                            onWheel={(e) => e.currentTarget.blur()}
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 w-8 p-0"
-                            onClick={() => actualizarCantidad(item.uniqueId, item.cantidad + 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
+                {/* Resultados de búsqueda de clientes */}
+                {clienteSearchResults.length > 0 && (
+                  <div className="border rounded-md overflow-hidden max-h-48 overflow-y-auto shadow-lg bg-white mt-2">
+                    {clienteSearchResults.map((cliente) => (
+                      <div
+                        key={cliente.id}
+                        className="p-3 hover:bg-primary/10 cursor-pointer border-b last:border-b-0 flex items-center justify-between transition-colors"
+                        onClick={() => seleccionarCliente(cliente)}
+                      >
+                        <div>
+                          <span className="font-medium">
+                            {cliente.nombres} {cliente.apellidos}
+                          </span>
+                          <span className="text-sm text-muted-foreground ml-2">
+                            {cliente.carnet}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold whitespace-nowrap">Bs {formatBs(item.precio_venta * item.cantidad)}</p>
-                          <Button size="sm" variant="destructive" className="h-8 w-8 p-0" onClick={() => eliminarItem(item.uniqueId)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
+                        <span className="text-sm text-muted-foreground">
+                          {cliente.celular}
+                        </span>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
+
+                {/* Mensaje de "No se encontraron clientes" */}
+                {clienteSearchTerm.trim().length >= 2 && 
+                 clienteSearchResults.length === 0 && 
+                 !searchingClientes && (
+                  <div className="text-center py-2 text-sm text-muted-foreground border rounded-md bg-muted/20 mt-2">
+                    No se encontraron clientes. Puede escribir el nombre manualmente.
+                  </div>
+                )}
+              </div>
+
+              {/* Mostrar nota del cliente seleccionado */}
+              {selectedCliente && showClienteNota && (
+                <div className="mb-4 p-3 bg-muted/30 rounded-md border">
+                  <p className="text-xs text-muted-foreground font-medium">Nota del cliente:</p>
+                  <p className="text-sm mt-0.5 break-words whitespace-pre-wrap">
+                    {selectedCliente.nota && selectedCliente.nota.trim() ? (
+                      selectedCliente.nota
+                    ) : (
+                      <span className="text-muted-foreground italic">Sin nota</span>
+                    )}
+                  </p>
                 </div>
               )}
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between text-sm"><span>Subtotal:</span><span>Bs {formatBs(subtotal)}</span></div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Label htmlFor="descuento" className="text-sm whitespace-nowrap">Descuento (monto Bs):</Label>
+
+              {/* Cliente seleccionado o manual */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nombre">
+                    Nombre del Cliente <span className="text-red-500">*</span>
+                  </Label>
+                  <Input 
+                    id="nombre" 
+                    value={datosCliente.nombre} 
+                    onChange={handleNombreManualChange} 
+                    placeholder="Ingrese el nombre completo" 
+                    className={selectedCliente ? "border-green-500 bg-green-50" : ""}
+                  />
+                  {selectedCliente && (
+                    <p className="text-xs text-green-600">✓ Cliente registrado</p>
+                  )}
+                  {clienteManual && !selectedCliente && datosCliente.nombre && (
+                    <p className="text-xs text-amber-600">ℹ Cliente no registrado (solo para esta cotización)</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="telefono">
+                    Teléfono <span className="text-red-500">*</span>
+                  </Label>
+                  <Input 
+                    id="telefono" 
+                    value={datosCliente.telefono} 
+                    onChange={handleTelefonoManualChange} 
+                    placeholder="Número de teléfono"
+                    className={selectedCliente ? "border-green-500 bg-green-50" : ""}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direccion">Dirección</Label>
+                  <Input 
+                    id="direccion" 
+                    value={datosCliente.direccion} 
+                    onChange={(e) => setDatosCliente(prev => ({ ...prev, direccion: e.target.value }))} 
+                    placeholder="Dirección completa" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tipoPago">
+                    Tipo de Pago <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={datosCliente.tipoPago} onValueChange={(value: "contra-entrega" | "pago-adelantado" | "mitad-adelanto") => setDatosCliente(prev => ({ ...prev, tipoPago: value }))}>
+                    <SelectTrigger><SelectValue placeholder="Seleccione tipo de pago" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contra-entrega">Contra Entrega</SelectItem>
+                      <SelectItem value="pago-adelantado">Pago por Adelantado</SelectItem>
+                      <SelectItem value="mitad-adelanto">Mitad de Adelanto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {datosCliente.tipoPago !== "pago-adelantado" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="vigencia">
+                      Vigencia <span className="text-red-500">*</span>
+                    </Label>
+                    <Select value={datosCliente.vigencia.toString()} onValueChange={(value) => setDatosCliente(prev => ({ ...prev, vigencia: parseInt(value) as 5 | 10 | 15 | 30 }))}>
+                      <SelectTrigger><SelectValue placeholder="Seleccione vigencia" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">5 días</SelectItem>
+                        <SelectItem value="10">10 días</SelectItem>
+                        <SelectItem value="15">15 días</SelectItem>
+                        <SelectItem value="30">30 días</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="descuento">Descuento (monto Bs)</Label>
                   <Input 
                     id="descuento" 
                     type="number" 
@@ -900,223 +1024,121 @@ export function CotizacionView() {
                       setDatosCliente(prev => ({ ...prev, descuento: Math.min(descuento, subtotal) })); 
                     }} 
                     placeholder="0" 
-                    className="w-24 h-8 number-input-no-scroll" 
+                    className="number-input-no-scroll" 
                     onWheel={(e) => e.currentTarget.blur()} 
                   />
                 </div>
-                <div className="flex justify-between text-lg font-bold"><span>Total:</span><span>Bs {formatBs(totalFinal)}</span></div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader><CardTitle>Información del Cliente</CardTitle></CardHeader>
-          <CardContent>
-            {/* Búsqueda de cliente con "ojito" arriba */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-sm font-medium">Buscar cliente registrado</Label>
-                {selectedCliente && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={toggleClienteNota}
-                          className="h-7 px-2 flex-shrink-0"
-                        >
-                          {showClienteNota ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                          <span className="text-xs ml-1">
-                            {showClienteNota ? "Ocultar nota" : "Ver nota"}
-                          </span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{showClienteNota ? "Ocultar nota" : "Ver nota"}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-              </div>
-              <div className="flex gap-2 mt-1">
-                <div className="relative flex-1">
-                  <Input
-                    placeholder="Buscar por nombre, carnet o celular..."
-                    value={clienteSearchTerm}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setClienteSearchTerm(value);
-                      if (value.trim().length >= 2) {
-                        searchClientesBackend(value.trim());
-                      } else {
-                        setClienteSearchResults([]);
-                      }
-                    }}
-                    className="pr-10"
-                  />
-                  {searchingClientes && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-                    </div>
-                  )}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowClienteForm(true)}
-                  className="h-10 px-3 flex-shrink-0"
-                >
-                  <UserPlus className="h-4 w-4" />
-                </Button>
-                {selectedCliente && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={limpiarCliente}
-                    className="h-10 px-2 flex-shrink-0"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
               </div>
 
-              {/* Resultados de búsqueda de clientes */}
-              {clienteSearchResults.length > 0 && (
-                <div className="border rounded-md overflow-hidden max-h-48 overflow-y-auto shadow-lg bg-white mt-2">
-                  {clienteSearchResults.map((cliente) => (
-                    <div
-                      key={cliente.id}
-                      className="p-3 hover:bg-primary/10 cursor-pointer border-b last:border-b-0 flex items-center justify-between transition-colors"
-                      onClick={() => seleccionarCliente(cliente)}
-                    >
-                      <div>
-                        <span className="font-medium">
-                          {cliente.nombres} {cliente.apellidos}
-                        </span>
-                        <span className="text-sm text-muted-foreground ml-2">
-                          {cliente.carnet}
-                        </span>
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {cliente.celular}
-                      </span>
-                    </div>
-                  ))}
+              {/* Indicador de cliente no registrado */}
+              {clienteManual && !selectedCliente && datosCliente.nombre && (
+                <div className="mt-4 p-2 bg-amber-50 border border-amber-200 rounded-md">
+                  <p className="text-xs text-amber-700">
+                    <span className="font-medium">ℹ Cliente no registrado:</span> Esta cotización se generará sin guardar en la base de datos.
+                  </p>
                 </div>
               )}
 
-              {/* Mensaje de "No se encontraron clientes" */}
-              {clienteSearchTerm.trim().length >= 2 && 
-               clienteSearchResults.length === 0 && 
-               !searchingClientes && (
-                <div className="text-center py-2 text-sm text-muted-foreground border rounded-md bg-muted/20 mt-2">
-                  No se encontraron clientes. Puede escribir el nombre manualmente.
-                </div>
-              )}
-            </div>
-
-            {/* Mostrar nota del cliente seleccionado */}
-            {selectedCliente && showClienteNota && (
-              <div className="mb-4 p-3 bg-muted/30 rounded-md border">
-                <p className="text-xs text-muted-foreground font-medium">Nota del cliente:</p>
-                <p className="text-sm mt-0.5 break-words whitespace-pre-wrap">
-                  {selectedCliente.nota && selectedCliente.nota.trim() ? (
-                    selectedCliente.nota
-                  ) : (
-                    <span className="text-muted-foreground italic">Sin nota</span>
-                  )}
-                </p>
-              </div>
-            )}
-
-            {/* Cliente seleccionado o manual */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre del Cliente *</Label>
-                <Input 
-                  id="nombre" 
-                  value={datosCliente.nombre} 
-                  onChange={handleNombreManualChange} 
-                  placeholder="Ingrese el nombre completo" 
-                  className={selectedCliente ? "border-green-500 bg-green-50" : ""}
-                />
-                {selectedCliente && (
-                  <p className="text-xs text-green-600">✓ Cliente registrado</p>
-                )}
-                {clienteManual && !selectedCliente && datosCliente.nombre && (
-                  <p className="text-xs text-amber-600">ℹ Cliente no registrado (solo para esta cotización)</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="telefono">Teléfono *</Label>
-                <Input 
-                  id="telefono" 
-                  value={datosCliente.telefono} 
-                  onChange={handleTelefonoManualChange} 
-                  placeholder="Número de teléfono"
-                  className={selectedCliente ? "border-green-500 bg-green-50" : ""}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="direccion">Dirección</Label>
-                <Input 
-                  id="direccion" 
-                  value={datosCliente.direccion} 
-                  onChange={(e) => setDatosCliente(prev => ({ ...prev, direccion: e.target.value }))} 
-                  placeholder="Dirección completa" 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tipoPago">Tipo de Pago *</Label>
-                <Select value={datosCliente.tipoPago} onValueChange={(value: "contra-entrega" | "pago-adelantado" | "mitad-adelanto") => setDatosCliente(prev => ({ ...prev, tipoPago: value }))}>
-                  <SelectTrigger><SelectValue placeholder="Seleccione tipo de pago" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="contra-entrega">Contra Entrega</SelectItem>
-                    <SelectItem value="pago-adelantado">Pago por Adelantado</SelectItem>
-                    <SelectItem value="mitad-adelanto">Mitad de Adelanto</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {datosCliente.tipoPago !== "pago-adelantado" && (
-                <div className="space-y-2">
-                  <Label htmlFor="vigencia">Vigencia *</Label>
-                  <Select value={datosCliente.vigencia.toString()} onValueChange={(value) => setDatosCliente(prev => ({ ...prev, vigencia: parseInt(value) as 5 | 10 | 15 | 30 }))}>
-                    <SelectTrigger><SelectValue placeholder="Seleccione vigencia" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5 días</SelectItem>
-                      <SelectItem value="10">10 días</SelectItem>
-                      <SelectItem value="15">15 días</SelectItem>
-                      <SelectItem value="30">30 días</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="flex items-end">
+              {/* Botón Generar Cotización */}
+              <div className="mt-4">
                 <Button onClick={generarCotizacion} className="w-full" disabled={cotizacionItems.length === 0 || loading || tieneItemsInvalidos}>
                   {loading ? "Generando..." : tieneItemsInvalidos ? "Cantidades inválidas" : "Generar Cotización"}
                 </Button>
               </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            {/* Indicador de cliente no registrado */}
-            {clienteManual && !selectedCliente && datosCliente.nombre && (
-              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-md">
-                <p className="text-xs text-amber-700">
-                  <span className="font-medium">ℹ Cliente no registrado:</span> Esta cotización se generará sin guardar en la base de datos.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          {/* Columna Derecha: Buscar Productos y Productos Agregados */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Buscar Productos */}
+            <Card>
+              <CardHeader><CardTitle>Buscar Productos</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                  <Input ref={searchInputRef} placeholder="Buscar por nombre o descripción... (mín. 2 caracteres)" value={searchQuery} onChange={handleSearchChange} onKeyDown={handleSearchKeyDown} className="pl-10" disabled={loading} autoFocus />
+                </div>
+                {loading && <div className="text-center py-4"><p className="text-muted-foreground">Buscando productos...</p></div>}
+                {!loading && searchResults.length > 0 && (
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {searchResults.map((product) => (
+                      <div key={product.idproducto} className="border rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          {product.imagen ? <img src={getProductImageUrl(product.imagen)} alt={product.nombre} className="w-16 h-16 rounded-md object-cover" onError={(e) => { (e.target as HTMLImageElement).src = "https://via.placeholder.com/64x64/f3f4f6/000000?text=Sin+imagen"; }} /> : <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center"><span className="text-xs text-muted-foreground">Sin imagen</span></div>}
+                          <div className="flex-1 min-w-0"><h4 className="font-semibold text-sm">{product.nombre}</h4><p className="text-xs text-muted-foreground line-clamp-2">{product.descripcion}</p><div className="flex items-center gap-2 mt-1 flex-wrap"><Badge variant="outline" className="text-xs">{product.nombre_ubicacion}</Badge></div><p className="text-xs font-medium">Bs {formatBs(product.precio_venta)} | Stock: {product.stock}</p></div>
+                          <Button size="sm" onClick={() => agregarProducto(product)} disabled={product.stock === 0}>{product.stock === 0 ? "Sin Stock" : "Agregar"}</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Productos Agregados */}
+            <Card>
+              <CardHeader><CardTitle>Productos Agregados</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {cotizacionItems.length === 0 ? (<p className="text-muted-foreground text-center py-8">No hay productos agregados</p>) : (
+                  <>
+                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                      {cotizacionItems.map((item) => (
+                        <div key={item.uniqueId} className="border rounded-lg p-3 bg-card">
+                          <div className="flex items-start gap-3 mb-3">
+                            {(item.imagenUrl || getProductImageUrl(item.imagen)) ? <img src={item.imagenUrl || getProductImageUrl(item.imagen)} alt={item.nombre} className="w-12 h-12 rounded object-cover flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).src = "https://via.placeholder.com/50x50/f3f4f6/000000?text=Producto"; }} /> : <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0"><span className="text-xs text-muted-foreground">Sin img</span></div>}
+                            <div className="flex-1 min-w-0"><h5 className="font-bold text-base break-words whitespace-normal leading-tight">{item.nombre}</h5><p className="text-sm font-medium text-green-600 mt-1">Bs {formatBs(item.precio_venta)} c/u</p></div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                onClick={() => actualizarCantidad(item.uniqueId, item.cantidad - 1)}
+                              >
+                                <Minus className="h-3 w-3" />
+                              </Button>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={item.cantidad === 0 ? "" : item.cantidad}
+                                onChange={(e) => handleCantidadInputChange(item.uniqueId, e.target.value)}
+                                onBlur={(e) => handleCantidadInputBlur(item.uniqueId, e.target.value)}
+                                className="w-12 h-8 text-center text-sm font-medium number-input-no-scroll"
+                                onWheel={(e) => e.currentTarget.blur()}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                onClick={() => actualizarCantidad(item.uniqueId, item.cantidad + 1)}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold whitespace-nowrap">Bs {formatBs(item.precio_venta * item.cantidad)}</p>
+                              <Button size="sm" variant="destructive" className="h-8 w-8 p-0" onClick={() => eliminarItem(item.uniqueId)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t pt-4 space-y-2">
+                      <div className="flex justify-between text-sm"><span>Subtotal:</span><span>Bs {formatBs(subtotal)}</span></div>
+                      {descuentoTotal > 0 && (
+                        <div className="flex justify-between text-sm text-red-600"><span>Descuento:</span><span>-Bs {formatBs(descuentoTotal)}</span></div>
+                      )}
+                      <div className="flex justify-between text-lg font-bold"><span>Total:</span><span>Bs {formatBs(totalFinal)}</span></div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
         {/* Dialog para crear cliente */}
         <Dialog open={showClienteForm} onOpenChange={setShowClienteForm}>
