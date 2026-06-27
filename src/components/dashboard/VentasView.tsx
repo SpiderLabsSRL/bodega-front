@@ -130,8 +130,6 @@ export function VentasView() {
   const [ventaSeleccionada, setVentaSeleccionada] = useState<Venta | null>(null);
   const [mostrarDetallesImpresion, setMostrarDetallesImpresion] = useState<boolean>(true);
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
-  const [mostrarAlerta, setMostrarAlerta] = useState(false);
-  const [nombreCliente, setNombreCliente] = useState("");
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -262,7 +260,6 @@ export function VentasView() {
       
       if (filtroEmpleado !== "Todos") {
         const empleadoLabel = empleadosOptions.find(e => e.value === filtroEmpleado)?.label || filtroEmpleado;
-        // Usar String() para evitar errores de replace en números
         const empleadoLabelStr = String(empleadoLabel);
         nombreArchivo += `_${empleadoLabelStr.replace(/\s+/g, '_')}`;
       }
@@ -273,7 +270,6 @@ export function VentasView() {
       
       if (filtroBodega !== "todos") {
         const bodegaLabel = bodegasOptions.find(b => b.value === filtroBodega)?.label || String(filtroBodega);
-        // Usar String() para evitar errores de replace en números
         const bodegaLabelStr = String(bodegaLabel);
         nombreArchivo += `_${bodegaLabelStr.replace(/\s+/g, '_')}`;
       }
@@ -371,16 +367,13 @@ export function VentasView() {
     setMostrarDetallesImpresion(imprimir);
     setVentaSeleccionada(venta);
     setMostrarDetalle(true);
-    setNombreCliente("");
   };
 
   const imprimirDetalle = () => {
-    if (!nombreCliente.trim()) {
-      setMostrarAlerta(true);
-      return;
-    }
-    
     if (ventaSeleccionada) {
+      // Usar el nombre del cliente de la venta seleccionada
+      const nombreCliente = ventaSeleccionada.cliente || "No especificado";
+      
       generateVentaPDF({
         venta: ventaSeleccionada,
         nombreCliente,
@@ -680,6 +673,7 @@ export function VentasView() {
                     <TableHead className="w-[140px]">Fecha y Hora</TableHead>
                     <TableHead className="w-[150px]">Usuario</TableHead>
                     {!isAssistant && <TableHead className="w-[130px]">Sucursal</TableHead>}
+                    <TableHead className="w-[150px]">Cliente</TableHead>
                     <TableHead className="min-w-[300px]">Descripción</TableHead>
                     <TableHead className="w-[100px] text-right">Subtotal</TableHead>
                     <TableHead className="w-[100px] text-right">Descuento</TableHead>
@@ -692,7 +686,7 @@ export function VentasView() {
                 <TableBody>
                   {ventasFiltradas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-8">
+                      <TableCell colSpan={11} className="text-center py-8">
                         <div className="flex flex-col items-center">
                           <p className="text-muted-foreground mb-2">No se encontraron ventas</p>
                           <p className="text-sm text-muted-foreground">
@@ -736,6 +730,14 @@ export function VentasView() {
                             </div>
                           </TableCell>
                         )}
+                        
+                        {/* Cliente */}
+                        <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
+                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">CLIENTE</div>
+                          <div className="text-sm font-medium">
+                            {venta.cliente || "No especificado"}
+                          </div>
+                        </TableCell>
                         
                         {/* Descripción */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
@@ -828,21 +830,6 @@ export function VentasView() {
             <DialogTitle>Detalle de Venta</DialogTitle>
           </DialogHeader>
 
-          {/* Formulario para datos del cliente */}
-          {mostrarDetallesImpresion && (
-            <div className="mb-6">
-              <div>
-                <Label htmlFor="nombreCliente">Nombre del Cliente</Label>
-                <Input
-                  id="nombreCliente"
-                  value={nombreCliente}
-                  onChange={(e) => setNombreCliente(e.target.value)}
-                  placeholder="Ingrese el nombre del cliente"
-                />
-              </div>
-            </div>
-          )}
-
           {/* Contenido a imprimir */}
           <div id="detalle-venta-imprimir" className="space-y-6">
             {mostrarDetallesImpresion && (
@@ -855,10 +842,10 @@ export function VentasView() {
               </div>
             )}
 
-            {/* Información del cliente */}
+            {/* Información del cliente y venta */}
             <div className="info-cliente space-y-2">
-              {mostrarDetallesImpresion && (
-                <p><strong>Cliente:</strong> {nombreCliente || "No especificado"}</p>
+              {mostrarDetallesImpresion && ventaSeleccionada && (
+                <p><strong>Cliente:</strong> {ventaSeleccionada.cliente || "No especificado"}</p>
               )}
               <p><strong>Fecha:</strong> {ventaSeleccionada ? `${formatDateForDisplay(ventaSeleccionada.fecha)} ${formatTimeForDisplay(ventaSeleccionada.fecha)}` : ""}</p>
               <p><strong>Dirección:</strong> Av. Heroinas esq. Hamiraya #316</p>
@@ -943,23 +930,6 @@ export function VentasView() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Alert Dialog */}
-      <AlertDialog open={mostrarAlerta} onOpenChange={setMostrarAlerta}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Información requerida</AlertDialogTitle>
-            <AlertDialogDescription>
-              Por favor, ingresa el nombre del cliente antes de generar el PDF.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setMostrarAlerta(false)}>
-              Entendido
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

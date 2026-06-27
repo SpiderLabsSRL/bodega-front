@@ -28,6 +28,7 @@ interface BackendVenta {
   idventa: number;
   fecha_hora: string;
   idusuario: number;
+  idcliente: number | null;
   idbodega: number;
   descripcion: string;
   sub_total: string;
@@ -39,6 +40,7 @@ interface BackendVenta {
   usuario_apellidos: string;
   usuario_usuario: string;
   bodega_nombre?: string;
+  cliente_nombre?: string;
   detalle: BackendDetalleVenta[];
 }
 
@@ -57,6 +59,8 @@ export interface Venta {
   usuario: string;
   usuario_completo: string;
   usuario_login: string;
+  idcliente: number | null;
+  cliente: string;
   idbodega?: number;
   bodegaNombre?: string;
   descripcion: string;
@@ -170,6 +174,8 @@ export const getVentas = async (filtros?: VentasFiltros): Promise<Venta[]> => {
       usuario: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_completo: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_login: venta.usuario_usuario,
+      idcliente: venta.idcliente,
+      cliente: venta.cliente_nombre || "No especificado",
       idbodega: venta.idbodega,
       bodegaNombre: venta.bodega_nombre || "N/A",
       descripcion: venta.descripcion,
@@ -245,6 +251,8 @@ export const getVentasHoyAsistente = async (username: string): Promise<Venta[]> 
       usuario: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_completo: `${venta.usuario_nombre} ${venta.usuario_apellidos}`,
       usuario_login: venta.usuario_usuario,
+      idcliente: venta.idcliente,
+      cliente: venta.cliente_nombre || "No especificado",
       idbodega: venta.idbodega,
       bodegaNombre: venta.bodega_nombre || "N/A",
       descripcion: venta.descripcion,
