@@ -264,16 +264,6 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
               </div>
             </PopoverContent>
           </Popover>
-
-          <Button
-            variant={showLowMarginOnly ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowLowMarginOnly(!showLowMarginOnly)}
-            className="h-9"
-          >
-            <Filter className="mr-2 h-4 w-4" />
-            Margen Bajo ({lowMarginCount})
-          </Button>
           
           {(selectedCategories.length > 0 || searchTerm || showLowMarginOnly || selectedSucursal) && (
             <Button
@@ -287,16 +277,6 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
             </Button>
           )}
           
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={loading}
-            className="h-9"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
         </div>
       </div>
 
