@@ -229,7 +229,13 @@ interface UbicacionConBodega {
   idbodega: number | null;
 }
 
-export function BodegaView() {
+interface BodegaViewProps {
+  searchProductId?: string;
+  searchProductName?: string;
+  searchBodegaId?: number;
+}
+
+export function BodegaView({ searchProductId, searchProductName, searchBodegaId }: BodegaViewProps = {}) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [isNewSucursalDialogOpen, setIsNewSucursalDialogOpen] = useState(false);
@@ -271,7 +277,7 @@ export function BodegaView() {
   // Función para refrescar ubicaciones y categorías
   const refreshUbicacionesYCategorias = useCallback(async () => {
     try {
-      const bodegaId = 1; // SIEMPRE usar idbodega = 1 para productos
+      const bodegaId = 1;
       const [ubicacionesData, categoriasData] = await Promise.all([
         getUbicacionesPorBodega(bodegaId),
         getCategorias(),
@@ -293,7 +299,7 @@ export function BodegaView() {
     const loadInitialData = async () => {
       setLoading(true);
       try {
-        const bodegaId = 1; // SIEMPRE usar idbodega = 1 para productos
+        const bodegaId = 1;
         const [ubicacionesData, categoriasData, bodegasData] = await Promise.all([
           getUbicacionesPorBodega(bodegaId),
           getCategorias(),
@@ -316,14 +322,79 @@ export function BodegaView() {
           }))
         );
 
-        if (bodegasData.length > 0) {
-          const firstBodega = bodegasData[0];
-          setSelectedBodega(firstBodega.idbodega);
-          const productosData = await getProductosByBodega(firstBodega.idbodega);
-          setProductos(productosData);
+        // Si se recibió un producto desde Inventario, aplicarlo PRIMERO
+        if (searchProductId && searchProductName) {
+          let bodegaIdEncontrada: number | null = null;
+          
+          // 1. PRIMERO: Usar la bodega que vino de Inventario (si existe)
+          if (searchBodegaId) {
+            bodegaIdEncontrada = searchBodegaId;
+          } else {
+            // 2. SEGUNDO: Buscar el producto en todas las bodegas para saber dónde está
+            const allProducts = await getAllProductosBodega();
+            const productoEncontrado = allProducts.find(p => p.id === parseInt(searchProductId));
+            
+            if (productoEncontrado && productoEncontrado.idbodega) {
+              bodegaIdEncontrada = productoEncontrado.idbodega;
+            }
+          }
+          
+          // Si encontramos una bodega, seleccionarla
+          if (bodegaIdEncontrada) {
+            // Verificar que la bodega existe en la lista
+            const bodegaExiste = bodegasData.some(b => b.idbodega === bodegaIdEncontrada);
+            if (bodegaExiste) {
+              setSelectedBodega(bodegaIdEncontrada);
+              
+              // Cargar los productos de esa bodega
+              const productosData = await getProductosByBodega(bodegaIdEncontrada);
+              setProductos(productosData);
+              setShowAllProducts(false);
+            } else {
+              // Si la bodega no existe, usar la primera
+              if (bodegasData.length > 0) {
+                const firstBodega = bodegasData[0];
+                setSelectedBodega(firstBodega.idbodega);
+                const productosData = await getProductosByBodega(firstBodega.idbodega);
+                setProductos(productosData);
+                setShowAllProducts(false);
+              }
+            }
+          } else {
+            // Si no se encuentra la bodega, cargar la primera
+            if (bodegasData.length > 0) {
+              const firstBodega = bodegasData[0];
+              setSelectedBodega(firstBodega.idbodega);
+              const productosData = await getProductosByBodega(firstBodega.idbodega);
+              setProductos(productosData);
+              setShowAllProducts(false);
+            }
+          }
+          
+          // Establecer el término de búsqueda
+          setSearchTerm(searchProductName);
+          
+          // Forzar la búsqueda después de cargar
+          setTimeout(() => {
+            performSearch(searchProductName);
+          }, 300);
+          
+          // Limpiar sessionStorage después de usar
+          sessionStorage.removeItem('searchProductId');
+          sessionStorage.removeItem('searchProductName');
+          sessionStorage.removeItem('searchBodegaId');
         } else {
-          const allProducts = await getAllProductosBodega();
-          setProductos(allProducts);
+          // Carga normal
+          if (bodegasData.length > 0) {
+            const firstBodega = bodegasData[0];
+            setSelectedBodega(firstBodega.idbodega);
+            const productosData = await getProductosByBodega(firstBodega.idbodega);
+            setProductos(productosData);
+            setShowAllProducts(false);
+          } else {
+            const allProducts = await getAllProductosBodega();
+            setProductos(allProducts);
+          }
         }
       } catch (error) {
         console.error("Error cargando datos iniciales:", error);
@@ -338,9 +409,9 @@ export function BodegaView() {
     };
 
     loadInitialData();
-  }, [toast]);
+  }, [toast, searchProductId, searchProductName, searchBodegaId]);
 
-  // Cargar ubicaciones cuando cambia la bodega seleccionada (SIEMPRE idbodega = 1)
+  // Cargar ubicaciones cuando cambia la bodega seleccionada
   useEffect(() => {
     refreshUbicacionesYCategorias();
   }, [refreshUbicacionesYCategorias]);
@@ -360,7 +431,6 @@ export function BodegaView() {
       }
 
       try {
-        // Usar el id de la sucursal para filtrar ubicaciones
         const ubicaciones = await getUbicacionesPorBodega(sucursal.id);
         setUbicacionesPorSucursal(ubicaciones.map(u => ({
           idubicacion: u.idubicacion,
@@ -518,7 +588,6 @@ export function BodegaView() {
 
     setIsCreatingUbicacion(true);
     try {
-      // Usar el idbodega de la sucursal seleccionada
       await createUbicacion({ 
         nombre: newUbicacionData.nombre.trim(), 
         idbodega: sucursal.id 
@@ -529,19 +598,16 @@ export function BodegaView() {
         description: `La ubicación "${newUbicacionData.nombre}" ha sido creada en ${selectedSucursal}.`,
       });
 
-      // Recargar ubicaciones de la sucursal
       const ubicaciones = await getUbicacionesPorBodega(sucursal.id);
       setUbicacionesPorSucursal(ubicaciones.map(u => ({
         idubicacion: u.idubicacion,
         nombre: u.nombre
       })));
       
-      // Seleccionar automáticamente la nueva ubicación
       setSelectedSucursalUbicacion(newUbicacionData.nombre.trim());
       setNewUbicacionData({ nombre: "" });
       setIsNewUbicacionDialogOpen(false);
       
-      // También refrescar las ubicaciones generales (idbodega = 1)
       await refreshUbicacionesYCategorias();
     } catch (error: any) {
       console.error("Error creando ubicación:", error);
@@ -683,7 +749,7 @@ export function BodegaView() {
       precio_venta: product.precio ?? 0,
       precio_compra: product.precio_compra ?? 0,
       stock_minimo: product.stockMinimo ?? 0,
-      idbodega: 1, // SIEMPRE idbodega = 1 para productos
+      idbodega: 1,
       descripcion: product.descripcion || "",
       imagen: product.imagen || "",
       ubicacion_nombre: product.ubicacion || "",
@@ -734,7 +800,6 @@ export function BodegaView() {
         formData.append("codigo_barras", productData.codigo_barras.trim());
       }
       
-      // SIEMPRE usar idbodega = 1 para productos
       formData.append("idbodega", "1");
       
       let categoriasIds: number[] = [];

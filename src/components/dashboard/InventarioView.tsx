@@ -11,10 +11,9 @@ import { getInventory, getLowMarginCount, InventoryItem, getCategories, Category
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useNavigate } from "react-router-dom";
 
 interface InventarioViewProps {
-  onViewChange?: (view: DashboardView) => void;
+  onViewChange?: (view: DashboardView, params?: { searchProductId?: string; searchProductName?: string; searchBodegaId?: number }) => void;
 }
 
 export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
@@ -30,12 +29,11 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
   const [error, setError] = useState<string | null>(null);
   const [totalInvertido, setTotalInvertido] = useState(0);
   const [totalGanancia, setTotalGanancia] = useState(0);
-  
-  const navigate = useNavigate();
 
   useEffect(() => {
     sessionStorage.removeItem('searchProductId');
     sessionStorage.removeItem('searchProductName');
+    sessionStorage.removeItem('searchBodegaId');
     loadInventoryData();
     loadLowMarginCount();
     loadCategories();
@@ -123,13 +121,31 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
   };
 
   const handleViewProduct = (item: InventoryItem) => {
+    // Guardar en sessionStorage el ID y nombre del producto
     sessionStorage.setItem('searchProductId', item.id);
     sessionStorage.setItem('searchProductName', item.nombre);
     
-    if (onViewChange) {
-      onViewChange('bodega');
+    // IMPORTANTE: Guardar la bodega seleccionada actualmente
+    if (selectedSucursal) {
+      sessionStorage.setItem('searchBodegaId', selectedSucursal.toString());
     } else {
-      navigate('/dashboard/bodega');
+      // Si no hay bodega seleccionada, intentar obtener la bodega del producto
+      if (item.bodegasStock && item.bodegasStock.length > 0) {
+        // Si el producto está en varias bodegas, usar la primera
+        sessionStorage.setItem('searchBodegaId', item.bodegasStock[0].idbodega.toString());
+      } else if (item.idbodega) {
+        sessionStorage.setItem('searchBodegaId', item.idbodega.toString());
+      } else {
+        sessionStorage.removeItem('searchBodegaId');
+      }
+    }
+    
+    if (onViewChange) {
+      onViewChange('bodega', { 
+        searchProductId: item.id, 
+        searchProductName: item.nombre,
+        searchBodegaId: selectedSucursal || (item.bodegasStock?.[0]?.idbodega) || item.idbodega
+      });
     }
   };
 
@@ -248,6 +264,16 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
               </div>
             </PopoverContent>
           </Popover>
+
+          <Button
+            variant={showLowMarginOnly ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowLowMarginOnly(!showLowMarginOnly)}
+            className="h-9"
+          >
+            <Filter className="mr-2 h-4 w-4" />
+            Margen Bajo ({lowMarginCount})
+          </Button>
           
           {(selectedCategories.length > 0 || searchTerm || showLowMarginOnly || selectedSucursal) && (
             <Button
@@ -260,7 +286,17 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
               Limpiar
             </Button>
           )}
-      
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="h-9"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </Button>
         </div>
       </div>
 
