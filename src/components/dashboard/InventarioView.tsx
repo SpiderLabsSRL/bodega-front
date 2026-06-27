@@ -1,12 +1,13 @@
+// src/components/dashboard/InventarioView.tsx
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Eye, Filter, RefreshCw, X } from "lucide-react";
+import { Search, Eye, Filter, RefreshCw, X, Warehouse, DollarSign, TrendingUp } from "lucide-react";
 import { DashboardView } from "@/pages/Dashboard";
-import { getInventory, getLowMarginCount, InventoryItem, getCategories, Category } from "@/api/InventoryApi";
+import { getInventory, getLowMarginCount, InventoryItem, getCategories, Category, getSucursales, SucursalOption, BodegaStock } from "@/api/InventoryApi";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,11 +21,15 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [showLowMarginOnly, setShowLowMarginOnly] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSucursal, setSelectedSucursal] = useState<number | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
   const [inventoryData, setInventoryData] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [lowMarginCount, setLowMarginCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [totalInvertido, setTotalInvertido] = useState(0);
+  const [totalGanancia, setTotalGanancia] = useState(0);
   
   const navigate = useNavigate();
 
@@ -34,11 +39,16 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
     loadInventoryData();
     loadLowMarginCount();
     loadCategories();
+    loadSucursales();
   }, []);
 
   useEffect(() => {
     loadInventoryData();
-  }, [searchTerm, showLowMarginOnly, selectedCategories]);
+  }, [searchTerm, showLowMarginOnly, selectedCategories, selectedSucursal]);
+
+  useEffect(() => {
+    loadLowMarginCount();
+  }, [selectedSucursal]);
 
   const loadInventoryData = async () => {
     try {
@@ -47,9 +57,12 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
       const response = await getInventory(
         searchTerm || undefined, 
         showLowMarginOnly || undefined,
-        selectedCategories.length > 0 ? selectedCategories : undefined
+        selectedCategories.length > 0 ? selectedCategories : undefined,
+        selectedSucursal || undefined
       );
       setInventoryData(response.items);
+      setTotalInvertido(response.totalInvertido || 0);
+      setTotalGanancia(response.totalGanancia || 0);
     } catch (err) {
       console.error("Error loading inventory:", err);
       setError("No se pudieron cargar los datos del inventario");
@@ -60,7 +73,7 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
 
   const loadLowMarginCount = async () => {
     try {
-      const count = await getLowMarginCount();
+      const count = await getLowMarginCount(selectedSucursal || undefined);
       setLowMarginCount(count);
     } catch (err) {
       console.error("Error loading low margin count:", err);
@@ -73,6 +86,15 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
       setCategories(categoriesData);
     } catch (err) {
       console.error("Error loading categories:", err);
+    }
+  };
+
+  const loadSucursales = async () => {
+    try {
+      const sucursalesData = await getSucursales();
+      setSucursales(sucursalesData);
+    } catch (err) {
+      console.error("Error loading sucursales:", err);
     }
   };
 
@@ -93,29 +115,34 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
     setSelectedCategories([]);
   };
 
-
   const clearAllFilters = () => {
     setSelectedCategories([]);
     setSearchTerm("");
     setShowLowMarginOnly(false);
+    setSelectedSucursal(null);
   };
-
-  // Filtrar por término de búsqueda
-  const filteredData = inventoryData.filter(item => {
-    const matchesSearch = item.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesMargin = showLowMarginOnly ? item.margenPorcentaje < 50 : true;
-    return matchesSearch && matchesMargin;
-  });
 
   const handleViewProduct = (item: InventoryItem) => {
     sessionStorage.setItem('searchProductId', item.id);
     sessionStorage.setItem('searchProductName', item.nombre);
     
     if (onViewChange) {
-      onViewChange('productos');
+      onViewChange('bodega');
     } else {
-      navigate('/dashboard/productos');
+      navigate('/dashboard/bodega');
     }
+  };
+
+  // Formatear número como moneda
+  const formatCurrency = (value: number) => {
+    return `Bs. ${value.toFixed(2)}`;
+  };
+
+  // Obtener el color del stock según el mínimo
+  const getStockColor = (stock: number, stockMinimo: number) => {
+    if (stock <= stockMinimo) return 'text-red-600';
+    if (stock <= stockMinimo * 2) return 'text-yellow-600';
+    return 'text-green-600';
   };
 
   if (error) {
@@ -137,25 +164,53 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
     );
   }
 
+  // Obtener los nombres de las bodegas para las cabeceras
+  const getBodegaNames = () => {
+    if (selectedSucursal) return [];
+    const names = new Set<string>();
+    inventoryData.forEach(item => {
+      item.bodegasStock.forEach(bs => {
+        names.add(bs.bodegaNombre);
+      });
+    });
+    return Array.from(names);
+  };
+
+  const bodegaNames = getBodegaNames();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">Inventario</h1>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:min-w-[250px]">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:min-w-[200px]">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
               placeholder="Buscar productos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 h-9"
             />
           </div>
           
+          {/* Filtro de Sucursal */}
+          <select
+            className="h-9 px-3 border rounded-md bg-background text-sm"
+            value={selectedSucursal || ""}
+            onChange={(e) => setSelectedSucursal(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Todas las bodegas</option>
+            {sucursales.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nombre}
+              </option>
+            ))}
+          </select>
+
           {/* Filtro de Categorías */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
+              <Button variant="outline" size="sm" className="h-9">
                 <Filter className="mr-2 h-4 w-4" />
                 Categorías
                 {selectedCategories.length > 0 && (
@@ -184,7 +239,7 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
                         checked={selectedCategories.includes(category.id)}
                         onCheckedChange={() => handleCategoryChange(category.id)}
                       />
-                      <Label htmlFor={`category-${category.id}`} className="flex-1">
+                      <Label htmlFor={`category-${category.id}`} className="flex-1 cursor-pointer">
                         {category.nombre}
                       </Label>
                     </div>
@@ -193,91 +248,110 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
               </div>
             </PopoverContent>
           </Popover>
-
-          <Button
-            variant={showLowMarginOnly ? "default" : "outline"}
-            onClick={() => setShowLowMarginOnly(!showLowMarginOnly)}
-            className="w-full sm:w-auto"
-          >
-            <Filter className="mr-2 h-4 w-4" />
-            Margen Bajo ({lowMarginCount})
-          </Button>
           
-          {(selectedCategories.length > 0 || searchTerm || showLowMarginOnly) && (
+          {(selectedCategories.length > 0 || searchTerm || showLowMarginOnly || selectedSucursal) && (
             <Button
               variant="outline"
+              size="sm"
               onClick={clearAllFilters}
-              className="w-full sm:w-auto"
+              className="h-9"
             >
               <X className="mr-2 h-4 w-4" />
-              Limpiar Filtros
+              Limpiar
             </Button>
           )}
-          
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            disabled={loading}
-            className="w-full sm:w-auto"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
+      
         </div>
       </div>
 
-      {/* Indicadores de filtros activos */}
-      {(selectedCategories.length > 0 ) && (
-        <div className="flex flex-wrap gap-2">
-          {selectedCategories.map(categoryId => {
-            const category = categories.find(c => c.id === categoryId);
-            return category ? (
-              <Badge key={categoryId} variant="secondary" className="flex items-center gap-1">
-                Categoría: {category.nombre}
-                <X 
-                  className="h-3 w-3 cursor-pointer" 
-                  onClick={() => handleCategoryChange(categoryId)}
-                />
-              </Badge>
-            ) : null;
-          })}
-        </div>
-      )}
+      {/* Tarjetas de Totales */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Productos</p>
+                <p className="text-2xl font-bold">{inventoryData.length}</p>
+              </div>
+              <div className="p-3 bg-primary/10 rounded-full">
+                <Warehouse className="h-6 w-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Invertido</p>
+                <p className="text-2xl font-bold text-blue-600">{formatCurrency(totalInvertido)}</p>
+              </div>
+              <div className="p-3 bg-blue-500/10 rounded-full">
+                <DollarSign className="h-6 w-6 text-blue-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Ganancia</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalGanancia)}</p>
+              </div>
+              <div className="p-3 bg-green-500/10 rounded-full">
+                <TrendingUp className="h-6 w-6 text-green-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Tabla de inventario */}
       <Card>
         <CardHeader>
           <CardTitle>
-            Productos en Inventario ({filteredData.length})
+            Productos en Inventario ({inventoryData.length})
             {loading && <span className="text-sm font-normal text-muted-foreground ml-2">Cargando...</span>}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
-              <TableHeader className="hidden md:table-header-group">
+              <TableHeader>
                 <TableRow>
-                  <TableHead className="px-4 py-3">Nombre</TableHead>
-                  <TableHead className="px-4 py-3">P. Compra</TableHead>
-                  <TableHead className="px-4 py-3">P. Venta</TableHead>
-                  <TableHead className="px-4 py-3">Cantidad</TableHead>
-                  <TableHead className="px-4 py-3">Margen (%)</TableHead>
-                  <TableHead className="px-4 py-3">Última Edición</TableHead>
-                  <TableHead className="px-4 py-3">Acciones</TableHead>
+                  <TableHead className="px-4 py-3 min-w-[150px]">Producto</TableHead>
+                  <TableHead className="px-4 py-3 min-w-[100px]">Código</TableHead>
+                  {selectedSucursal ? (
+                    <>
+                      <TableHead className="px-4 py-3 text-center min-w-[80px]">Stock</TableHead>
+                      <TableHead className="px-4 py-3 text-center min-w-[80px]">Stock Mínimo</TableHead>
+                    </>
+                  ) : (
+                    bodegaNames.map((nombre) => (
+                      <TableHead key={nombre} className="px-4 py-3 text-center min-w-[80px]">
+                        {nombre}
+                      </TableHead>
+                    ))
+                  )}
+                  <TableHead className="px-4 py-3 text-right min-w-[100px]">Precio</TableHead>
+                  <TableHead className="px-4 py-3 text-right min-w-[120px]">Total Invertido</TableHead>
+                  <TableHead className="px-4 py-3 text-right min-w-[120px]">Total Ganancia</TableHead>
+                  <TableHead className="px-4 py-3 text-center min-w-[60px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={10} className="text-center py-8">
                       <div className="flex justify-center">
                         <RefreshCw className="h-6 w-6 animate-spin" />
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : filteredData.length === 0 ? (
+                ) : inventoryData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                       {showLowMarginOnly 
                         ? "No hay productos con margen bajo" 
                         : "No se encontraron productos"
@@ -285,112 +359,84 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredData.map((item) => (
-                    <TableRow key={item.id} className="border-b transition-colors hover:bg-muted/50">
-                      {/* Desktop View */}
-                      <TableCell className="hidden md:table-cell px-4 py-3 font-medium">
-                        {item.nombre}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell px-4 py-3">
-                        <div className="text-sm">Bs. {item.precioCompra.toFixed(2)}</div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell px-4 py-3">
-                        <div className="font-medium">Bs. {item.precioVenta.toFixed(2)}</div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell px-4 py-3">
-                        <span className={`font-medium ${
-                          item.cantidad <= item.stockMinimo ? 'text-red-600' : 'text-green-600'
-                        }`}>
-                          {item.cantidad}
+                  inventoryData.map((item) => (
+                    <TableRow 
+                      key={item.id} 
+                      className="border-b transition-colors hover:bg-muted/50 cursor-pointer"
+                      onClick={() => handleViewProduct(item)}
+                    >
+                      <TableCell className="px-4 py-3 font-medium">
+                        <div>
+                          <div className="font-medium">{item.nombre}</div>
                           {item.cantidad <= item.stockMinimo && (
-                            <Badge variant="destructive" className="ml-2 text-xs">
-                              Mínimo
+                            <Badge variant="destructive" className="text-xs mt-1">
+                              Stock mínimo
                             </Badge>
                           )}
-                        </span>
+                          {!selectedSucursal && item.bodegasStock.length > 1 && (
+                            <Badge variant="outline" className="text-xs mt-1 ml-1">
+                              {item.bodegasStock.length} bodegas
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell px-4 py-3">
+                      <TableCell className="px-4 py-3">
+                        <span className="text-xs font-mono">{item.codigo}</span>
+                      </TableCell>
+                      {selectedSucursal ? (
+                        <>
+                          <TableCell className="px-4 py-3 text-center">
+                            <span className={`font-semibold ${getStockColor(item.cantidad, item.stockMinimo)}`}>
+                              {item.cantidad}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-center text-muted-foreground">
+                            {item.stockMinimo}
+                          </TableCell>
+                        </>
+                      ) : (
+                        bodegaNames.map((nombre) => {
+                          const bodegaStock = item.bodegasStock.find(bs => bs.bodegaNombre === nombre);
+                          return (
+                            <TableCell key={nombre} className="px-4 py-3 text-center">
+                              {bodegaStock ? (
+                                <span className={`font-semibold ${getStockColor(bodegaStock.stock, bodegaStock.stockMinimo)}`}>
+                                  {bodegaStock.stock}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                          );
+                        })
+                      )}
+                      <TableCell className="px-4 py-3 text-right font-medium">
+                        Bs. {item.precioVenta.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right text-blue-600 font-medium">
+                        {formatCurrency(item.totalInvertido)}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-right">
                         <span className={`font-medium ${
-                          item.margenPorcentaje < 50 ? 'text-red-600' : 'text-green-600'
+                          item.totalGanancia >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          {item.margenPorcentaje.toFixed(1)}%
+                          {formatCurrency(item.totalGanancia)}
                         </span>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell px-4 py-3">
-                        <div className="text-muted-foreground text-sm">{item.ultimaEdicion}</div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell px-4 py-3">
+                      <TableCell className="px-4 py-3 text-center">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleViewProduct(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewProduct(item);
+                          }}
                           className="h-8 w-8 p-0"
-                          title="Ver producto"
+                          title="Ver producto en bodega"
                         >
                           <Eye className="h-4 w-4" />
                           <span className="sr-only">Ver producto</span>
                         </Button>
-                      </TableCell>
-
-                      {/* Mobile View */}
-                      <TableCell className="md:hidden px-4 py-3">
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-start">
-                            <div className="font-medium">{item.nombre}</div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewProduct(item)}
-                              className="h-8 w-8 p-0"
-                              title="Ver producto"
-                            >
-                              <Eye className="h-4 w-4" />
-                              <span className="sr-only">Ver producto</span>
-                            </Button>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <div className="text-xs font-medium text-muted-foreground mb-1">ÚLTIMA EDICIÓN</div>
-                              <div className="text-muted-foreground">{item.ultimaEdicion}</div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <div className="text-xs font-medium text-muted-foreground mb-1">PRECIO COMPRA</div>
-                              <div className="text-sm">Bs. {item.precioCompra.toFixed(2)}</div>
-                            </div>
-                            <div>
-                              <div className="text-xs font-medium text-muted-foreground mb-1">PRECIO VENTA</div>
-                              <div className="font-medium">Bs. {item.precioVenta.toFixed(2)}</div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <div className="text-xs font-medium text-muted-foreground mb-1">CANTIDAD</div>
-                              <span className={`font-medium ${
-                                item.cantidad <= item.stockMinimo ? 'text-red-600' : 'text-green-600'
-                              }`}>
-                                {item.cantidad}
-                                {item.cantidad <= item.stockMinimo && (
-                                  <Badge variant="destructive" className="ml-2 text-xs">
-                                    Mínimo
-                                  </Badge>
-                                )}
-                              </span>
-                            </div>
-                            <div>
-                              <div className="text-xs font-medium text-muted-foreground mb-1">MARGEN (%)</div>
-                              <span className={`font-medium ${
-                                item.margenPorcentaje < 50 ? 'text-red-600' : 'text-green-600'
-                              }`}>
-                                {item.margenPorcentaje.toFixed(1)}%
-                              </span>
-                            </div>
-                          </div>
-                        </div>
                       </TableCell>
                     </TableRow>
                   ))
