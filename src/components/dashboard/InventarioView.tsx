@@ -350,7 +350,8 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
                       </TableHead>
                     ))
                   )}
-                  <TableHead className="px-4 py-3 text-right min-w-[100px]">Precio</TableHead>
+                  <TableHead className="px-4 py-3 text-right min-w-[100px]">Precio Compra</TableHead>
+                  <TableHead className="px-4 py-3 text-right min-w-[100px]">Precio Venta</TableHead>
                   <TableHead className="px-4 py-3 text-right min-w-[120px]">Total Invertido</TableHead>
                   <TableHead className="px-4 py-3 text-right min-w-[120px]">Total Ganancia</TableHead>
                   <TableHead className="px-4 py-3 text-center min-w-[60px]">Acciones</TableHead>
@@ -359,7 +360,7 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={11} className="text-center py-8">
                       <div className="flex justify-center">
                         <RefreshCw className="h-6 w-6 animate-spin" />
                       </div>
@@ -367,7 +368,7 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
                   </TableRow>
                 ) : inventoryData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       {showLowMarginOnly 
                         ? "No hay productos con margen bajo" 
                         : "No se encontraron productos"
@@ -426,8 +427,11 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
                           );
                         })
                       )}
+                      <TableCell className="px-4 py-3 text-right text-blue-600 font-medium">
+                        {formatCurrency(item.precioCompra)}
+                      </TableCell>
                       <TableCell className="px-4 py-3 text-right font-medium">
-                        Bs. {item.precioVenta.toFixed(2)}
+                        {formatCurrency(item.precioVenta)}
                       </TableCell>
                       <TableCell className="px-4 py-3 text-right text-blue-600 font-medium">
                         {formatCurrency(item.totalInvertido)}
