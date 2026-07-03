@@ -722,11 +722,10 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
   const userRole = localStorage.getItem("userRole") || "admin";
   const isAssistant = userRole === "Asistente";
 
-  // Ref para evitar recargas infinitas
   const isInitialLoad = useRef(true);
 
   // ============================================
-  // FUNCIONES DE REFRESCO - DEFINIDAS EN ORDEN CORRECTO
+  // FUNCIONES DE REFRESCO
   // ============================================
 
   const refreshUbicacionesYCategorias = useCallback(async () => {
@@ -1118,7 +1117,6 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
   // EFECTOS
   // ============================================
 
-  // Carga inicial de datos
   useEffect(() => {
     const loadInitialData = async () => {
       setLoading(true);
@@ -1272,7 +1270,6 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     loadUbicacionesSucursal();
   }, [selectedSucursal, sucursales]);
 
-  // Búsqueda con debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchTerm.trim().length >= 2) {
@@ -1500,6 +1497,9 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
           <div className="block lg:hidden space-y-3 w-full">
             {filteredProducts.map((product) => {
               const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
+              // Obtener todas las categorías del producto
+              const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
+              
               return (
                 <Card key={product.id} className="p-3 w-full">
                   <div className="space-y-3 w-full">
@@ -1515,11 +1515,20 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                         <h3 className="font-semibold text-sm sm:text-base leading-tight line-clamp-2 break-words">
                           {product.nombre}
                         </h3>
-                        <Badge variant="secondary" className="text-xs mt-1">
-                          {product.categoria}
-                        </Badge>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {categorias.slice(0, 2).map((cat, index) => (
+                            <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0.5">
+                              {cat.length > 15 ? cat.substring(0, 12) + "..." : cat}
+                            </Badge>
+                          ))}
+                          {categorias.length > 2 && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
+                              +{categorias.length - 2}
+                            </Badge>
+                          )}
+                        </div>
                         {product.bodega_nombre && (
-                          <Badge variant="outline" className="text-xs mt-1 ml-1">
+                          <Badge variant="outline" className="text-xs mt-1">
                             {product.bodega_nombre}
                           </Badge>
                         )}
@@ -1624,9 +1633,9 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                 <Table className="min-w-full">
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-[70px]">Img</TableHead>
                       <TableHead>Producto</TableHead>
-                      <TableHead>Código</TableHead>
-                      <TableHead>Categoría</TableHead>
+                      <TableHead className="min-w-[150px]">Categorías</TableHead>
                       <TableHead>Ubicación</TableHead>
                       <TableHead>Bodega</TableHead>
                       <TableHead className="text-center">Stock</TableHead>
@@ -1638,29 +1647,40 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                   <TableBody>
                     {filteredProducts.map((product) => {
                       const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
+                      // Obtener todas las categorías del producto
+                      const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
+                      
                       return (
                         <TableRow key={product.id}>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="w-10 h-10 flex-shrink-0">
-                                <ImageCarousel
-                                  images={imageUrl ? [imageUrl] : []}
-                                  productName={product.nombre}
-                                  className="w-10 h-10"
-                                />
-                              </div>
-                              <div>
-                                <div className="font-medium text-sm">{product.nombre}</div>
-                              </div>
+                            <div className="w-10 h-10">
+                              <ImageCarousel
+                                images={imageUrl ? [imageUrl] : []}
+                                productName={product.nombre}
+                                className="w-10 h-10"
+                              />
                             </div>
                           </TableCell>
                           <TableCell>
-                            <span className="text-xs font-mono">{product.codigo}</span>
+                            <div className="font-medium text-sm">{product.nombre}</div>
+                            <div className="text-xs text-muted-foreground">{product.codigo}</div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className="text-xs">
-                              {product.categoria}
-                            </Badge>
+                            <div className="flex flex-wrap gap-1">
+                              {categorias.slice(0, 2).map((cat, index) => (
+                                <Badge key={index} variant="secondary" className="text-xs">
+                                  {cat.length > 12 ? cat.substring(0, 10) + "..." : cat}
+                                </Badge>
+                              ))}
+                              {categorias.length > 2 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  +{categorias.length - 2}
+                                </Badge>
+                              )}
+                              {categorias.length === 0 && (
+                                <span className="text-xs text-muted-foreground">Sin categoría</span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm">{product.ubicacion}</TableCell>
                           <TableCell className="text-sm">

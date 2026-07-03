@@ -35,7 +35,7 @@ interface BackendProductoBodega {
   estado: number;
   idubicacion: number;
   ubicacion_nombre: string;
-  categorias: string[];
+  categorias: string[]; // <-- Esto ya es un array
   imagen: any;
   precio_venta: string;
   precio_compra: string;
@@ -56,7 +56,8 @@ export interface ProductoBodega {
   id: number;
   nombre: string;
   codigo: string;
-  categoria: string;
+  categoria: string; // <-- Cambiar a categorias como string con comas
+  categoriasArray?: string[]; // <-- Nueva propiedad opcional para el array
   stock: number;
   stockMinimo: number;
   ubicacion: string;
@@ -375,7 +376,7 @@ export const buscarProductosBodega = async (termino: string, idbodega?: number):
 };
 
 // ============================================
-// MAPEADOR
+// MAPEADOR CORREGIDO
 // ============================================
 
 function mapBackendProductoBodega(producto: BackendProductoBodega): ProductoBodega {
@@ -429,16 +430,18 @@ function mapBackendProductoBodega(producto: BackendProductoBodega): ProductoBode
     }
   }
 
-  let categoria = "Sin categoría";
+  // CORRECCIÓN: Guardar TODAS las categorías como string separado por comas
+  let categoriasString = "Sin categoría";
   if (producto.categorias && producto.categorias.length > 0) {
-    categoria = producto.categorias[0];
+    categoriasString = producto.categorias.join(', ');
   }
 
   return {
     id: producto.idproducto,
     nombre: producto.nombre,
     codigo: producto.codigo_barras || `COD-${producto.idproducto}`,
-    categoria: categoria,
+    categoria: categoriasString, // <-- Ahora contiene todas las categorías separadas por coma
+    categoriasArray: producto.categorias || [], // <-- Guardamos el array original por si se necesita
     stock: producto.stock || 0,
     stockMinimo: producto.stock_minimo || 0,
     ubicacion: producto.ubicacion_nombre || "Sin ubicación",
