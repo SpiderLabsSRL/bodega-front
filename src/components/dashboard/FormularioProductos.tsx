@@ -15,15 +15,25 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, Search, Camera } from "lucide-react";
+import { Plus, X, Search, Camera, Edit, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { AddItemDialog } from "./AddItemDialog";
 import BarcodeScanner from "./BarcodeScanner";
 import {
   createUbicacion,
+  updateUbicacion,
+  deleteUbicacion,
   createCategoria,
+  updateCategoria,
+  deleteCategoria,
   getUbicaciones,
   getCategorias,
   UbicacionItem,
@@ -67,6 +77,9 @@ interface FormularioProductosProps {
 interface AddDialogState {
   open: boolean;
   type: "categoria" | "ubicacion" | null;
+  mode: "create" | "edit" | null;
+  editId?: number | null;
+  editName?: string;
 }
 
 interface ManagementItem {
@@ -82,6 +95,10 @@ interface SearchSelectProps {
   placeholder: string;
   label: string;
   required?: boolean;
+  onEdit?: (item: string) => void;
+  onDelete?: (item: string) => void;
+  showActions?: boolean;
+  itemType?: string;
 }
 
 const SearchSelect = ({
@@ -91,6 +108,10 @@ const SearchSelect = ({
   placeholder,
   label,
   required,
+  onEdit,
+  onDelete,
+  showActions = false,
+  itemType = "item",
 }: SearchSelectProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -131,14 +152,44 @@ const SearchSelect = ({
         {isOpen && filteredOptions.length > 0 && (
           <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-28 overflow-y-auto">
             {filteredOptions.map((option) => (
-              <button
+              <div
                 key={option}
-                type="button"
-                className="w-full text-left px-2 py-1 text-xs hover:bg-accent hover:text-accent-foreground"
-                onMouseDown={() => addSelection(option)}
+                className="flex items-center justify-between px-2 py-1 hover:bg-accent"
               >
-                {option}
-              </button>
+                <button
+                  type="button"
+                  className="flex-1 text-left text-xs"
+                  onMouseDown={() => addSelection(option)}
+                >
+                  {option}
+                </button>
+                {showActions && (
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit?.(option);
+                      }}
+                      className="p-0.5 hover:text-blue-500 transition-colors"
+                      title={`Editar ${itemType}`}
+                    >
+                      <Edit className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete?.(option);
+                      }}
+                      className="p-0.5 hover:text-red-500 transition-colors"
+                      title={`Eliminar ${itemType}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -362,12 +413,15 @@ export function FormularioProductos({
   const [addDialogState, setAddDialogState] = useState<AddDialogState>({
     open: false,
     type: null,
+    mode: "create",
+    editId: null,
+    editName: "",
   });
+  const [editDialogData, setEditDialogData] = useState({ name: "", id: 0 });
   const [todosProductos, setTodosProductos] = useState<ProductoSelect[]>([]);
   const [loadingProductos, setLoadingProductos] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
-  // Estado para ubicaciones filtradas por bodega (SOLO idbodega = 1 para formulario de productos)
   const [ubicacionesFiltradas, setUbicacionesFiltradas] = useState<string[]>([]);
   const [ubicacionesCompletas, setUbicacionesCompletas] = useState<Array<{ idubicacion: number; nombre: string; idbodega: number | null }>>([]);
 
@@ -389,6 +443,7 @@ export function FormularioProductos({
 
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [isAddingElement, setIsAddingElement] = useState(false);
+  const [isDeletingElement, setIsDeletingElement] = useState(false);
 
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -397,7 +452,6 @@ export function FormularioProductos({
   useEffect(() => {
     const loadUbicacionesFiltradas = async () => {
       try {
-        // SIEMPRE usar idbodega = 1 para el formulario de productos
         const bodegaId = 1;
         const ubicaciones = await getUbicaciones(bodegaId);
         const nombres = ubicaciones.map(u => u.nombre);
@@ -408,7 +462,6 @@ export function FormularioProductos({
           idbodega: u.idbodega
         })));
         
-        // Si el producto tiene una ubicación y no está en la lista filtrada, agregarla
         if (formData.ubicacion && !nombres.includes(formData.ubicacion)) {
           setUbicacionesFiltradas(prev => [...prev, formData.ubicacion]);
         }
@@ -420,7 +473,6 @@ export function FormularioProductos({
     loadUbicacionesFiltradas();
   }, []);
 
-  // Actualizar listas locales cuando cambian las props
   useEffect(() => {
     setLocalLists({
       ubicaciones: ubicacionesProp || [],
@@ -428,7 +480,6 @@ export function FormularioProductos({
     });
   }, [ubicacionesProp, categoriasProp]);
 
-  // Actualizar el formulario cuando cambia el producto
   useEffect(() => {
     if (!product) {
       setFormData({
@@ -537,11 +588,9 @@ export function FormularioProductos({
     loadTodosProductos();
   }, []);
 
-  // Cargar elementos de gestión iniciales (SOLO ubicaciones con idbodega = 1)
   useEffect(() => {
     const loadManagementItems = async () => {
       try {
-        // Cargar SOLO ubicaciones con idbodega = 1
         const [ubicacionesData, categoriasData] = await Promise.all([
           getUbicaciones(1),
           getCategorias(),
@@ -589,13 +638,16 @@ export function FormularioProductos({
     return item?.id || 0;
   };
 
+  const getItemById = (items: ManagementItem[], id: number): ManagementItem | undefined => {
+    return items.find((item) => item.id === id);
+  };
+
   const updateLocalLists = async (type: string) => {
     try {
       let ubicacionesData: UbicacionItem[] = [];
       let categoriasData: ManagementItem[] = [];
 
       if (type === "ubicacion" || type === "all") {
-        // SIEMPRE cargar ubicaciones con idbodega = 1
         ubicacionesData = await getUbicaciones(1);
         
         const ubicacionesNombres = ubicacionesData.map((item) => item.nombre);
@@ -633,6 +685,142 @@ export function FormularioProductos({
     }
   };
 
+  // ============================================
+  // FUNCIONES PARA GESTIÓN DE UBICACIONES
+  // ============================================
+
+  const handleEditUbicacion = (nombre: string) => {
+    const item = managementItems.ubicaciones.find(u => u.nombre === nombre);
+    if (!item) {
+      toast({
+        title: "Error",
+        description: "Ubicación no encontrada",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEditDialogData({ name: item.nombre, id: item.id });
+    setAddDialogState({
+      open: true,
+      type: "ubicacion",
+      mode: "edit",
+      editId: item.id,
+      editName: item.nombre,
+    });
+  };
+
+  const handleDeleteUbicacion = async (nombre: string) => {
+    const item = managementItems.ubicaciones.find(u => u.nombre === nombre);
+    if (!item) {
+      toast({
+        title: "Error",
+        description: "Ubicación no encontrada",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.ubicacion === nombre) {
+      toast({
+        title: "Error",
+        description: "No puedes eliminar la ubicación que está seleccionada para este producto",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsDeletingElement(true);
+    try {
+      await deleteUbicacion(item.id);
+      await updateLocalLists("ubicacion");
+      
+      toast({
+        title: "Ubicación eliminada",
+        description: `La ubicación "${nombre}" ha sido eliminada.`,
+        variant: "destructive",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar la ubicación",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingElement(false);
+    }
+  };
+
+  // ============================================
+  // FUNCIONES PARA GESTIÓN DE CATEGORÍAS
+  // ============================================
+
+  const handleEditCategoria = (nombre: string) => {
+    const item = managementItems.categorias.find(c => c.nombre === nombre);
+    if (!item) {
+      toast({
+        title: "Error",
+        description: "Categoría no encontrada",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEditDialogData({ name: item.nombre, id: item.id });
+    setAddDialogState({
+      open: true,
+      type: "categoria",
+      mode: "edit",
+      editId: item.id,
+      editName: item.nombre,
+    });
+  };
+
+  const handleDeleteCategoria = async (nombre: string) => {
+    const item = managementItems.categorias.find(c => c.nombre === nombre);
+    if (!item) {
+      toast({
+        title: "Error",
+        description: "Categoría no encontrada",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.categorias.includes(nombre)) {
+      toast({
+        title: "Error",
+        description: "No puedes eliminar una categoría que está seleccionada para este producto",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsDeletingElement(true);
+    try {
+      await deleteCategoria(item.id);
+      await updateLocalLists("categoria");
+      
+      toast({
+        title: "Categoría eliminada",
+        description: `La categoría "${nombre}" ha sido eliminada.`,
+        variant: "destructive",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar la categoría",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingElement(false);
+    }
+  };
+
+  // ============================================
+  // FUNCIONES PARA AGREGAR/EDITAR ELEMENTOS
+  // ============================================
+
   const handleAddNewElement = async (name: string) => {
     if (isAddingElement) return;
 
@@ -642,42 +830,70 @@ export function FormularioProductos({
     setIsAddingElement(true);
 
     try {
-      switch (type) {
-        case "categoria":
-          await createCategoria({ nombre: name });
-          break;
-        case "ubicacion":
-          // SIEMPRE usar idbodega = 1 para ubicaciones de productos
-          await createUbicacion({ 
-            nombre: name, 
-            idbodega: 1 
-          });
-          break;
+      const isEdit = addDialogState.mode === "edit";
+      
+      if (isEdit) {
+        switch (type) {
+          case "categoria":
+            await updateCategoria(addDialogState.editId!, { nombre: name });
+            break;
+          case "ubicacion":
+            await updateUbicacion(addDialogState.editId!, { nombre: name, idbodega: 1 });
+            break;
+        }
+        
+        toast({
+          title: `${type.charAt(0).toUpperCase() + type.slice(1)} actualizado`,
+          description: `El ${type} ha sido actualizado exitosamente.`,
+        });
+      } else {
+        switch (type) {
+          case "categoria":
+            await createCategoria({ nombre: name });
+            break;
+          case "ubicacion":
+            await createUbicacion({ nombre: name, idbodega: 1 });
+            break;
+        }
+        
+        toast({
+          title: `${type.charAt(0).toUpperCase() + type.slice(1)} agregado`,
+          description: `El ${type} "${name}" ha sido agregado exitosamente.`,
+        });
       }
 
       await updateLocalLists(type);
 
-      if (type === "ubicacion") {
+      if (type === "ubicacion" && !isEdit) {
         handleInputChange("ubicacion", name);
       }
 
-      toast({
-        title: `${type.charAt(0).toUpperCase() + type.slice(1)} agregado`,
-        description: `El ${type} "${name}" ha sido agregado exitosamente.`,
-      });
-
-      setAddDialogState({ open: false, type: null });
+      setAddDialogState({ open: false, type: null, mode: "create", editId: null, editName: "" });
     } catch (error) {
-      console.error(`Error agregando ${type}:`, error);
+      console.error(`Error ${addDialogState.mode === "edit" ? "actualizando" : "agregando"} ${type}:`, error);
       toast({
         title: "Error",
-        description: `No se pudo agregar el ${type}`,
+        description: `No se pudo ${addDialogState.mode === "edit" ? "actualizar" : "agregar"} el ${type}`,
         variant: "destructive",
       });
     } finally {
       setIsAddingElement(false);
     }
   };
+
+  const openAddDialog = (type: "categoria" | "ubicacion") => {
+    setAddDialogState({
+      open: true,
+      type,
+      mode: "create",
+      editId: null,
+      editName: "",
+    });
+  };
+
+  // ============================================
+  // FUNCIONES PARA EL FORMULARIO
+  // ============================================
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -733,7 +949,6 @@ export function FormularioProductos({
     setIsSubmittingProduct(true);
 
     try {
-      // Obtener el ID de la ubicación seleccionada (de las ubicaciones filtradas)
       const ubicacionSeleccionada = ubicacionesCompletas.find(u => u.nombre === formData.ubicacion);
       const idubicacion = ubicacionSeleccionada?.idubicacion || 0;
 
@@ -774,7 +989,6 @@ export function FormularioProductos({
       const stockMinimoNum = Number(formData.stockMinimo) || 0;
       formDataToSend.append("stock_minimo", stockMinimoNum.toString());
 
-      // SIEMPRE usar idbodega = 1 para productos
       const bodegaId = 1;
       formDataToSend.append("idbodega", bodegaId.toString());
 
@@ -836,10 +1050,6 @@ export function FormularioProductos({
     } finally {
       setIsSubmittingProduct(false);
     }
-  };
-
-  const openAddDialog = (type: "categoria" | "ubicacion") => {
-    setAddDialogState({ open: true, type });
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -970,30 +1180,34 @@ export function FormularioProductos({
               <Label htmlFor="ubicacion" className="text-xs font-medium">
                 Ubicación <span className="text-red-500">*</span>
               </Label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-6 w-6 p-0"
-                onClick={() => openAddDialog("ubicacion")}
-                disabled={isAddingElement}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 w-6 p-0"
+                  onClick={() => openAddDialog("ubicacion")}
+                  disabled={isAddingElement}
+                  title="Agregar ubicación"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
-            <select
-              value={formData.ubicacion || ""}
-              onChange={(e) => handleInputChange("ubicacion", e.target.value)}
-              className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-              required
-            >
-              <option value="">Seleccionar</option>
-              {ubicacionesFiltradas.map((ubicacion) => (
-                <option key={ubicacion} value={ubicacion}>
-                  {ubicacion}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              options={localLists.ubicaciones}
+              selectedValues={formData.ubicacion ? [formData.ubicacion] : []}
+              onSelectionChange={(values) => {
+                const newValue = values.length > 0 ? values[0] : "";
+                handleInputChange("ubicacion", newValue);
+              }}
+              placeholder="Buscar ubicación..."
+              label=""
+              onEdit={handleEditUbicacion}
+              onDelete={handleDeleteUbicacion}
+              showActions={true}
+              itemType="ubicación"
+            />
             <p className="text-[10px] text-muted-foreground">
               Ubicaciones de la bodega principal
             </p>
@@ -1004,16 +1218,19 @@ export function FormularioProductos({
               <Label className="text-xs font-medium">
                 Categorías <span className="text-red-500">*</span>
               </Label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => openAddDialog("categoria")}
-                className="h-6 w-6 p-0"
-                disabled={isAddingElement}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openAddDialog("categoria")}
+                  className="h-6 w-6 p-0"
+                  disabled={isAddingElement}
+                  title="Agregar categoría"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
             <SearchSelect
               options={localLists.categorias}
@@ -1023,6 +1240,10 @@ export function FormularioProductos({
               }
               placeholder="Buscar categorías..."
               label=""
+              onEdit={handleEditCategoria}
+              onDelete={handleDeleteCategoria}
+              showActions={true}
+              itemType="categoría"
             />
           </div>
         </div>
@@ -1164,7 +1385,7 @@ export function FormularioProductos({
               >
                 {isSubmittingProduct ? (
                   <>
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1.5"></div>
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
                     {product ? "Actualizando..." : "Agregando..."}
                   </>
                 ) : product ? (
@@ -1199,25 +1420,77 @@ export function FormularioProductos({
         </div>
       </form>
 
-      <AddItemDialog
+      {/* Dialog para crear/editar elementos */}
+      <Dialog
         open={addDialogState.open}
-        onOpenChange={(open) => setAddDialogState({ open, type: null })}
-        title={`Agregar ${
-          addDialogState.type === "categoria"
-            ? "Categoría"
-            : addDialogState.type === "ubicacion"
-              ? "Ubicación"
-              : ""
-        }`}
-        itemType={
-          addDialogState.type === "categoria"
-            ? "categorías"
-            : addDialogState.type === "ubicacion"
-              ? "ubicaciones"
-              : ""
-        }
-        onAdd={handleAddNewElement}
-      />
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddDialogState({ open: false, type: null, mode: "create", editId: null, editName: "" });
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {addDialogState.mode === "edit" ? "Editar" : "Agregar"}{" "}
+              {addDialogState.type === "categoria"
+                ? "Categoría"
+                : addDialogState.type === "ubicacion"
+                ? "Ubicación"
+                : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Nombre <span className="text-red-500">*</span>
+              </label>
+              <Input
+                placeholder={`Ej: ${addDialogState.type === "categoria" ? "Electrónicos" : "Pasillo A"}`}
+                value={editDialogData.name}
+                onChange={(e) => setEditDialogData({ ...editDialogData, name: e.target.value })}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && editDialogData.name.trim()) {
+                    handleAddNewElement(editDialogData.name);
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddDialogState({ open: false, type: null, mode: "create", editId: null, editName: "" });
+                setEditDialogData({ name: "", id: 0 });
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (editDialogData.name.trim()) {
+                  handleAddNewElement(editDialogData.name.trim());
+                }
+              }}
+              className="bg-primary hover:bg-primary/90"
+              disabled={!editDialogData.name.trim() || isAddingElement}
+            >
+              {isAddingElement ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {addDialogState.mode === "edit" ? "Actualizando..." : "Creando..."}
+                </>
+              ) : addDialogState.mode === "edit" ? (
+                "Actualizar"
+              ) : (
+                "Crear"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

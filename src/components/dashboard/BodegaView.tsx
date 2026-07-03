@@ -1,8 +1,9 @@
 // src/components/dashboard/BodegaView.tsx
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,7 @@ import {
   Filter,
   Building2,
   MapPin,
+  Store,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FormularioProductos } from "./FormularioProductos";
@@ -53,6 +55,7 @@ import {
   getUbicaciones,
   getCategorias,
   getBodegasActivas,
+  getTodasBodegas,
   getProductosByBodega,
   getAllProductosBodega,
   createProductoBodega,
@@ -61,6 +64,8 @@ import {
   transferirProducto,
   buscarProductosBodega,
   createBodega,
+  updateBodega,
+  updateBodegaEstado,
   getUbicaciones as getUbicacionesPorBodega,
   ProductoBodega,
   Sucursal,
@@ -69,7 +74,10 @@ import {
   createUbicacion,
 } from "@/api/ManagementSectionApi";
 
-// Componente para el carrusel de imágenes
+// ============================================
+// COMPONENTE PARA EL CARRUSEL DE IMÁGENES
+// ============================================
+
 interface ImageCarouselProps {
   images: string[];
   productName: string;
@@ -166,7 +174,10 @@ function ImageCarousel({ images, productName, className = "" }: ImageCarouselPro
   );
 }
 
-// Función para obtener URL de imagen
+// ============================================
+// FUNCIÓN PARA OBTENER URL DE IMAGEN
+// ============================================
+
 export const getImageUrl = (imagen: string | undefined | null | any): string => {
   const fallbackImage = "https://static.vecteezy.com/system/resources/previews/011/781/801/non_2x/medicine-3d-render-icon-illustration-png.png";
   
@@ -223,6 +234,10 @@ export const getImageUrl = (imagen: string | undefined | null | any): string => 
   return fallbackImage;
 };
 
+// ============================================
+// INTERFACES
+// ============================================
+
 interface UbicacionConBodega {
   idubicacion: number;
   nombre: string;
@@ -234,6 +249,439 @@ interface BodegaViewProps {
   searchProductName?: string;
   searchBodegaId?: number;
 }
+
+// ============================================
+// COMPONENTE PARA GESTIÓN DE SUCURSALES
+// ============================================
+
+interface SucursalesManagementProps {
+  sucursales: Sucursal[];
+  onSucursalesChange: () => void;
+  isAssistant: boolean;
+}
+
+function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: SucursalesManagementProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingSucursal, setEditingSucursal] = useState<Sucursal | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [sucursalToDelete, setSucursalToDelete] = useState<Sucursal | null>(null);
+  const [formData, setFormData] = useState({
+    nombre: "",
+    direccion: "",
+    telefono: "",
+  });
+  const { toast } = useToast();
+
+  const handleCreate = async () => {
+    if (!formData.nombre.trim()) {
+      toast({
+        title: "Error",
+        description: "El nombre de la sucursal es obligatorio",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await createBodega({
+        nombre: formData.nombre.trim(),
+        tipo: "Sucursal",
+        direccion: formData.direccion || "",
+        telefono: formData.telefono || "",
+      });
+
+      toast({
+        title: "Sucursal creada",
+        description: `La sucursal "${formData.nombre}" ha sido creada exitosamente.`,
+      });
+
+      setFormData({ nombre: "", direccion: "", telefono: "" });
+      setIsCreating(false);
+      await onSucursalesChange();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo crear la sucursal",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!editingSucursal) return;
+    if (!formData.nombre.trim()) {
+      toast({
+        title: "Error",
+        description: "El nombre de la sucursal es obligatorio",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await updateBodega(editingSucursal.id, {
+        nombre: formData.nombre.trim(),
+        tipo: editingSucursal.tipo || "Sucursal",
+        direccion: formData.direccion || "",
+        telefono: formData.telefono || "",
+        estado: editingSucursal.estado,
+      });
+
+      toast({
+        title: "Sucursal actualizada",
+        description: `La sucursal "${formData.nombre}" ha sido actualizada exitosamente.`,
+      });
+
+      setFormData({ nombre: "", direccion: "", telefono: "" });
+      setIsEditing(false);
+      setEditingSucursal(null);
+      await onSucursalesChange();
+    } catch (error: any) {
+      console.error("Error actualizando sucursal:", error);
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo actualizar la sucursal",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleEstado = async (sucursal: Sucursal) => {
+    const nuevoEstado = sucursal.estado === 0 ? 1 : 0;
+    try {
+      await updateBodegaEstado(sucursal.id, nuevoEstado);
+      toast({
+        title: "Estado actualizado",
+        description: `La sucursal "${sucursal.nombre}" ha sido ${nuevoEstado === 0 ? "activada" : "desactivada"}.`,
+      });
+      await onSucursalesChange();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo cambiar el estado",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!sucursalToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await updateBodegaEstado(sucursalToDelete.id, 2);
+      
+      toast({
+        title: "Sucursal eliminada",
+        description: `La sucursal "${sucursalToDelete.nombre}" ha sido eliminada.`,
+        variant: "destructive",
+      });
+      
+      setSucursalToDelete(null);
+      await onSucursalesChange();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar la sucursal",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const openEditModal = (sucursal: Sucursal) => {
+    setEditingSucursal(sucursal);
+    setFormData({
+      nombre: sucursal.nombre || "",
+      direccion: sucursal.direccion || "",
+      telefono: sucursal.telefono || "",
+    });
+    setIsEditing(true);
+  };
+
+  return (
+    <>
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8">
+            <Store className="mr-2 h-4 w-4" />
+            Ver Sucursales
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Gestión de Sucursales
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {!isAssistant && (
+              <Button
+                onClick={() => {
+                  setFormData({ nombre: "", direccion: "", telefono: "" });
+                  setIsCreating(true);
+                }}
+                className="w-full"
+                size="sm"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nueva Sucursal
+              </Button>
+            )}
+
+            <div className="space-y-2">
+              {sucursales.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No hay sucursales registradas
+                </p>
+              ) : (
+                sucursales.map((sucursal) => (
+                  <div
+                    key={sucursal.id}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
+                        <span className="font-medium truncate">{sucursal.nombre}</span>
+                        <Badge variant={sucursal.estado === 0 ? "default" : "secondary"} className="text-xs flex-shrink-0">
+                          {sucursal.estado === 0 ? "Activa" : "Inactiva"}
+                        </Badge>
+                        {sucursal.tipo === "Principal" && (
+                          <Badge variant="outline" className="text-xs flex-shrink-0">
+                            Principal
+                          </Badge>
+                        )}
+                      </div>
+                      {(sucursal.direccion || sucursal.telefono) && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {sucursal.direccion && <span>{sucursal.direccion}</span>}
+                          {sucursal.direccion && sucursal.telefono && <span> • </span>}
+                          {sucursal.telefono && <span>{sucursal.telefono}</span>}
+                        </div>
+                      )}
+                    </div>
+                    {!isAssistant && sucursal.tipo !== "Principal" && (
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => openEditModal(sucursal)}
+                          title="Editar"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        
+                        <div className="flex items-center gap-1">
+                          <Switch
+                            checked={sucursal.estado === 0}
+                            onCheckedChange={() => handleToggleEstado(sucursal)}
+                            className="data-[state=checked]:bg-green-500"
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {sucursal.estado === 0 ? "Activo" : "Inactivo"}
+                          </span>
+                        </div>
+
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 w-7 p-0 border-red-200 hover:border-red-500 hover:bg-red-50"
+                              title="Eliminar"
+                              onClick={() => setSucursalToDelete(sucursal)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar sucursal?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                ¿Estás seguro de que deseas eliminar la sucursal "{sucursalToDelete?.nombre}"?
+                                <br />
+                                <span className="text-red-500 font-semibold">Esta acción no se puede deshacer.</span>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={() => setSucursalToDelete(null)}>
+                                Cancelar
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={handleDelete}
+                                className="bg-red-500 hover:bg-red-600"
+                                disabled={isDeleting}
+                              >
+                                {isDeleting ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Eliminando...
+                                  </>
+                                ) : (
+                                  "Eliminar"
+                                )}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCreating} onOpenChange={setIsCreating}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Crear Nueva Sucursal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Nombre de la Sucursal <span className="text-red-500">*</span>
+              </label>
+              <Input
+                placeholder="Ej: Sucursal Norte"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && formData.nombre.trim()) {
+                    handleCreate();
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Dirección</label>
+              <Input
+                placeholder="Dirección de la sucursal"
+                value={formData.direccion}
+                onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Teléfono</label>
+              <Input
+                placeholder="Teléfono de contacto"
+                value={formData.telefono}
+                onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreating(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreate}
+              className="bg-primary hover:bg-primary/90"
+              disabled={!formData.nombre.trim() || isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                "Crear Sucursal"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Sucursal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Nombre de la Sucursal <span className="text-red-500">*</span>
+              </label>
+              <Input
+                placeholder="Nombre de la sucursal"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && formData.nombre.trim()) {
+                    handleEdit();
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Dirección</label>
+              <Input
+                placeholder="Dirección de la sucursal"
+                value={formData.direccion}
+                onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Teléfono</label>
+              <Input
+                placeholder="Teléfono de contacto"
+                value={formData.telefono}
+                onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditing(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleEdit}
+              className="bg-primary hover:bg-primary/90"
+              disabled={!formData.nombre.trim() || isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Actualizando...
+                </>
+              ) : (
+                "Actualizar Sucursal"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ============================================
+// COMPONENTE PRINCIPAL BODEGA VIEW
+// ============================================
 
 export function BodegaView({ searchProductId, searchProductName, searchBodegaId }: BodegaViewProps = {}) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -274,7 +722,13 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
   const userRole = localStorage.getItem("userRole") || "admin";
   const isAssistant = userRole === "Asistente";
 
-  // Función para refrescar ubicaciones y categorías
+  // Ref para evitar recargas infinitas
+  const isInitialLoad = useRef(true);
+
+  // ============================================
+  // FUNCIONES DE REFRESCO - DEFINIDAS EN ORDEN CORRECTO
+  // ============================================
+
   const refreshUbicacionesYCategorias = useCallback(async () => {
     try {
       const bodegaId = 1;
@@ -293,158 +747,6 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       console.error("Error refrescando ubicaciones y categorías:", error);
     }
   }, []);
-
-  // Cargar datos iniciales
-  useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
-      try {
-        const bodegaId = 1;
-        const [ubicacionesData, categoriasData, bodegasData] = await Promise.all([
-          getUbicacionesPorBodega(bodegaId),
-          getCategorias(),
-          getBodegasActivas(),
-        ]);
-
-        setUbicaciones(ubicacionesData.map((item) => item.nombre));
-        setUbicacionesConBodega(ubicacionesData.map((item) => ({
-          idubicacion: item.idubicacion,
-          nombre: item.nombre,
-          idbodega: item.idbodega
-        })));
-        setCategorias(categoriasData);
-        setBodegas(bodegasData);
-        setSucursales(
-          bodegasData.map((b) => ({
-            id: b.idbodega,
-            nombre: b.nombre,
-            ubicacion: b.direccion || "",
-          }))
-        );
-
-        // Si se recibió un producto desde Inventario, aplicarlo PRIMERO
-        if (searchProductId && searchProductName) {
-          let bodegaIdEncontrada: number | null = null;
-          
-          // 1. PRIMERO: Usar la bodega que vino de Inventario (si existe)
-          if (searchBodegaId) {
-            bodegaIdEncontrada = searchBodegaId;
-          } else {
-            // 2. SEGUNDO: Buscar el producto en todas las bodegas para saber dónde está
-            const allProducts = await getAllProductosBodega();
-            const productoEncontrado = allProducts.find(p => p.id === parseInt(searchProductId));
-            
-            if (productoEncontrado && productoEncontrado.idbodega) {
-              bodegaIdEncontrada = productoEncontrado.idbodega;
-            }
-          }
-          
-          // Si encontramos una bodega, seleccionarla
-          if (bodegaIdEncontrada) {
-            // Verificar que la bodega existe en la lista
-            const bodegaExiste = bodegasData.some(b => b.idbodega === bodegaIdEncontrada);
-            if (bodegaExiste) {
-              setSelectedBodega(bodegaIdEncontrada);
-              
-              // Cargar los productos de esa bodega
-              const productosData = await getProductosByBodega(bodegaIdEncontrada);
-              setProductos(productosData);
-              setShowAllProducts(false);
-            } else {
-              // Si la bodega no existe, usar la primera
-              if (bodegasData.length > 0) {
-                const firstBodega = bodegasData[0];
-                setSelectedBodega(firstBodega.idbodega);
-                const productosData = await getProductosByBodega(firstBodega.idbodega);
-                setProductos(productosData);
-                setShowAllProducts(false);
-              }
-            }
-          } else {
-            // Si no se encuentra la bodega, cargar la primera
-            if (bodegasData.length > 0) {
-              const firstBodega = bodegasData[0];
-              setSelectedBodega(firstBodega.idbodega);
-              const productosData = await getProductosByBodega(firstBodega.idbodega);
-              setProductos(productosData);
-              setShowAllProducts(false);
-            }
-          }
-          
-          // Establecer el término de búsqueda
-          setSearchTerm(searchProductName);
-          
-          // Forzar la búsqueda después de cargar
-          setTimeout(() => {
-            performSearch(searchProductName);
-          }, 300);
-          
-          // Limpiar sessionStorage después de usar
-          sessionStorage.removeItem('searchProductId');
-          sessionStorage.removeItem('searchProductName');
-          sessionStorage.removeItem('searchBodegaId');
-        } else {
-          // Carga normal
-          if (bodegasData.length > 0) {
-            const firstBodega = bodegasData[0];
-            setSelectedBodega(firstBodega.idbodega);
-            const productosData = await getProductosByBodega(firstBodega.idbodega);
-            setProductos(productosData);
-            setShowAllProducts(false);
-          } else {
-            const allProducts = await getAllProductosBodega();
-            setProductos(allProducts);
-          }
-        }
-      } catch (error) {
-        console.error("Error cargando datos iniciales:", error);
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar los datos iniciales",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadInitialData();
-  }, [toast, searchProductId, searchProductName, searchBodegaId]);
-
-  // Cargar ubicaciones cuando cambia la bodega seleccionada
-  useEffect(() => {
-    refreshUbicacionesYCategorias();
-  }, [refreshUbicacionesYCategorias]);
-
-  // Cargar ubicaciones de la sucursal seleccionada para transferencia
-  useEffect(() => {
-    const loadUbicacionesSucursal = async () => {
-      if (!selectedSucursal) {
-        setUbicacionesPorSucursal([]);
-        return;
-      }
-      
-      const sucursal = sucursales.find(s => s.nombre === selectedSucursal);
-      if (!sucursal) {
-        setUbicacionesPorSucursal([]);
-        return;
-      }
-
-      try {
-        const ubicaciones = await getUbicacionesPorBodega(sucursal.id);
-        setUbicacionesPorSucursal(ubicaciones.map(u => ({
-          idubicacion: u.idubicacion,
-          nombre: u.nombre
-        })));
-        setSelectedSucursalUbicacion("");
-      } catch (error) {
-        console.error("Error cargando ubicaciones de sucursal:", error);
-        setUbicacionesPorSucursal([]);
-      }
-    };
-
-    loadUbicacionesSucursal();
-  }, [selectedSucursal, sucursales]);
 
   const loadProductosByBodega = useCallback(async (idbodega: number) => {
     setLoadingAll(true);
@@ -484,30 +786,23 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
 
   const reloadBodegas = useCallback(async () => {
     try {
-      const bodegasData = await getBodegasActivas();
+      const bodegasData = await getTodasBodegas();
       setBodegas(bodegasData);
       setSucursales(
         bodegasData.map((b) => ({
           id: b.idbodega,
           nombre: b.nombre,
           ubicacion: b.direccion || "",
+          tipo: b.tipo || "Sucursal",
+          direccion: b.direccion,
+          telefono: b.telefono,
+          estado: b.estado,
         }))
       );
     } catch (error) {
       console.error("Error recargando bodegas:", error);
     }
   }, []);
-
-  const handleBodegaChange = (idbodega: number) => {
-    setSelectedBodega(idbodega);
-    setSearchTerm("");
-    setFilterBajoStock(false);
-    if (idbodega) {
-      loadProductosByBodega(idbodega);
-    } else {
-      loadAllProductos();
-    }
-  };
 
   const performSearch = useCallback(async (query: string) => {
     setSearching(true);
@@ -527,35 +822,30 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     }
   }, [selectedBodega, toast]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchTerm.trim().length >= 2) {
-        performSearch(searchTerm);
-      } else if (searchTerm.trim().length === 0 && !showAllProducts && selectedBodega) {
-        loadProductosByBodega(selectedBodega);
-      } else if (searchTerm.trim().length === 0 && showAllProducts) {
-        loadAllProductos();
+  // ============================================
+  // HANDLERS
+  // ============================================
+
+  const handleBodegaChange = (idbodega: number) => {
+    setSelectedBodega(idbodega);
+    setSearchTerm("");
+    setFilterBajoStock(false);
+    
+    const bodegaSeleccionada = bodegas.find(b => b.idbodega === idbodega);
+    
+    if (bodegaSeleccionada && bodegaSeleccionada.estado === 0) {
+      loadProductosByBodega(idbodega);
+    } else {
+      if (bodegaSeleccionada && bodegaSeleccionada.estado !== 0) {
+        toast({
+          title: "Bodega inactiva",
+          description: `La bodega "${bodegaSeleccionada.nombre}" está inactiva. Mostrando todos los productos.`,
+          variant: "default",
+        });
       }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm, performSearch, showAllProducts, selectedBodega, loadProductosByBodega, loadAllProductos]);
-
-  const filteredProducts = useMemo(() => {
-    let result = productos;
-    if (filterBajoStock) {
-      result = result.filter((p) => p.stock <= p.stockMinimo);
+      loadAllProductos();
     }
-    return result;
-  }, [productos, filterBajoStock]);
-
-  const totalStock = useMemo(() => {
-    return productos.reduce((sum, p) => sum + p.stock, 0);
-  }, [productos]);
-
-  const productosBajoStock = useMemo(() => {
-    return productos.filter((p) => p.stock <= p.stockMinimo);
-  }, [productos]);
+  };
 
   const handleTransferir = (product: ProductoBodega) => {
     setSelectedProduct(product);
@@ -693,49 +983,6 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     }
   };
 
-  const handleCrearSucursal = async () => {
-    if (!newSucursalData.nombre.trim()) {
-      toast({
-        title: "Error",
-        description: "El nombre de la sucursal es obligatorio",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsCreatingSucursal(true);
-    try {
-      const data = await createBodega({
-        nombre: newSucursalData.nombre,
-        tipo: "Sucursal",
-        direccion: newSucursalData.direccion || "",
-        telefono: newSucursalData.telefono || "",
-      });
-
-      toast({
-        title: "Sucursal creada",
-        description: `La sucursal "${data.nombre}" ha sido creada exitosamente.`,
-      });
-
-      await reloadBodegas();
-      setIsNewSucursalDialogOpen(false);
-      setNewSucursalData({ nombre: "", direccion: "", telefono: "" });
-
-      if (data.idbodega) {
-        setSelectedBodega(data.idbodega);
-        await loadProductosByBodega(data.idbodega);
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo crear la sucursal",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCreatingSucursal(false);
-    }
-  };
-
   const handleEdit = (product: ProductoBodega) => {
     if (isAssistant) return;
     
@@ -867,6 +1114,206 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     setEditingProduct(null);
   };
 
+  // ============================================
+  // EFECTOS
+  // ============================================
+
+  // Carga inicial de datos
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        const bodegaId = 1;
+        const [ubicacionesData, categoriasData, bodegasData] = await Promise.all([
+          getUbicacionesPorBodega(bodegaId),
+          getCategorias(),
+          getTodasBodegas(),
+        ]);
+
+        setUbicaciones(ubicacionesData.map((item) => item.nombre));
+        setUbicacionesConBodega(ubicacionesData.map((item) => ({
+          idubicacion: item.idubicacion,
+          nombre: item.nombre,
+          idbodega: item.idbodega
+        })));
+        setCategorias(categoriasData);
+        setBodegas(bodegasData);
+        setSucursales(
+          bodegasData.map((b) => ({
+            id: b.idbodega,
+            nombre: b.nombre,
+            ubicacion: b.direccion || "",
+            tipo: b.tipo || "Sucursal",
+            direccion: b.direccion,
+            telefono: b.telefono,
+            estado: b.estado,
+          }))
+        );
+
+        const bodegasActivas = bodegasData.filter(b => b.estado === 0);
+
+        if (searchProductId && searchProductName) {
+          let bodegaIdEncontrada: number | null = null;
+          
+          if (searchBodegaId) {
+            bodegaIdEncontrada = searchBodegaId;
+          } else {
+            const allProducts = await getAllProductosBodega();
+            const productoEncontrado = allProducts.find(p => p.id === parseInt(searchProductId));
+            
+            if (productoEncontrado && productoEncontrado.idbodega) {
+              bodegaIdEncontrada = productoEncontrado.idbodega;
+            }
+          }
+          
+          if (bodegaIdEncontrada) {
+            const bodegaExiste = bodegasActivas.some(b => b.idbodega === bodegaIdEncontrada);
+            if (bodegaExiste) {
+              setSelectedBodega(bodegaIdEncontrada);
+              const productosData = await getProductosByBodega(bodegaIdEncontrada);
+              setProductos(productosData);
+              setShowAllProducts(false);
+            } else {
+              if (bodegasActivas.length > 0) {
+                const firstBodega = bodegasActivas[0];
+                setSelectedBodega(firstBodega.idbodega);
+                const productosData = await getProductosByBodega(firstBodega.idbodega);
+                setProductos(productosData);
+                setShowAllProducts(false);
+              } else {
+                const allProducts = await getAllProductosBodega();
+                setProductos(allProducts);
+                setShowAllProducts(true);
+              }
+            }
+          } else {
+            if (bodegasActivas.length > 0) {
+              const firstBodega = bodegasActivas[0];
+              setSelectedBodega(firstBodega.idbodega);
+              const productosData = await getProductosByBodega(firstBodega.idbodega);
+              setProductos(productosData);
+              setShowAllProducts(false);
+            } else {
+              const allProducts = await getAllProductosBodega();
+              setProductos(allProducts);
+              setShowAllProducts(true);
+            }
+          }
+          
+          setSearchTerm(searchProductName);
+          
+          setTimeout(() => {
+            performSearch(searchProductName);
+          }, 300);
+          
+          sessionStorage.removeItem('searchProductId');
+          sessionStorage.removeItem('searchProductName');
+          sessionStorage.removeItem('searchBodegaId');
+        } else {
+          if (bodegasActivas.length > 0) {
+            const firstBodega = bodegasActivas[0];
+            setSelectedBodega(firstBodega.idbodega);
+            const productosData = await getProductosByBodega(firstBodega.idbodega);
+            setProductos(productosData);
+            setShowAllProducts(false);
+          } else {
+            const allProducts = await getAllProductosBodega();
+            setProductos(allProducts);
+            setShowAllProducts(true);
+          }
+        }
+        
+        isInitialLoad.current = false;
+      } catch (error) {
+        console.error("Error cargando datos iniciales:", error);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los datos iniciales",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, [toast, searchProductId, searchProductName, searchBodegaId]);
+
+  useEffect(() => {
+    refreshUbicacionesYCategorias();
+  }, [refreshUbicacionesYCategorias]);
+
+  useEffect(() => {
+    const loadUbicacionesSucursal = async () => {
+      if (!selectedSucursal) {
+        setUbicacionesPorSucursal([]);
+        return;
+      }
+      
+      const sucursal = sucursales.find(s => s.nombre === selectedSucursal);
+      if (!sucursal) {
+        setUbicacionesPorSucursal([]);
+        return;
+      }
+
+      try {
+        const ubicaciones = await getUbicacionesPorBodega(sucursal.id);
+        setUbicacionesPorSucursal(ubicaciones.map(u => ({
+          idubicacion: u.idubicacion,
+          nombre: u.nombre
+        })));
+        setSelectedSucursalUbicacion("");
+      } catch (error) {
+        console.error("Error cargando ubicaciones de sucursal:", error);
+        setUbicacionesPorSucursal([]);
+      }
+    };
+
+    loadUbicacionesSucursal();
+  }, [selectedSucursal, sucursales]);
+
+  // Búsqueda con debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchTerm.trim().length >= 2) {
+        performSearch(searchTerm);
+      } else if (searchTerm.trim().length === 0 && selectedBodega && !isInitialLoad.current) {
+        const bodegaActiva = bodegas.find(b => b.idbodega === selectedBodega && b.estado === 0);
+        if (bodegaActiva) {
+          loadProductosByBodega(selectedBodega);
+        } else {
+          loadAllProductos();
+        }
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, performSearch, selectedBodega, loadProductosByBodega, loadAllProductos, bodegas]);
+
+  // ============================================
+  // FILTROS Y MEMOS
+  // ============================================
+
+  const filteredProducts = useMemo(() => {
+    let result = productos;
+    if (filterBajoStock) {
+      result = result.filter((p) => p.stock <= p.stockMinimo);
+    }
+    return result;
+  }, [productos, filterBajoStock]);
+
+  const totalStock = useMemo(() => {
+    return productos.reduce((sum, p) => sum + p.stock, 0);
+  }, [productos]);
+
+  const productosBajoStock = useMemo(() => {
+    return productos.filter((p) => p.stock <= p.stockMinimo);
+  }, [productos]);
+
+  // ============================================
+  // RENDER
+  // ============================================
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -878,13 +1325,15 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
 
   return (
     <div className="space-y-4 md:space-y-6 p-2 md:p-0">
-      {/* Header */}
+      {/* ============================================
+      HEADER
+      ============================================ */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl md:text-3xl font-bold text-primary flex items-center gap-2">
           <Warehouse className="h-7 w-7" />
           Bodega Central
         </h1>
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             className="px-3 py-2 border rounded-md bg-background text-sm w-full sm:w-auto"
             value={selectedBodega || ""}
@@ -892,7 +1341,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
           >
             {bodegas.map((b) => (
               <option key={b.idbodega} value={b.idbodega}>
-                {b.nombre} {b.tipo === 'Principal' ? '⭐' : ''}
+                {b.nombre} {b.tipo === 'Principal' ? '⭐' : ''} {b.estado !== 0 ? '(Inactiva)' : ''}
               </option>
             ))}
           </select>
@@ -910,6 +1359,12 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
               </Badge>
             )}
           </Button>
+
+          <SucursalesManagement
+            sucursales={sucursales}
+            onSucursalesChange={reloadBodegas}
+            isAssistant={isAssistant}
+          />
 
           {!isAssistant && (
             <Dialog
@@ -952,7 +1407,9 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* ============================================
+      STATS CARDS
+      ============================================ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -1011,7 +1468,9 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
         </Card>
       </div>
 
-      {/* Tabla de productos en bodega */}
+      {/* ============================================
+      TABLA DE PRODUCTOS
+      ============================================ */}
       <Card>
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <CardTitle>
@@ -1306,7 +1765,9 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
         </CardContent>
       </Card>
 
-      {/* Dialog de transferencia */}
+      {/* ============================================
+      DIALOG DE TRANSFERENCIA
+      ============================================ */}
       <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -1341,11 +1802,13 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                 onChange={(e) => setSelectedSucursal(e.target.value)}
               >
                 <option value="">Seleccionar sucursal...</option>
-                {sucursales.map((s) => (
-                  <option key={s.id} value={s.nombre}>
-                    {s.nombre} - {s.ubicacion}
-                  </option>
-                ))}
+                {sucursales
+                  .filter(s => s.estado === 0)
+                  .map((s) => (
+                    <option key={s.id} value={s.nombre}>
+                      {s.nombre} - {s.ubicacion}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -1421,7 +1884,9 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para crear nueva ubicación (desde transferencia) */}
+      {/* ============================================
+      DIALOG PARA CREAR NUEVA UBICACIÓN (desde transferencia)
+      ============================================ */}
       <Dialog open={isNewUbicacionDialogOpen} onOpenChange={setIsNewUbicacionDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -1484,7 +1949,9 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para crear nueva sucursal */}
+      {/* ============================================
+      DIALOG PARA CREAR NUEVA SUCURSAL (desde transferencia)
+      ============================================ */}
       <Dialog open={isNewSucursalDialogOpen} onOpenChange={setIsNewSucursalDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -1527,7 +1994,44 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
               Cancelar
             </Button>
             <Button
-              onClick={handleCrearSucursal}
+              onClick={async () => {
+                if (!newSucursalData.nombre.trim()) {
+                  toast({
+                    title: "Error",
+                    description: "El nombre de la sucursal es obligatorio",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+
+                setIsCreatingSucursal(true);
+                try {
+                  await createBodega({
+                    nombre: newSucursalData.nombre.trim(),
+                    tipo: "Sucursal",
+                    direccion: newSucursalData.direccion || "",
+                    telefono: newSucursalData.telefono || "",
+                  });
+
+                  toast({
+                    title: "Sucursal creada",
+                    description: `La sucursal "${newSucursalData.nombre}" ha sido creada exitosamente.`,
+                  });
+
+                  await reloadBodegas();
+                  setIsNewSucursalDialogOpen(false);
+                  setNewSucursalData({ nombre: "", direccion: "", telefono: "" });
+                  setIsTransferDialogOpen(true);
+                } catch (error: any) {
+                  toast({
+                    title: "Error",
+                    description: error.message || "No se pudo crear la sucursal",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setIsCreatingSucursal(false);
+                }
+              }}
               className="bg-primary hover:bg-primary/90"
               disabled={!newSucursalData.nombre.trim() || isCreatingSucursal}
             >

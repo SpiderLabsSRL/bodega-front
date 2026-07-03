@@ -2,6 +2,10 @@
 import axios from "axios";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+// ============================================
+// INTERFACES
+// ============================================
+
 interface BackendUbicacion {
   idubicacion: number;
   nombre: string;
@@ -96,6 +100,19 @@ export interface TransferenciaRequest {
   cantidad: number;
 }
 
+export interface UbicacionRequest {
+  nombre: string;
+  idbodega?: number | null;
+}
+
+export interface CategoriaRequest {
+  nombre: string;
+}
+
+// ============================================
+// CONFIGURACIÓN DE AXIOS
+// ============================================
+
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -104,12 +121,26 @@ const api = axios.create({
   },
 });
 
+// ============================================
+// FUNCIONES PARA BODEGAS
+// ============================================
+
 export const getBodegas = async (): Promise<BackendBodega[]> => {
   try {
     const response = await api.get<BackendBodega[]>("/bodegas");
     return response.data;
   } catch (error) {
     console.error("Error fetching bodegas:", error);
+    throw new Error("No se pudieron cargar las bodegas");
+  }
+};
+
+export const getTodasBodegas = async (): Promise<BackendBodega[]> => {
+  try {
+    const response = await api.get<BackendBodega[]>("/bodegas/todas");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching todas las bodegas:", error);
     throw new Error("No se pudieron cargar las bodegas");
   }
 };
@@ -134,6 +165,30 @@ export const createBodega = async (data: BodegaRequest): Promise<BackendBodega> 
   }
 };
 
+export const updateBodega = async (id: number, data: Partial<BodegaRequest & { estado?: number }>): Promise<BackendBodega> => {
+  try {
+    const response = await api.put<BackendBodega>(`/bodegas/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error("Error updating bodega:", error);
+    throw new Error("No se pudo actualizar la bodega");
+  }
+};
+
+export const updateBodegaEstado = async (id: number, estado: number): Promise<BackendBodega> => {
+  try {
+    const response = await api.patch<BackendBodega>(`/bodegas/${id}/estado`, { estado });
+    return response.data;
+  } catch (error) {
+    console.error("Error updating bodega estado:", error);
+    throw new Error("No se pudo cambiar el estado de la bodega");
+  }
+};
+
+// ============================================
+// FUNCIONES PARA UBICACIONES
+// ============================================
+
 export const getUbicaciones = async (idbodega?: number): Promise<BackendUbicacion[]> => {
   try {
     const url = idbodega ? `/ubicaciones?bodega=${idbodega}` : "/ubicaciones";
@@ -145,6 +200,39 @@ export const getUbicaciones = async (idbodega?: number): Promise<BackendUbicacio
   }
 };
 
+export const createUbicacion = async (data: UbicacionRequest): Promise<BackendUbicacion> => {
+  try {
+    const response = await api.post<BackendUbicacion>("/ubicaciones", data);
+    return response.data;
+  } catch (error) {
+    console.error("Error creating ubicacion:", error);
+    throw new Error("No se pudo crear la ubicación");
+  }
+};
+
+export const updateUbicacion = async (id: number, data: UbicacionRequest): Promise<BackendUbicacion> => {
+  try {
+    const response = await api.put<BackendUbicacion>(`/ubicaciones/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error("Error updating ubicacion:", error);
+    throw new Error("No se pudo actualizar la ubicación");
+  }
+};
+
+export const deleteUbicacion = async (id: number): Promise<void> => {
+  try {
+    await api.delete(`/ubicaciones/${id}`);
+  } catch (error) {
+    console.error("Error deleting ubicacion:", error);
+    throw new Error("No se pudo eliminar la ubicación");
+  }
+};
+
+// ============================================
+// FUNCIONES PARA CATEGORÍAS
+// ============================================
+
 export const getCategorias = async (): Promise<BackendCategoria[]> => {
   try {
     const response = await api.get<BackendCategoria[]>("/categorias");
@@ -154,6 +242,39 @@ export const getCategorias = async (): Promise<BackendCategoria[]> => {
     throw new Error("No se pudieron cargar las categorías");
   }
 };
+
+export const createCategoria = async (data: CategoriaRequest): Promise<BackendCategoria> => {
+  try {
+    const response = await api.post<BackendCategoria>("/categorias", data);
+    return response.data;
+  } catch (error) {
+    console.error("Error creating categoria:", error);
+    throw new Error("No se pudo crear la categoría");
+  }
+};
+
+export const updateCategoria = async (id: number, data: CategoriaRequest): Promise<BackendCategoria> => {
+  try {
+    const response = await api.put<BackendCategoria>(`/categorias/${id}`, data);
+    return response.data;
+  } catch (error) {
+    console.error("Error updating categoria:", error);
+    throw new Error("No se pudo actualizar la categoría");
+  }
+};
+
+export const deleteCategoria = async (id: number): Promise<void> => {
+  try {
+    await api.delete(`/categorias/${id}`);
+  } catch (error) {
+    console.error("Error deleting categoria:", error);
+    throw new Error("No se pudo eliminar la categoría");
+  }
+};
+
+// ============================================
+// FUNCIONES PARA PRODUCTOS EN BODEGA
+// ============================================
 
 export const getProductosByBodega = async (idbodega: number): Promise<ProductoBodega[]> => {
   try {
