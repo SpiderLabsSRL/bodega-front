@@ -63,7 +63,6 @@ CREATE TABLE productos (
     idproducto SERIAL PRIMARY KEY,
     nombre VARCHAR(200) NOT NULL,
     descripcion TEXT,
-    idubicacion INTEGER REFERENCES ubicaciones(idubicacion),
     estado SMALLINT DEFAULT 0,
     imagen bytea,
     precio_venta INTEGER NOT NULL DEFAULT 0,
@@ -81,6 +80,13 @@ CREATE TABLE producto_bodega (
     UNIQUE(idproducto, idbodega)
 );
 
+-- Crear tabla producto_ubicacion_bodega (más explícita)
+CREATE TABLE producto_ubicacion_bodega (
+    idproducto INTEGER REFERENCES productos(idproducto) ON DELETE CASCADE,
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE CASCADE,
+    idubicacion INTEGER REFERENCES ubicaciones(idubicacion) ON DELETE CASCADE,
+    PRIMARY KEY (idproducto, idbodega, idubicacion)
+);
 -- Relación muchos a muchos: Productos - Categorías
 CREATE TABLE producto_categorias (
     idproducto INTEGER REFERENCES productos(idproducto) ON DELETE CASCADE,
