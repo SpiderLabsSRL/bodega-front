@@ -129,15 +129,24 @@ export const getPagosPendientes = async (): Promise<PagoPendiente[]> => {
     let url = "/pagos/pendientes";
     const params = new URLSearchParams();
     
-    if (rol === 'Admin' && idbodega) {
+    // Si NO es Admin, filtrar por su bodega (solo ve su bodega)
+    if (rol !== 'Admin' && idbodega) {
       params.append('bodega', idbodega.toString());
     }
+    // Si es Admin, NO enviar parámetro bodega para ver TODAS las cotizaciones
+    // Solo enviar bodega si se quiere filtrar (esto se manejaría desde un filtro en el frontend)
+    // Por ahora, el Admin ve todas sin filtro
     
     if (params.toString()) {
       url += `?${params.toString()}`;
     }
     
+    console.log("📤 Solicitando pagos pendientes - URL:", url);
+    console.log("👤 Rol:", rol, "Bodega:", idbodega);
+    
     const response = await api.get<BackendPagoPendiente[]>(url);
+    
+    console.log("📥 Pagos pendientes recibidos:", response.data.length);
     
     return response.data.map((pago) => ({
       id: `COT-${pago.idcotizacion.toString().padStart(3, '0')}`,
@@ -173,6 +182,7 @@ export const getPagosPendientes = async (): Promise<PagoPendiente[]> => {
       throw new Error("Sesión expirada, por favor inicie sesión nuevamente");
     }
     
+    console.error("❌ Error en getPagosPendientes:", error);
     throw new Error("No se pudieron cargar los pagos pendientes");
   }
 };

@@ -68,7 +68,6 @@ export function PagosPendientesView() {
   // Manejar el botón "atrás" del navegador
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      // Si algún diálogo está abierto, cerrarlo sin salir de la página
       if (showDetalleDialog || showEntregaDialog || showConfirmEntrega) {
         event.preventDefault();
         
@@ -82,14 +81,11 @@ export function PagosPendientesView() {
           setShowDetalleDialog(false);
         }
         
-        // Agregar una nueva entrada al historial para mantener la posición
         window.history.pushState(null, "", window.location.href);
       }
     };
 
-    // Agregar una entrada inicial al historial
     window.history.pushState(null, "", window.location.href);
-
     window.addEventListener('popstate', handlePopState);
 
     return () => {
@@ -114,15 +110,12 @@ export function PagosPendientesView() {
     }
   };
 
-  // Filtrar pagos por búsqueda y usuario
   const filteredPagos = pagosPendientes.filter(pago => {
-    // Filtro de búsqueda
     const matchesSearch = pago.cliente.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pago.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pago.telefono.includes(searchQuery) ||
       (isAdmin && pago.usuarioNombre?.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    // Filtro de usuario (solo para admin)
     const matchesUsuario = !isAdmin || filtroUsuario === "todos" || 
       (pago.usuarioNombre && pago.usuarioNombre === filtroUsuario);
     
@@ -190,7 +183,6 @@ export function PagosPendientesView() {
     setProcessingAction(`guardar-entregas-${pagoParaEntrega.id}`);
     
     try {
-      // Preparar productos con las cantidades temporales
       const productosActualizados = pagoParaEntrega.productos.map(producto => ({
         ...producto,
         cantidadEntregada: entregasTemporales[producto.id] || 0
@@ -206,7 +198,6 @@ export function PagosPendientesView() {
         idUsuario: USUARIO_ACTUAL.id
       });
 
-      // Actualizar estado local
       const updatedPagos = pagosPendientes.map(p => {
         if (p.id === pagoParaEntrega.id) {
           const nuevoSaldo = montoPago > 0 ? Math.max(0, p.saldo - montoPago) : p.saldo;
@@ -248,7 +239,6 @@ export function PagosPendientesView() {
     } catch (error: any) {
       console.error("Error guardando entregas:", error);
       
-      // Mostrar error específico de stock
       if (error.message?.includes("Stock insuficiente")) {
         toast({
           title: "Stock insuficiente",
@@ -318,7 +308,6 @@ export function PagosPendientesView() {
     }
   };
 
-  // Función para verificar si puede mostrar el botón "Finalizar Entrega"
   const puedeFinalizarEntrega = (pago: PagoPendiente) => {
     const noHayProductosPendientes = pago.productos.every(
       producto => producto.cantidadEntregada >= producto.cantidad
@@ -328,10 +317,8 @@ export function PagosPendientesView() {
     return noHayProductosPendientes && noHaySaldoPendiente && !pago.entregado;
   };
 
-  // Función auxiliar para verificar si una acción está en proceso
   const isProcessing = (actionId: string) => processingAction === actionId;
 
-  // Función para manejar el cierre del diálogo de entregas
   const handleCloseEntregaDialog = () => {
     setShowEntregaDialog(false);
     setShowConfirmEntrega(false);
@@ -383,7 +370,6 @@ export function PagosPendientesView() {
               />
             </div>
             
-            {/* Filtro de Usuario - Solo visible para Admin */}
             {isAdmin && usuariosUnicos.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
                 <Label className="text-sm font-medium text-muted-foreground">Filtrar por usuario:</Label>
@@ -451,6 +437,11 @@ export function PagosPendientesView() {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total:</span>
                     <span className="font-medium">Bs {formatBs(pago.monto)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Abonado:</span>
+                    <span className="font-medium text-green-600">Bs {formatBs(pago.monto - pago.saldo)}</span>
                   </div>
                   
                   <div className="flex justify-between text-sm">
@@ -588,8 +579,9 @@ export function PagosPendientesView() {
                   {isAdmin && <TableHead>Usuario Registro</TableHead>}
                   {isAdmin && <TableHead>Sucursal</TableHead>}
                   <TableHead>Tipo de Pago</TableHead>
-                  <TableHead className="text-right">Monto Total</TableHead>
-                  <TableHead className="text-right">Saldo Pendiente</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Abonado</TableHead>
+                  <TableHead className="text-right">Pendiente</TableHead>
                   <TableHead className="text-center">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -616,6 +608,9 @@ export function PagosPendientesView() {
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       Bs {formatBs(pago.monto)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium text-green-600">
+                      Bs {formatBs(pago.monto - pago.saldo)}
                     </TableCell>
                     <TableCell className="text-right font-bold text-orange-600">
                       Bs {formatBs(pago.saldo)}
@@ -757,7 +752,6 @@ export function PagosPendientesView() {
           
           {pagoParaDetalle && (
             <div className="space-y-4">
-              {/* Información del Cliente */}
               <div className="bg-muted/50 p-4 rounded-lg">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div>
@@ -793,7 +787,6 @@ export function PagosPendientesView() {
                 </div>
               </div>
 
-              {/* Productos */}
               <div>
                 <h4 className="font-semibold text-primary mb-3">Productos Cotizados</h4>
                 <div className="space-y-3">
@@ -819,7 +812,6 @@ export function PagosPendientesView() {
                 </div>
               </div>
 
-              {/* Resumen */}
               <div className="bg-primary/5 p-4 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <span className="font-medium">Subtotal:</span>
@@ -832,6 +824,10 @@ export function PagosPendientesView() {
                 <div className="flex justify-between items-center mb-2">
                   <span className="font-medium">Total:</span>
                   <span className="text-lg font-bold">Bs {formatBs(pagoParaDetalle.monto)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-medium text-green-600">Abonado:</span>
+                  <span className="text-lg font-bold text-green-600">Bs {formatBs(pagoParaDetalle.monto - pagoParaDetalle.saldo)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="font-medium text-orange-600">Saldo Pendiente:</span>
@@ -857,6 +853,22 @@ export function PagosPendientesView() {
           
           {pagoParaEntrega && (
             <div className="space-y-4 sm:space-y-6">
+              {/* Resumen de pagos */}
+              <div className="bg-primary/5 p-4 rounded-lg grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-lg font-bold">Bs {formatBs(pagoParaEntrega.monto)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Abonado</p>
+                  <p className="text-lg font-bold text-green-600">Bs {formatBs(pagoParaEntrega.monto - pagoParaEntrega.saldo)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pendiente</p>
+                  <p className="text-lg font-bold text-orange-600">Bs {formatBs(pagoParaEntrega.saldo)}</p>
+                </div>
+              </div>
+
               <div className="space-y-3 sm:space-y-4">
                 {pagoParaEntrega.productos.map((producto) => {
                   const cantidadEntregadaTemporal = entregasTemporales[producto.id] ?? producto.cantidadEntregada;
@@ -997,7 +1009,6 @@ export function PagosPendientesView() {
                     </RadioGroup>
                   </div>
 
-                  {/* Mostrar imagen QR cuando se selecciona el método QR */}
                   {metodoPagoEntrega === "qr" && (
                     <div className="text-center mt-4">
                       <div className="w-64 h-64 bg-white rounded-lg mx-auto flex items-center justify-center border-2 border-primary/20">

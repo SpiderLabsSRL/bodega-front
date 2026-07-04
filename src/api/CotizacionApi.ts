@@ -83,10 +83,10 @@ export interface CotizacionRequest {
     precio_unitario: number;
     subtotal_linea: number;
   }>;
-  // Campos adicionales para manejo de cliente (opcionales)
   carnet?: string;
   cliente_nota?: string;
   idbodega?: number;
+  idusuario?: number;
 }
 
 const api = axios.create({
@@ -96,6 +96,29 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("userBodega");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
 
 function mapBackendCotizacion(cotizacion: BackendCotizacion): Cotizacion {
   let vigenciaLegible = "No definida";
@@ -153,29 +176,24 @@ function mapBackendDetalleCotizacion(detalle: BackendDetalleCotizacion): Detalle
 
 export const createCotizacion = async (cotizacion: CotizacionRequest): Promise<Cotizacion> => {
   try {
-    // Obtener bodega del usuario o usar 1 por defecto
-    let idbodega = getUserBodega();
-    if (!idbodega) {
-      console.warn("⚠️ No se encontró bodega del usuario, usando bodega por defecto (1)");
-      idbodega = 1;
-    }
-    
-    // Obtener usuario
+    const idbodega = getUserBodega();
     const userId = getUserId();
+    
     if (!userId) {
       throw new Error("No se encontró usuario autenticado");
     }
     
-    const cotizacionConBodega = {
+    const cotizacionConUsuario = {
       ...cotizacion,
-      idbodega: idbodega,
+      idbodega: idbodega || 1,
       idusuario: userId
     };
     
-    console.log("📤 Creando cotización con bodega:", idbodega);
-    console.log("📤 Datos completos:", cotizacionConBodega);
+    console.log("📤 Creando cotización con usuario:", userId);
+    console.log("📤 Bodega:", idbodega || 1);
+    console.log("📤 Datos completos:", cotizacionConUsuario);
     
-    const response = await api.post<BackendCotizacion>("/cotizaciones", cotizacionConBodega);
+    const response = await api.post<BackendCotizacion>("/cotizaciones", cotizacionConUsuario);
     return mapBackendCotizacion(response.data);
   } catch (error) {
     console.error("Error creating quotation:", error);

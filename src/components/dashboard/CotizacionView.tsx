@@ -86,7 +86,6 @@ const formatBs = (value: number) => {
   return v.toFixed(2);
 };
 
-// Función para filtrar productos duplicados
 const filterUniqueProducts = (products: Product[]): Product[] => {
   const seen = new Set<number>();
   return products.filter(product => {
@@ -146,7 +145,6 @@ export function CotizacionView() {
   const [loadingCotizaciones, setLoadingCotizaciones] = useState(false);
   const [alert, setAlert] = useState<AlertState>({ show: false, title: "", message: "" });
   
-  // Estados para clientes
   const [clienteSearchTerm, setClienteSearchTerm] = useState("");
   const [clienteSearchResults, setClienteSearchResults] = useState<ClienteSearchResult[]>([]);
   const [searchingClientes, setSearchingClientes] = useState(false);
@@ -232,7 +230,6 @@ export function CotizacionView() {
 
     try {
       const results = await searchProducts(query, false);
-      // Filtrar duplicados
       const uniqueResults = filterUniqueProducts(results);
       setSearchResults(uniqueResults);
 
@@ -311,7 +308,6 @@ export function CotizacionView() {
     toast({ title: "Producto agregado", description: `${product.nombre} agregado a la cotización` });
   }, [toast]);
 
-  // Función para actualizar cantidad desde el input manual
   const actualizarCantidad = useCallback((uniqueId: string, nuevaCantidad: number) => {
     if (nuevaCantidad < 0) return;
     
@@ -322,7 +318,6 @@ export function CotizacionView() {
     );
   }, []);
 
-  // Función para manejar cambio en input de cantidad
   const handleCantidadInputChange = useCallback((uniqueId: string, value: string) => {
     if (value === "") {
       setCotizacionItems(prevItems =>
@@ -345,10 +340,8 @@ export function CotizacionView() {
     );
   }, []);
 
-  // Función para manejar blur en input de cantidad
   const handleCantidadInputBlur = useCallback((uniqueId: string, value: string) => {
     if (value === "" || parseInt(value) === 0) {
-      // Si el valor es 0 o vacío, eliminamos el item
       setCotizacionItems(prevItems => 
         prevItems.filter(item => item.uniqueId !== uniqueId)
       );
@@ -366,7 +359,6 @@ export function CotizacionView() {
   const abono = 0;
   const saldo = totalFinal;
 
-  // Función para seleccionar un cliente de la búsqueda
   const seleccionarCliente = (cliente: ClienteSearchResult) => {
     setSelectedCliente(cliente);
     setDatosCliente(prev => ({
@@ -380,7 +372,6 @@ export function CotizacionView() {
     setClienteManual(false);
   };
 
-  // Función para limpiar el cliente seleccionado
   const limpiarCliente = () => {
     setSelectedCliente(null);
     setDatosCliente(prev => ({
@@ -394,17 +385,14 @@ export function CotizacionView() {
     setClienteManual(false);
   };
 
-  // Función para alternar la nota del cliente
   const toggleClienteNota = () => {
     setShowClienteNota(!showClienteNota);
   };
 
-  // Función para cuando el usuario escribe manualmente el nombre
   const handleNombreManualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setDatosCliente(prev => ({ ...prev, nombre: value }));
     setClienteManual(true);
-    // Si había un cliente seleccionado y el nombre cambia, lo deseleccionamos
     if (selectedCliente) {
       setSelectedCliente(null);
       setShowClienteNota(false);
@@ -421,7 +409,6 @@ export function CotizacionView() {
     }
   };
 
-  // Validación del formulario de cliente
   const validateClienteForm = (): boolean => {
     if (!clienteFormData.nombres.trim()) {
       toast({ title: "Error", description: "Los nombres son obligatorios", variant: "destructive" });
@@ -451,7 +438,6 @@ export function CotizacionView() {
     return true;
   };
 
-  // Crear cliente desde el formulario
   const handleCreateCliente = async () => {
     if (!validateClienteForm()) return;
 
@@ -552,14 +538,12 @@ export function CotizacionView() {
       return;
     }
 
-    // Si el cliente es manual (no seleccionado de la BD), solo generamos la cotización sin guardar
     if (clienteManual && !selectedCliente) {
       toast({ title: "Cotización generada", description: "La cotización ha sido generada exitosamente (cliente no registrado)" });
       setCotizacionGenerada(true);
       return;
     }
 
-    // Si el cliente está registrado, guardamos la cotización
     try {
       setLoading(true);
       let tipoPagoBackend: "Pago por Adelantado" | "Mitad de Pago" | "Contra Entrega";
@@ -810,13 +794,10 @@ export function CotizacionView() {
           </Dialog>
         </div>
 
-        {/* Nueva distribución: Izquierda - Información del Cliente, Derecha - Buscar Productos y Productos Agregados */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Columna Izquierda: Información del Cliente */}
           <Card className="lg:col-span-1">
             <CardHeader><CardTitle>Información del Cliente</CardTitle></CardHeader>
             <CardContent>
-              {/* Búsqueda de cliente con "ojito" arriba */}
               <div className="mb-4">
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-sm font-medium">Buscar cliente registrado</Label>
@@ -892,7 +873,6 @@ export function CotizacionView() {
                   )}
                 </div>
 
-                {/* Resultados de búsqueda de clientes */}
                 {clienteSearchResults.length > 0 && (
                   <div className="border rounded-md overflow-hidden max-h-48 overflow-y-auto shadow-lg bg-white mt-2">
                     {clienteSearchResults.map((cliente) => (
@@ -917,7 +897,6 @@ export function CotizacionView() {
                   </div>
                 )}
 
-                {/* Mensaje de "No se encontraron clientes" */}
                 {clienteSearchTerm.trim().length >= 2 && 
                  clienteSearchResults.length === 0 && 
                  !searchingClientes && (
@@ -927,7 +906,6 @@ export function CotizacionView() {
                 )}
               </div>
 
-              {/* Mostrar nota del cliente seleccionado */}
               {selectedCliente && showClienteNota && (
                 <div className="mb-4 p-3 bg-muted/30 rounded-md border">
                   <p className="text-xs text-muted-foreground font-medium">Nota del cliente:</p>
@@ -941,7 +919,6 @@ export function CotizacionView() {
                 </div>
               )}
 
-              {/* Cliente seleccionado o manual */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="nombre">
@@ -1030,7 +1007,6 @@ export function CotizacionView() {
                 </div>
               </div>
 
-              {/* Indicador de cliente no registrado */}
               {clienteManual && !selectedCliente && datosCliente.nombre && (
                 <div className="mt-4 p-2 bg-amber-50 border border-amber-200 rounded-md">
                   <p className="text-xs text-amber-700">
@@ -1039,7 +1015,6 @@ export function CotizacionView() {
                 </div>
               )}
 
-              {/* Botón Generar Cotización */}
               <div className="mt-4">
                 <Button onClick={generarCotizacion} className="w-full" disabled={cotizacionItems.length === 0 || loading || tieneItemsInvalidos}>
                   {loading ? "Generando..." : tieneItemsInvalidos ? "Cantidades inválidas" : "Generar Cotización"}
@@ -1048,9 +1023,7 @@ export function CotizacionView() {
             </CardContent>
           </Card>
 
-          {/* Columna Derecha: Buscar Productos y Productos Agregados */}
           <div className="lg:col-span-1 space-y-6">
-            {/* Buscar Productos */}
             <Card>
               <CardHeader><CardTitle>Buscar Productos</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -1075,7 +1048,6 @@ export function CotizacionView() {
               </CardContent>
             </Card>
 
-            {/* Productos Agregados */}
             <Card>
               <CardHeader><CardTitle>Productos Agregados</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -1140,7 +1112,6 @@ export function CotizacionView() {
           </div>
         </div>
 
-        {/* Dialog para crear cliente */}
         <Dialog open={showClienteForm} onOpenChange={setShowClienteForm}>
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
