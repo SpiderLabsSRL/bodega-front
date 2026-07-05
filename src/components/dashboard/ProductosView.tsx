@@ -150,6 +150,56 @@ export function ImageCarousel({
   );
 }
 
+// Función para renderizar ubicaciones con badges
+function RenderUbicaciones({ 
+  ubicaciones, 
+  bodegaId 
+}: { 
+  ubicaciones: Array<{ idubicacion: number; nombre: string; idbodega: number }>; 
+  bodegaId: number | null;
+}) {
+  if (!ubicaciones || ubicaciones.length === 0) {
+    return <span className="text-xs text-muted-foreground">Sin ubicación</span>;
+  }
+
+  // Filtrar ubicaciones por bodega si se especifica
+  let ubicacionesFiltradas = ubicaciones;
+  if (bodegaId !== null && bodegaId !== undefined) {
+    ubicacionesFiltradas = ubicaciones.filter(u => u.idbodega === bodegaId);
+  }
+
+  // Si no hay ubicaciones filtradas, mostrar todas
+  if (ubicacionesFiltradas.length === 0) {
+    ubicacionesFiltradas = ubicaciones;
+  }
+
+  // Extraer los nombres
+  const nombres = ubicacionesFiltradas.map(u => u.nombre).filter(Boolean);
+  
+  if (nombres.length === 0) {
+    return <span className="text-xs text-muted-foreground">Sin ubicación</span>;
+  }
+
+  // Mostrar hasta 2 ubicaciones
+  const mostrar = nombres.slice(0, 2);
+  const restantes = nombres.length - 2;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {mostrar.map((nombre, index) => (
+        <Badge key={index} variant="secondary" className="text-xs">
+          {nombre.length > 12 ? nombre.substring(0, 10) + "..." : nombre}
+        </Badge>
+      ))}
+      {restantes > 0 && (
+        <Badge variant="secondary" className="text-xs">
+          +{restantes}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 // Hook para debounce
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -346,6 +396,18 @@ export function ProductosView() {
     return producto.stock || 0;
   };
 
+  // Obtener el ID de bodega del usuario para filtrar ubicaciones
+  const getUserBodegaId = (): number | null => {
+    try {
+      const bodegaId = localStorage.getItem("userBodega");
+      return bodegaId ? parseInt(bodegaId) : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const userBodegaId = getUserBodegaId();
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -481,6 +543,10 @@ export function ProductosView() {
                     <div className="block xl:hidden space-y-3 w-full">
                       {products.map((product) => {
                         const totalStock = getTotalStock(product);
+                        const ubicacionesProducto = product.ubicaciones || [];
+                        const ubicacionesNombres = ubicacionesProducto.map(u => u.nombre).filter(Boolean);
+                        const ubicacionesMostrar = ubicacionesNombres.slice(0, 2);
+                        const ubicacionesRestantes = ubicacionesNombres.length - 2;
 
                         return (
                           <Card key={product.idproducto} className="p-3 w-full">
@@ -525,13 +591,23 @@ export function ProductosView() {
                               </div>
 
                               <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
-                                <div>
-                                  <span className="font-medium">
-                                    Ubicación:
-                                  </span>
-                                  <span className="text-muted-foreground ml-1 block sm:inline">
-                                    {product.ubicacion}
-                                  </span>
+                                <div className="col-span-2">
+                                  <span className="font-medium">Ubicación:</span>
+                                  <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {ubicacionesMostrar.map((nombre, index) => (
+                                      <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0">
+                                        {nombre.length > 10 ? nombre.substring(0, 8) + "..." : nombre}
+                                      </Badge>
+                                    ))}
+                                    {ubicacionesRestantes > 0 && (
+                                      <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                                        +{ubicacionesRestantes}
+                                      </Badge>
+                                    )}
+                                    {ubicacionesNombres.length === 0 && (
+                                      <span className="text-muted-foreground text-xs">Sin ubicación</span>
+                                    )}
+                                  </div>
                                 </div>
                                 <div>
                                   <span className="font-medium">Stock:</span>
@@ -619,9 +695,7 @@ export function ProductosView() {
                               <TableRow>
                                 <TableHead className="w-[70px]">Img</TableHead>
                                 <TableHead>Producto</TableHead>
-                                <TableHead className="w-[120px]">
-                                  Ubic.
-                                </TableHead>
+                                <TableHead className="min-w-[150px]">Ubicación</TableHead>
                                 <TableHead className="min-w-[150px]">
                                   Código de Barras
                                 </TableHead>
@@ -680,8 +754,11 @@ export function ProductosView() {
                                         </div>
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-sm">
-                                      {product.ubicacion}
+                                    <TableCell>
+                                      <RenderUbicaciones 
+                                        ubicaciones={product.ubicaciones || []} 
+                                        bodegaId={userBodegaId}
+                                      />
                                     </TableCell>
                                     <TableCell>
                                       {product.codigo_barras ? (
