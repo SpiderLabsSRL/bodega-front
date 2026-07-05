@@ -1140,6 +1140,58 @@ function UbicacionManagementDialog({
 }
 
 // ============================================
+// FUNCIÓN PARA RENDERIZAR UBICACIONES CON BADGES (FILTRADAS POR BODEGA)
+// ============================================
+
+function RenderUbicaciones({ 
+  ubicaciones, 
+  bodegaId 
+}: { 
+  ubicaciones: any[]; 
+  bodegaId: number | null;
+}) {
+  if (!ubicaciones || ubicaciones.length === 0) {
+    return <span className="text-xs text-muted-foreground">Sin ubicación</span>;
+  }
+
+  // Filtrar ubicaciones por bodega
+  const ubicacionesFiltradas = ubicaciones.filter(u => {
+    // Si la ubicación tiene idbodega, filtrar por la bodega seleccionada
+    if (u.idbodega !== undefined && u.idbodega !== null) {
+      return u.idbodega === bodegaId;
+    }
+    // Si no tiene idbodega, mostrar todas (para compatibilidad)
+    return true;
+  });
+
+  // Extraer los nombres de las ubicaciones filtradas
+  const nombres = ubicacionesFiltradas.map(u => u.nombre || u).filter(Boolean);
+  
+  if (nombres.length === 0) {
+    return <span className="text-xs text-muted-foreground">Sin ubicación</span>;
+  }
+
+  // Mostrar hasta 2 ubicaciones
+  const mostrar = nombres.slice(0, 2);
+  const restantes = nombres.length - 2;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {mostrar.map((nombre, index) => (
+        <Badge key={index} variant="secondary" className="text-xs">
+          {nombre.length > 12 ? nombre.substring(0, 10) + "..." : nombre}
+        </Badge>
+      ))}
+      {restantes > 0 && (
+        <Badge variant="secondary" className="text-xs">
+          +{restantes}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // COMPONENTE PRINCIPAL BODEGA VIEW
 // ============================================
 
@@ -1940,6 +1992,17 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
             {filteredProducts.map((product) => {
               const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
               const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
+              // Obtener ubicaciones del producto y filtrar por bodega seleccionada
+              const ubicacionesProducto = product.ubicaciones || [];
+              const ubicacionesFiltradas = ubicacionesProducto.filter((u: any) => {
+                if (u.idbodega !== undefined && u.idbodega !== null) {
+                  return u.idbodega === selectedBodega;
+                }
+                return true;
+              });
+              const ubicacionesNombres = ubicacionesFiltradas.map((u: any) => u.nombre || u).filter(Boolean);
+              const ubicacionesMostrar = ubicacionesNombres.slice(0, 2);
+              const ubicacionesRestantes = ubicacionesNombres.length - 2;
               
               return (
                 <Card key={product.id} className="p-3 w-full">
@@ -1993,7 +2056,21 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                       </div>
                       <div>
                         <span className="font-medium">Ubicación:</span>
-                        <span className="text-muted-foreground ml-1">{product.ubicacion}</span>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {ubicacionesMostrar.map((nombre, index) => (
+                            <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0">
+                              {nombre.length > 10 ? nombre.substring(0, 8) + "..." : nombre}
+                            </Badge>
+                          ))}
+                          {ubicacionesRestantes > 0 && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                              +{ubicacionesRestantes}
+                            </Badge>
+                          )}
+                          {ubicacionesNombres.length === 0 && (
+                            <span className="text-muted-foreground text-xs">Sin ubicación</span>
+                          )}
+                        </div>
                       </div>
                       <div className="col-span-2">
                         <span className="font-medium">Precio:</span>
@@ -2077,7 +2154,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                       <TableHead className="w-[70px]">Img</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead className="min-w-[150px]">Categorías</TableHead>
-                      <TableHead>Ubicación</TableHead>
+                      <TableHead className="min-w-[100px]">Ubicación</TableHead>
                       <TableHead>Bodega</TableHead>
                       <TableHead className="text-center">Stock</TableHead>
                       <TableHead className="text-center">Stock Mínimo</TableHead>
@@ -2089,6 +2166,8 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                     {filteredProducts.map((product) => {
                       const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
                       const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
+                      // Obtener ubicaciones del producto
+                      const ubicacionesProducto = product.ubicaciones || [];
                       
                       return (
                         <TableRow key={product.id}>
@@ -2122,7 +2201,12 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-sm">{product.ubicacion}</TableCell>
+                          <TableCell>
+                            <RenderUbicaciones 
+                              ubicaciones={ubicacionesProducto} 
+                              bodegaId={selectedBodega}
+                            />
+                          </TableCell>
                           <TableCell className="text-sm">
                             {product.bodega_nombre || "—"}
                           </TableCell>
