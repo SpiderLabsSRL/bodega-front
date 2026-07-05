@@ -35,7 +35,7 @@ interface BackendProductoBodega {
   estado: number;
   idubicacion: number;
   ubicacion_nombre: string;
-  categorias: string[]; // <-- Esto ya es un array
+  categorias: string[];
   imagen: any;
   precio_venta: string;
   precio_compra: string;
@@ -44,6 +44,11 @@ interface BackendProductoBodega {
   stock_minimo: number;
   idbodega: number;
   bodega_nombre: string;
+  ubicaciones?: Array<{
+    idubicacion: number;
+    nombre: string;
+    idbodega: number;
+  }>;
   bodegas_stock?: Array<{
     idbodega: number;
     bodega_nombre: string;
@@ -56,11 +61,16 @@ export interface ProductoBodega {
   id: number;
   nombre: string;
   codigo: string;
-  categoria: string; // <-- Cambiar a categorias como string con comas
-  categoriasArray?: string[]; // <-- Nueva propiedad opcional para el array
+  categoria: string;
+  categoriasArray?: string[];
   stock: number;
   stockMinimo: number;
   ubicacion: string;
+  ubicaciones?: Array<{
+    idubicacion: number;
+    nombre: string;
+    idbodega: number;
+  }>;
   precio: number;
   precio_compra?: number;
   proveedor: string;
@@ -108,6 +118,12 @@ export interface UbicacionRequest {
 
 export interface CategoriaRequest {
   nombre: string;
+}
+
+export interface ProductoUbicacionBodegaRequest {
+  idproducto: number;
+  idbodega: number;
+  idubicacion: number;
 }
 
 // ============================================
@@ -376,6 +392,38 @@ export const buscarProductosBodega = async (termino: string, idbodega?: number):
 };
 
 // ============================================
+// FUNCIONES PARA PRODUCTO_UBICACION_BODEGA
+// ============================================
+
+export const getUbicacionesByProductoBodega = async (idproducto: number, idbodega: number): Promise<BackendUbicacion[]> => {
+  try {
+    const response = await api.get<BackendUbicacion[]>(`/bodegas/productos/${idproducto}/bodega/${idbodega}/ubicaciones`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching ubicaciones por producto y bodega:", error);
+    return [];
+  }
+};
+
+export const asignarUbicacionProductoBodega = async (data: ProductoUbicacionBodegaRequest): Promise<void> => {
+  try {
+    await api.post("/bodegas/productos/ubicacion", data);
+  } catch (error) {
+    console.error("Error asignando ubicación a producto en bodega:", error);
+    throw new Error("No se pudo asignar la ubicación al producto");
+  }
+};
+
+export const eliminarUbicacionProductoBodega = async (idproducto: number, idbodega: number, idubicacion: number): Promise<void> => {
+  try {
+    await api.delete(`/bodegas/productos/${idproducto}/bodega/${idbodega}/ubicacion/${idubicacion}`);
+  } catch (error) {
+    console.error("Error eliminando ubicación de producto en bodega:", error);
+    throw new Error("No se pudo eliminar la ubicación del producto");
+  }
+};
+
+// ============================================
 // MAPEADOR CORREGIDO
 // ============================================
 
@@ -430,21 +478,34 @@ function mapBackendProductoBodega(producto: BackendProductoBodega): ProductoBode
     }
   }
 
-  // CORRECCIÓN: Guardar TODAS las categorías como string separado por comas
   let categoriasString = "Sin categoría";
   if (producto.categorias && producto.categorias.length > 0) {
     categoriasString = producto.categorias.join(', ');
+  }
+
+  // Obtener la ubicación principal (la primera que tenga esta bodega)
+  let ubicacionPrincipal = "Sin ubicación";
+  if (producto.ubicaciones && producto.ubicaciones.length > 0) {
+    const ubicacionEnBodega = producto.ubicaciones.find(u => u.idbodega === producto.idbodega);
+    if (ubicacionEnBodega) {
+      ubicacionPrincipal = ubicacionEnBodega.nombre;
+    } else if (producto.ubicacion_nombre) {
+      ubicacionPrincipal = producto.ubicacion_nombre;
+    }
+  } else if (producto.ubicacion_nombre) {
+    ubicacionPrincipal = producto.ubicacion_nombre;
   }
 
   return {
     id: producto.idproducto,
     nombre: producto.nombre,
     codigo: producto.codigo_barras || `COD-${producto.idproducto}`,
-    categoria: categoriasString, // <-- Ahora contiene todas las categorías separadas por coma
-    categoriasArray: producto.categorias || [], // <-- Guardamos el array original por si se necesita
+    categoria: categoriasString,
+    categoriasArray: producto.categorias || [],
     stock: producto.stock || 0,
     stockMinimo: producto.stock_minimo || 0,
-    ubicacion: producto.ubicacion_nombre || "Sin ubicación",
+    ubicacion: ubicacionPrincipal,
+    ubicaciones: producto.ubicaciones || [],
     precio: parseFloat(producto.precio_venta) || 0,
     precio_compra: parseFloat(producto.precio_compra) || 0,
     proveedor: "",

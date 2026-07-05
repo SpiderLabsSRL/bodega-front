@@ -50,6 +50,7 @@ interface ProductFormData {
   categorias: string[];
   descripcion: string;
   ubicacion: string;
+  ubicaciones?: number[];
   precioVenta: string | number;
   precioCompra?: string | number;
   stock: number | string;
@@ -72,6 +73,7 @@ interface FormularioProductosProps {
   onRefreshData?: () => void;
   idbodega?: number;
   ubicacionesConBodega?: Array<{ idubicacion: number; nombre: string; idbodega: number | null }>;
+  onUbicacionesChange?: () => Promise<void>;
 }
 
 interface AddDialogState {
@@ -347,6 +349,7 @@ export function FormularioProductos({
   onRefreshData,
   idbodega,
   ubicacionesConBodega,
+  onUbicacionesChange,
 }: FormularioProductosProps) {
   const [formData, setFormData] = useState<ProductFormData>(() => {
     if (!product) {
@@ -355,6 +358,7 @@ export function FormularioProductos({
         categorias: [],
         descripcion: "",
         ubicacion: "",
+        ubicaciones: [],
         precioVenta: "",
         precioCompra: "",
         stock: "",
@@ -364,7 +368,7 @@ export function FormularioProductos({
         codigoBarras: "",
         productosSimilares: [],
         productosSimilaresData: [],
-        idbodega: 1,
+        idbodega: idbodega || 1,
       };
     }
 
@@ -391,12 +395,20 @@ export function FormularioProductos({
       }
     }
 
+    let ubicacionesIds: number[] = [];
+    if (product.ubicaciones && Array.isArray(product.ubicaciones)) {
+      ubicacionesIds = product.ubicaciones.map((u: any) => u.idubicacion || u.id || u).filter((id: number) => !isNaN(id));
+    } else if (product.idubicacion) {
+      ubicacionesIds = [product.idubicacion];
+    }
+
     return {
       id: product.idproducto?.toString() || product.id?.toString(),
       nombre: product.nombre || "",
       categorias: categoriasArray,
       descripcion: product.descripcion || "",
       ubicacion: product.ubicacion_nombre || product.ubicacion || "",
+      ubicaciones: ubicacionesIds,
       precioVenta: product.precio_venta?.toString() || product.precio?.toString() || "",
       precioCompra: product.precio_compra?.toString() || "",
       stock: product.stock?.toString() || "",
@@ -406,7 +418,7 @@ export function FormularioProductos({
       codigoBarras: product.codigo_barras || product.codigo || "",
       productosSimilares: similaresArray,
       productosSimilaresData: similaresDataArray,
-      idbodega: product.idbodega || 1,
+      idbodega: product.idbodega || idbodega || 1,
     };
   });
 
@@ -448,22 +460,28 @@ export function FormularioProductos({
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
-  // Cargar ubicaciones filtradas por bodega (SIEMPRE idbodega = 1 para productos)
+  // Cargar ubicaciones filtradas por bodega
   useEffect(() => {
     const loadUbicacionesFiltradas = async () => {
       try {
-        const bodegaId = 1;
+        const bodegaId = idbodega || 1;
         const ubicaciones = await getUbicaciones(bodegaId);
-        const nombres = ubicaciones.map(u => u.nombre);
+        const ubicacionesFiltradasPorBodega = ubicaciones.filter(u => u.idbodega === bodegaId || u.idbodega === null);
+        const nombres = ubicacionesFiltradasPorBodega.map(u => u.nombre);
         setUbicacionesFiltradas(nombres);
-        setUbicacionesCompletas(ubicaciones.map(u => ({
+        setUbicacionesCompletas(ubicacionesFiltradasPorBodega.map(u => ({
           idubicacion: u.id,
           nombre: u.nombre,
           idbodega: u.idbodega
         })));
         
-        if (formData.ubicacion && !nombres.includes(formData.ubicacion)) {
-          setUbicacionesFiltradas(prev => [...prev, formData.ubicacion]);
+        setLocalLists(prev => ({
+          ...prev,
+          ubicaciones: nombres,
+        }));
+        
+        if (formData.ubicacion && !nombres.includes(formData.ubicacion) && !product) {
+          setFormData(prev => ({ ...prev, ubicacion: "" }));
         }
       } catch (error) {
         console.error("Error cargando ubicaciones filtradas:", error);
@@ -471,33 +489,28 @@ export function FormularioProductos({
     };
 
     loadUbicacionesFiltradas();
-  }, []);
+  }, [idbodega, product]);
 
   useEffect(() => {
-    setLocalLists({
+    setLocalLists(prev => ({
+      ...prev,
       ubicaciones: ubicacionesProp || [],
+    }));
+  }, [ubicacionesProp]);
+
+  useEffect(() => {
+    setLocalLists(prev => ({
+      ...prev,
       categorias: categoriasProp || [],
-    });
-  }, [ubicacionesProp, categoriasProp]);
+    }));
+  }, [categoriasProp]);
 
   useEffect(() => {
     if (!product) {
-      setFormData({
-        nombre: "",
-        categorias: [],
-        descripcion: "",
-        ubicacion: "",
-        precioVenta: "",
-        precioCompra: "",
-        stock: "",
-        stockMinimo: "",
-        imagen: "",
-        imagenFile: null,
-        codigoBarras: "",
-        productosSimilares: [],
-        productosSimilaresData: [],
-        idbodega: 1,
-      });
+      setFormData(prev => ({
+        ...prev,
+        idbodega: idbodega || 1,
+      }));
       return;
     }
 
@@ -524,12 +537,21 @@ export function FormularioProductos({
       }
     }
 
-    setFormData({
+    let ubicacionesIds: number[] = [];
+    if (product.ubicaciones && Array.isArray(product.ubicaciones)) {
+      ubicacionesIds = product.ubicaciones.map((u: any) => u.idubicacion || u.id || u).filter((id: number) => !isNaN(id));
+    } else if (product.idubicacion) {
+      ubicacionesIds = [product.idubicacion];
+    }
+
+    setFormData(prev => ({
+      ...prev,
       id: product.idproducto?.toString() || product.id?.toString(),
       nombre: product.nombre || "",
       categorias: categoriasArray,
       descripcion: product.descripcion || "",
       ubicacion: product.ubicacion_nombre || product.ubicacion || "",
+      ubicaciones: ubicacionesIds,
       precioVenta: product.precio_venta?.toString() || product.precio?.toString() || "",
       precioCompra: product.precio_compra?.toString() || "",
       stock: product.stock?.toString() || "",
@@ -539,9 +561,9 @@ export function FormularioProductos({
       codigoBarras: product.codigo_barras || product.codigo || "",
       productosSimilares: similaresArray,
       productosSimilaresData: similaresDataArray,
-      idbodega: product.idbodega || 1,
-    });
-  }, [product]);
+      idbodega: product.idbodega || idbodega || 1,
+    }));
+  }, [product, idbodega]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -591,30 +613,31 @@ export function FormularioProductos({
   useEffect(() => {
     const loadManagementItems = async () => {
       try {
+        const bodegaId = idbodega || 1;
         const [ubicacionesData, categoriasData] = await Promise.all([
-          getUbicaciones(1),
+          getUbicaciones(bodegaId),
           getCategorias(),
         ]);
 
-        const ubicacionesNombres = ubicacionesData.map((item) => item.nombre);
-        const categoriasNombres = categoriasData.map((item) => item.nombre);
+        const ubicacionesFiltradasPorBodega = ubicacionesData.filter(u => u.idbodega === bodegaId || u.idbodega === null);
+        const ubicacionesNombres = ubicacionesFiltradasPorBodega.map((item) => item.nombre);
 
         setManagementItems({
-          ubicaciones: ubicacionesData.map(u => ({ id: u.id, nombre: u.nombre, estado: u.estado })),
+          ubicaciones: ubicacionesFiltradasPorBodega.map(u => ({ id: u.id, nombre: u.nombre, estado: u.estado })),
           categorias: categoriasData,
         });
 
-        setLocalLists({
+        setLocalLists(prev => ({
+          ...prev,
           ubicaciones: ubicacionesNombres,
-          categorias: categoriasNombres,
-        });
+        }));
       } catch (error) {
         console.error("Error cargando elementos de gestión:", error);
       }
     };
 
     loadManagementItems();
-  }, []);
+  }, [idbodega]);
 
   const handleInputChange = (
     field: keyof ProductFormData,
@@ -644,27 +667,32 @@ export function FormularioProductos({
 
   const updateLocalLists = async (type: string) => {
     try {
+      const bodegaId = idbodega || 1;
       let ubicacionesData: UbicacionItem[] = [];
       let categoriasData: ManagementItem[] = [];
 
       if (type === "ubicacion" || type === "all") {
-        ubicacionesData = await getUbicaciones(1);
-        
-        const ubicacionesNombres = ubicacionesData.map((item) => item.nombre);
+        ubicacionesData = await getUbicaciones(bodegaId);
+        const ubicacionesFiltradasPorBodega = ubicacionesData.filter(u => u.idbodega === bodegaId || u.idbodega === null);
+        const ubicacionesNombres = ubicacionesFiltradasPorBodega.map((item) => item.nombre);
         setManagementItems((prev) => ({ 
           ...prev, 
-          ubicaciones: ubicacionesData.map(u => ({ id: u.id, nombre: u.nombre, estado: u.estado }))
+          ubicaciones: ubicacionesFiltradasPorBodega.map(u => ({ id: u.id, nombre: u.nombre, estado: u.estado }))
         }));
         setLocalLists((prev) => ({
           ...prev,
           ubicaciones: ubicacionesNombres,
         }));
         setUbicacionesFiltradas(ubicacionesNombres);
-        setUbicacionesCompletas(ubicacionesData.map(u => ({
+        setUbicacionesCompletas(ubicacionesFiltradasPorBodega.map(u => ({
           idubicacion: u.id,
           nombre: u.nombre,
           idbodega: u.idbodega
         })));
+        
+        if (onUbicacionesChange) {
+          await onUbicacionesChange();
+        }
       }
 
       if (type === "categoria" || type === "all") {
@@ -721,10 +749,10 @@ export function FormularioProductos({
       return;
     }
 
-    if (formData.ubicacion === nombre) {
+    if (formData.ubicaciones && formData.ubicaciones.includes(item.id)) {
       toast({
         title: "Error",
-        description: "No puedes eliminar la ubicación que está seleccionada para este producto",
+        description: "No puedes eliminar una ubicación que está seleccionada para este producto",
         variant: "destructive",
       });
       return;
@@ -831,6 +859,7 @@ export function FormularioProductos({
 
     try {
       const isEdit = addDialogState.mode === "edit";
+      const bodegaId = idbodega || 1;
       
       if (isEdit) {
         switch (type) {
@@ -838,7 +867,7 @@ export function FormularioProductos({
             await updateCategoria(addDialogState.editId!, { nombre: name });
             break;
           case "ubicacion":
-            await updateUbicacion(addDialogState.editId!, { nombre: name, idbodega: 1 });
+            await updateUbicacion(addDialogState.editId!, { nombre: name, idbodega: bodegaId });
             break;
         }
         
@@ -852,7 +881,7 @@ export function FormularioProductos({
             await createCategoria({ nombre: name });
             break;
           case "ubicacion":
-            await createUbicacion({ nombre: name, idbodega: 1 });
+            await createUbicacion({ nombre: name, idbodega: bodegaId });
             break;
         }
         
@@ -865,6 +894,13 @@ export function FormularioProductos({
       await updateLocalLists(type);
 
       if (type === "ubicacion" && !isEdit) {
+        const nuevaUbicacion = ubicacionesCompletas.find(u => u.nombre === name);
+        if (nuevaUbicacion) {
+          const ubicacionesActuales = formData.ubicaciones || [];
+          if (!ubicacionesActuales.includes(nuevaUbicacion.idubicacion)) {
+            handleInputChange("ubicaciones", [...ubicacionesActuales, nuevaUbicacion.idubicacion]);
+          }
+        }
         handleInputChange("ubicacion", name);
       }
 
@@ -909,10 +945,10 @@ export function FormularioProductos({
       return;
     }
 
-    if (!formData.ubicacion) {
+    if (!formData.ubicaciones || formData.ubicaciones.length === 0) {
       toast({
         title: "Error",
-        description: "La ubicación es obligatoria",
+        description: "Debe seleccionar al menos una ubicación",
         variant: "destructive",
       });
       return;
@@ -949,19 +985,6 @@ export function FormularioProductos({
     setIsSubmittingProduct(true);
 
     try {
-      const ubicacionSeleccionada = ubicacionesCompletas.find(u => u.nombre === formData.ubicacion);
-      const idubicacion = ubicacionSeleccionada?.idubicacion || 0;
-
-      if (idubicacion === 0) {
-        toast({
-          title: "Error",
-          description: "La ubicación seleccionada no es válida",
-          variant: "destructive",
-        });
-        setIsSubmittingProduct(false);
-        return;
-      }
-
       const descripcionFormateada = formatDescriptionForProduction(
         formData.descripcion,
       );
@@ -970,7 +993,14 @@ export function FormularioProductos({
 
       formDataToSend.append("nombre", formData.nombre);
       formDataToSend.append("descripcion", descripcionFormateada);
-      formDataToSend.append("idubicacion", idubicacion.toString());
+      
+      const ubicacionesIds = formData.ubicaciones
+        .map(id => typeof id === 'string' ? parseInt(id) : id)
+        .filter(id => !isNaN(id) && id > 0);
+      
+      if (ubicacionesIds.length > 0) {
+        formDataToSend.append("ubicaciones", JSON.stringify(ubicacionesIds));
+      }
       
       const categoriasIds = formData.categorias.map((cat) =>
         getItemIdByName(managementItems.categorias, cat)
@@ -989,7 +1019,7 @@ export function FormularioProductos({
       const stockMinimoNum = Number(formData.stockMinimo) || 0;
       formDataToSend.append("stock_minimo", stockMinimoNum.toString());
 
-      const bodegaId = 1;
+      const bodegaId = idbodega || 1;
       formDataToSend.append("idbodega", bodegaId.toString());
 
       if (formData.codigoBarras && formData.codigoBarras.trim() !== "") {
@@ -1032,7 +1062,7 @@ export function FormularioProductos({
         precio_compra: precioCompraNum,
         stock: stockNum,
         stock_minimo: stockMinimoNum,
-        idubicacion: idubicacion,
+        ubicaciones: ubicacionesIds,
         categorias: categoriasIds,
         productos_similares: formData.productosSimilares || [],
       };
@@ -1090,6 +1120,161 @@ export function FormularioProductos({
       imagen: "",
       imagenFile: null,
     }));
+  };
+
+  // ============================================
+  // COMPONENTE PARA SELECCIONAR MÚLTIPLES UBICACIONES CON ACCIONES
+  // ============================================
+
+  const UbicacionMultiSelect = () => {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [isOpen, setIsOpen] = useState(false);
+
+    const ubicacionesDisponibles = ubicacionesCompletas.filter(
+      (u) => !(formData.ubicaciones || []).includes(u.idubicacion)
+    );
+
+    const filteredOptions = ubicacionesDisponibles.filter(
+      (u) => u.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const addUbicacion = (ubicacion: typeof ubicacionesCompletas[0]) => {
+      const current = formData.ubicaciones || [];
+      handleInputChange("ubicaciones", [...current, ubicacion.idubicacion]);
+      setSearchTerm("");
+      setIsOpen(false);
+    };
+
+    const removeUbicacion = (id: number) => {
+      const current = formData.ubicaciones || [];
+      handleInputChange("ubicaciones", current.filter((u) => u !== id));
+    };
+
+    const getUbicacionNombre = (id: number) => {
+      const ubicacion = ubicacionesCompletas.find((u) => u.idubicacion === id);
+      return ubicacion ? ubicacion.nombre : `Ubicación ${id}`;
+    };
+
+    const handleEditUbicacionDesdeSelect = (nombre: string) => {
+      setIsOpen(false);
+      handleEditUbicacion(nombre);
+    };
+
+    const handleDeleteUbicacionDesdeSelect = async (nombre: string) => {
+      setIsOpen(false);
+      await handleDeleteUbicacion(nombre);
+    };
+
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-medium">
+            Ubicaciones <span className="text-red-500">*</span>
+          </Label>
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-6 w-6 p-0"
+              onClick={() => openAddDialog("ubicacion")}
+              disabled={isAddingElement}
+              title="Agregar ubicación"
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+        <div className="relative">
+          <Input
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setIsOpen(true);
+            }}
+            onFocus={() => setIsOpen(true)}
+            onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+            placeholder="Buscar ubicaciones..."
+            className="h-8 text-xs"
+          />
+          {isOpen && filteredOptions.length > 0 && (
+            <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-28 overflow-y-auto">
+              {filteredOptions.map((ubicacion) => (
+                <div
+                  key={ubicacion.idubicacion}
+                  className="flex items-center justify-between px-2 py-1 hover:bg-accent"
+                >
+                  <button
+                    type="button"
+                    className="flex-1 text-left text-xs"
+                    onMouseDown={() => addUbicacion(ubicacion)}
+                  >
+                    {ubicacion.nombre}
+                  </button>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditUbicacionDesdeSelect(ubicacion.nombre);
+                      }}
+                      className="p-0.5 hover:text-blue-500 transition-colors"
+                      title="Editar ubicación"
+                    >
+                      <Edit className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteUbicacionDesdeSelect(ubicacion.nombre);
+                      }}
+                      className="p-0.5 hover:text-red-500 transition-colors"
+                      title="Eliminar ubicación"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {(formData.ubicaciones || []).length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {(formData.ubicaciones || []).map((id) => {
+              const ubicacion = ubicacionesCompletas.find(u => u.idubicacion === id);
+              if (!ubicacion) return null;
+              return (
+                <Badge
+                  key={id}
+                  variant="secondary"
+                  className="text-xs px-1.5 py-0 h-5 flex items-center gap-1"
+                >
+                  <span>{ubicacion.nombre}</span>
+                  {/* Solo el botón de eliminar en el badge, sin editar ni eliminar adicionales */}
+                  <button
+                    type="button"
+                    onClick={() => removeUbicacion(id)}
+                    className="hover:text-destructive transition-colors ml-1"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </Badge>
+              );
+            })}
+          </div>
+        )}
+        {ubicacionesCompletas.length === 0 && (
+          <p className="text-[10px] text-amber-500">
+            No hay ubicaciones registradas para esta bodega
+          </p>
+        )}
+        <p className="text-[10px] text-muted-foreground">
+          Selecciona una o más ubicaciones para este producto
+        </p>
+      </div>
+    );
   };
 
   return (
@@ -1176,41 +1361,7 @@ export function FormularioProductos({
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="ubicacion" className="text-xs font-medium">
-                Ubicación <span className="text-red-500">*</span>
-              </Label>
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-6 w-6 p-0"
-                  onClick={() => openAddDialog("ubicacion")}
-                  disabled={isAddingElement}
-                  title="Agregar ubicación"
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-            <SearchSelect
-              options={localLists.ubicaciones}
-              selectedValues={formData.ubicacion ? [formData.ubicacion] : []}
-              onSelectionChange={(values) => {
-                const newValue = values.length > 0 ? values[0] : "";
-                handleInputChange("ubicacion", newValue);
-              }}
-              placeholder="Buscar ubicación..."
-              label=""
-              onEdit={handleEditUbicacion}
-              onDelete={handleDeleteUbicacion}
-              showActions={true}
-              itemType="ubicación"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Ubicaciones de la bodega principal
-            </p>
+            <UbicacionMultiSelect />
           </div>
 
           <div className="space-y-1">

@@ -32,6 +32,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   Plus,
   Search,
@@ -48,6 +49,7 @@ import {
   Building2,
   MapPin,
   Store,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FormularioProductos } from "./FormularioProductos";
@@ -69,9 +71,13 @@ import {
   getUbicaciones as getUbicacionesPorBodega,
   ProductoBodega,
   Sucursal,
+  asignarUbicacionProductoBodega,
+  getUbicacionesByProductoBodega,
 } from "@/api/BodegaApi";
 import {
   createUbicacion,
+  updateUbicacion,
+  deleteUbicacion,
 } from "@/api/ManagementSectionApi";
 
 // ============================================
@@ -680,6 +686,460 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
 }
 
 // ============================================
+// COMPONENTE PARA GESTIÓN DE UBICACIONES EN TRANSFERENCIA
+// ============================================
+
+interface UbicacionManagementDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sucursalId: number | null;
+  sucursalNombre: string;
+  onUbicacionCreada: (ubicacion: { idubicacion: number; nombre: string }) => void;
+  onUbicacionEditada?: () => void;
+  onUbicacionEliminada?: () => void;
+}
+
+function UbicacionManagementDialog({
+  open,
+  onOpenChange,
+  sucursalId,
+  sucursalNombre,
+  onUbicacionCreada,
+  onUbicacionEditada,
+  onUbicacionEliminada,
+}: UbicacionManagementDialogProps) {
+  const [ubicaciones, setUbicaciones] = useState<Array<{ idubicacion: number; nombre: string; estado: number }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editingUbicacion, setEditingUbicacion] = useState<{ id: number; nombre: string } | null>(null);
+  const [formData, setFormData] = useState({ nombre: "" });
+  const [ubicacionToDelete, setUbicacionToDelete] = useState<{ id: number; nombre: string } | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const { toast } = useToast();
+
+  const loadUbicaciones = useCallback(async () => {
+    if (!sucursalId) return;
+    
+    setIsLoading(true);
+    try {
+      const ubicacionesData = await getUbicacionesPorBodega(sucursalId);
+      setUbicaciones(ubicacionesData.map(u => ({
+        idubicacion: u.idubicacion,
+        nombre: u.nombre,
+        estado: u.estado || 0
+      })));
+    } catch (error) {
+      console.error("Error cargando ubicaciones:", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar las ubicaciones",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sucursalId, toast]);
+
+  useEffect(() => {
+    if (open && sucursalId) {
+      loadUbicaciones();
+    }
+  }, [open, sucursalId, loadUbicaciones]);
+
+  // Resetear estados cuando se cierra el diálogo principal
+  useEffect(() => {
+    if (!open) {
+      setIsCreating(false);
+      setIsEditing(false);
+      setIsDeleting(false);
+      setShowCreateDialog(false);
+      setShowEditDialog(false);
+      setFormData({ nombre: "" });
+      setEditingUbicacion(null);
+      setUbicacionToDelete(null);
+    }
+  }, [open]);
+
+  const handleCreate = async () => {
+    if (!formData.nombre.trim()) {
+      toast({
+        title: "Error",
+        description: "El nombre de la ubicación es obligatorio",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!sucursalId) {
+      toast({
+        title: "Error",
+        description: "Primero selecciona una sucursal",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const nuevaUbicacion = await createUbicacion({
+        nombre: formData.nombre.trim(),
+        idbodega: sucursalId,
+      });
+
+      toast({
+        title: "Ubicación creada",
+        description: `La ubicación "${formData.nombre}" ha sido creada en ${sucursalNombre}.`,
+      });
+
+      const nombreCreado = formData.nombre.trim();
+      setFormData({ nombre: "" });
+      setShowCreateDialog(false);
+      setIsCreating(false);
+      await loadUbicaciones();
+      
+      onUbicacionCreada({
+        idubicacion: nuevaUbicacion.id,
+        nombre: nombreCreado,
+      });
+      
+      if (onUbicacionEditada) onUbicacionEditada();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo crear la ubicación",
+        variant: "destructive",
+      });
+      setIsCreating(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!editingUbicacion) return;
+    if (!formData.nombre.trim()) {
+      toast({
+        title: "Error",
+        description: "El nombre de la ubicación es obligatorio",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsEditing(true);
+    try {
+      await updateUbicacion(editingUbicacion.id, {
+        nombre: formData.nombre.trim(),
+        idbodega: sucursalId || undefined,
+      });
+
+      toast({
+        title: "Ubicación actualizada",
+        description: `La ubicación "${formData.nombre}" ha sido actualizada.`,
+      });
+
+      setFormData({ nombre: "" });
+      setEditingUbicacion(null);
+      setShowEditDialog(false);
+      setIsEditing(false);
+      await loadUbicaciones();
+      if (onUbicacionEditada) onUbicacionEditada();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo actualizar la ubicación",
+        variant: "destructive",
+      });
+      setIsEditing(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!ubicacionToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteUbicacion(ubicacionToDelete.id);
+
+      toast({
+        title: "Ubicación eliminada",
+        description: `La ubicación "${ubicacionToDelete.nombre}" ha sido eliminada.`,
+        variant: "destructive",
+      });
+
+      setUbicacionToDelete(null);
+      setIsDeleting(false);
+      await loadUbicaciones();
+      if (onUbicacionEliminada) onUbicacionEliminada();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar la ubicación",
+        variant: "destructive",
+      });
+      setIsDeleting(false);
+    }
+  };
+
+  const openEditModal = (ubicacion: { idubicacion: number; nombre: string }) => {
+    setEditingUbicacion({ id: ubicacion.idubicacion, nombre: ubicacion.nombre });
+    setFormData({ nombre: ubicacion.nombre });
+    setShowEditDialog(true);
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              Gestión de Ubicaciones - {sucursalNombre}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Botón para crear nueva ubicación */}
+            <Button
+              onClick={() => {
+                setFormData({ nombre: "" });
+                setShowCreateDialog(true);
+              }}
+              className="w-full"
+              size="sm"
+              disabled={!sucursalId}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva Ubicación
+            </Button>
+
+            {!sucursalId && (
+              <p className="text-xs text-amber-500 text-center">
+                Selecciona una sucursal primero para gestionar sus ubicaciones
+              </p>
+            )}
+
+            {/* Lista de ubicaciones */}
+            <div className="space-y-2">
+              {isLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : ubicaciones.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4 text-sm">
+                  No hay ubicaciones registradas en esta sucursal
+                </p>
+              ) : (
+                ubicaciones.map((ubicacion) => (
+                  <div
+                    key={ubicacion.idubicacion}
+                    className="flex items-center justify-between p-2 border rounded-lg hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                      <span className="text-sm">{ubicacion.nombre}</span>
+                      <Badge variant={ubicacion.estado === 0 ? "default" : "secondary"} className="text-xs">
+                        {ubicacion.estado === 0 ? "Activa" : "Inactiva"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => openEditModal(ubicacion)}
+                        title="Editar"
+                      >
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 w-6 p-0 border-red-200 hover:border-red-500 hover:bg-red-50"
+                            title="Eliminar"
+                            onClick={() => setUbicacionToDelete({ id: ubicacion.idubicacion, nombre: ubicacion.nombre })}
+                          >
+                            <Trash2 className="h-3 w-3 text-red-500" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Eliminar ubicación?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              ¿Estás seguro de que deseas eliminar la ubicación "{ubicacionToDelete?.nombre}"?
+                              <br />
+                              <span className="text-red-500 font-semibold">Esta acción no se puede deshacer.</span>
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setUbicacionToDelete(null)}>
+                              Cancelar
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDelete}
+                              className="bg-red-500 hover:bg-red-600"
+                              disabled={isDeleting}
+                            >
+                              {isDeleting ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Eliminando...
+                                </>
+                              ) : (
+                                "Eliminar"
+                              )}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para crear ubicación */}
+      <Dialog open={showCreateDialog} onOpenChange={(open) => {
+        if (!open) {
+          setIsCreating(false);
+          setFormData({ nombre: "" });
+        }
+        setShowCreateDialog(open);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Crear Nueva Ubicación</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Nombre de la Ubicación <span className="text-red-500">*</span>
+              </label>
+              <Input
+                placeholder="Ej: Pasillo A, Estante 3"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && formData.nombre.trim()) {
+                    handleCreate();
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Sucursal</label>
+              <div className="p-2 bg-muted rounded-md text-sm font-medium">
+                {sucursalNombre || "Selecciona una sucursal primero"}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowCreateDialog(false);
+                setIsCreating(false);
+                setFormData({ nombre: "" });
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreate}
+              className="bg-primary hover:bg-primary/90"
+              disabled={!formData.nombre.trim() || isCreating || !sucursalId}
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                "Crear Ubicación"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para editar ubicación */}
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        if (!open) {
+          setIsEditing(false);
+          setFormData({ nombre: "" });
+          setEditingUbicacion(null);
+        }
+        setShowEditDialog(open);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Ubicación</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Nombre de la Ubicación <span className="text-red-500">*</span>
+              </label>
+              <Input
+                placeholder="Nombre de la ubicación"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && formData.nombre.trim()) {
+                    handleEdit();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowEditDialog(false);
+                setIsEditing(false);
+                setFormData({ nombre: "" });
+                setEditingUbicacion(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleEdit}
+              className="bg-primary hover:bg-primary/90"
+              disabled={!formData.nombre.trim() || isEditing}
+            >
+              {isEditing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Actualizando...
+                </>
+              ) : (
+                "Actualizar Ubicación"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ============================================
 // COMPONENTE PRINCIPAL BODEGA VIEW
 // ============================================
 
@@ -687,9 +1147,10 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
   const [searchTerm, setSearchTerm] = useState("");
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [isNewSucursalDialogOpen, setIsNewSucursalDialogOpen] = useState(false);
-  const [isNewUbicacionDialogOpen, setIsNewUbicacionDialogOpen] = useState(false);
+  const [isUbicacionManagementOpen, setIsUbicacionManagementOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductoBodega | null>(null);
   const [selectedSucursal, setSelectedSucursal] = useState<string>("");
+  const [selectedSucursalId, setSelectedSucursalId] = useState<number | null>(null);
   const [selectedSucursalUbicacion, setSelectedSucursalUbicacion] = useState<string>("");
   const [cantidadTransferir, setCantidadTransferir] = useState<string>("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -711,11 +1172,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     direccion: "",
     telefono: "",
   });
-  const [newUbicacionData, setNewUbicacionData] = useState({
-    nombre: "",
-  });
   const [isCreatingSucursal, setIsCreatingSucursal] = useState(false);
-  const [isCreatingUbicacion, setIsCreatingUbicacion] = useState(false);
   const [ubicacionesPorSucursal, setUbicacionesPorSucursal] = useState<Array<{ idubicacion: number; nombre: string }>>([]);
   const { toast } = useToast();
 
@@ -730,13 +1187,14 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
 
   const refreshUbicacionesYCategorias = useCallback(async () => {
     try {
-      const bodegaId = 1;
+      const bodegaId = selectedBodega || 1;
       const [ubicacionesData, categoriasData] = await Promise.all([
         getUbicacionesPorBodega(bodegaId),
         getCategorias(),
       ]);
-      setUbicaciones(ubicacionesData.map((item) => item.nombre));
-      setUbicacionesConBodega(ubicacionesData.map((item) => ({
+      const ubicacionesFiltradas = ubicacionesData.filter(u => u.idbodega === bodegaId || u.idbodega === null);
+      setUbicaciones(ubicacionesFiltradas.map((item) => item.nombre));
+      setUbicacionesConBodega(ubicacionesFiltradas.map((item) => ({
         idubicacion: item.idubicacion,
         nombre: item.nombre,
         idbodega: item.idbodega
@@ -745,7 +1203,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     } catch (error) {
       console.error("Error refrescando ubicaciones y categorías:", error);
     }
-  }, []);
+  }, [selectedBodega]);
 
   const loadProductosByBodega = useCallback(async (idbodega: number) => {
     setLoadingAll(true);
@@ -834,6 +1292,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     
     if (bodegaSeleccionada && bodegaSeleccionada.estado === 0) {
       loadProductosByBodega(idbodega);
+      refreshUbicacionesYCategorias();
     } else {
       if (bodegaSeleccionada && bodegaSeleccionada.estado !== 0) {
         toast({
@@ -849,65 +1308,20 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
   const handleTransferir = (product: ProductoBodega) => {
     setSelectedProduct(product);
     setSelectedSucursal("");
+    setSelectedSucursalId(null);
     setSelectedSucursalUbicacion("");
     setCantidadTransferir("");
     setUbicacionesPorSucursal([]);
     setIsTransferDialogOpen(true);
   };
 
-  const handleCrearUbicacionEnTransferencia = async () => {
-    if (!newUbicacionData.nombre.trim()) {
-      toast({
-        title: "Error",
-        description: "El nombre de la ubicación es obligatorio",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const sucursal = sucursales.find(s => s.nombre === selectedSucursal);
-    if (!sucursal) {
-      toast({
-        title: "Error",
-        description: "Primero selecciona una sucursal destino",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsCreatingUbicacion(true);
-    try {
-      await createUbicacion({ 
-        nombre: newUbicacionData.nombre.trim(), 
-        idbodega: sucursal.id 
-      });
-
-      toast({
-        title: "Ubicación creada",
-        description: `La ubicación "${newUbicacionData.nombre}" ha sido creada en ${selectedSucursal}.`,
-      });
-
-      const ubicaciones = await getUbicacionesPorBodega(sucursal.id);
-      setUbicacionesPorSucursal(ubicaciones.map(u => ({
-        idubicacion: u.idubicacion,
-        nombre: u.nombre
-      })));
-      
-      setSelectedSucursalUbicacion(newUbicacionData.nombre.trim());
-      setNewUbicacionData({ nombre: "" });
-      setIsNewUbicacionDialogOpen(false);
-      
-      await refreshUbicacionesYCategorias();
-    } catch (error: any) {
-      console.error("Error creando ubicación:", error);
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo crear la ubicación",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCreatingUbicacion(false);
-    }
+  const handleUbicacionCreada = (ubicacion: { idubicacion: number; nombre: string }) => {
+    setSelectedSucursalUbicacion(ubicacion.nombre);
+    setUbicacionesPorSucursal(prev => [...prev, ubicacion]);
+    toast({
+      title: "Ubicación seleccionada",
+      description: `La ubicación "${ubicacion.nombre}" ha sido seleccionada para la transferencia.`,
+    });
   };
 
   const confirmarTransferencia = async () => {
@@ -962,6 +1376,21 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
         description: `${cantidad} unidades de ${selectedProduct.nombre} enviadas a ${selectedSucursal}`,
       });
 
+      if (selectedSucursalUbicacion) {
+        const ubicacion = ubicacionesPorSucursal.find(u => u.nombre === selectedSucursalUbicacion);
+        if (ubicacion) {
+          try {
+            await asignarUbicacionProductoBodega({
+              idproducto: selectedProduct.id,
+              idbodega: sucursalDestino.id,
+              idubicacion: ubicacion.idubicacion
+            });
+          } catch (error) {
+            console.error("Error asignando ubicación:", error);
+          }
+        }
+      }
+
       if (showAllProducts) {
         await loadAllProductos();
       } else if (selectedBodega) {
@@ -971,6 +1400,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       setIsTransferDialogOpen(false);
       setSelectedProduct(null);
       setSelectedSucursal("");
+      setSelectedSucursalId(null);
       setSelectedSucursalUbicacion("");
       setCantidadTransferir("");
     } catch (error: any) {
@@ -989,16 +1419,17 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       idproducto: product.id,
       nombre: product.nombre || "",
       codigo_barras: product.codigo || "",
-      categorias: product.categoria ? [product.categoria] : [],
+      categorias: product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [],
       stock: product.stock ?? 0,
       ubicacion: product.ubicacion || "",
       precio_venta: product.precio ?? 0,
       precio_compra: product.precio_compra ?? 0,
       stock_minimo: product.stockMinimo ?? 0,
-      idbodega: 1,
+      idbodega: selectedBodega || 1,
       descripcion: product.descripcion || "",
       imagen: product.imagen || "",
       ubicacion_nombre: product.ubicacion || "",
+      ubicaciones: product.ubicaciones?.map(u => u.idubicacion) || [],
     };
 
     setEditingProduct(productData);
@@ -1036,7 +1467,6 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       
       formData.append("nombre", productData.nombre);
       formData.append("descripcion", productData.descripcion || "");
-      formData.append("idubicacion", productData.idubicacion?.toString() || "1");
       formData.append("precio_venta", productData.precio_venta?.toString() || "0");
       formData.append("precio_compra", productData.precio_compra?.toString() || "0");
       formData.append("stock", productData.stock?.toString() || "0");
@@ -1046,7 +1476,18 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
         formData.append("codigo_barras", productData.codigo_barras.trim());
       }
       
-      formData.append("idbodega", "1");
+      const bodegaId = selectedBodega || 1;
+      formData.append("idbodega", bodegaId.toString());
+      
+      if (productData.ubicaciones && productData.ubicaciones.length > 0) {
+        const ubicacionesIds = productData.ubicaciones.map((u: any) => {
+          if (typeof u === 'object' && u !== null) {
+            return u.idubicacion || u.id || u;
+          }
+          return typeof u === 'string' ? parseInt(u) : u;
+        }).filter((id: number) => !isNaN(id));
+        formData.append("ubicaciones", JSON.stringify(ubicacionesIds));
+      }
       
       let categoriasIds: number[] = [];
       if (productData.categorias && productData.categorias.length > 0) {
@@ -1121,15 +1562,16 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     const loadInitialData = async () => {
       setLoading(true);
       try {
-        const bodegaId = 1;
+        const bodegaId = selectedBodega || 1;
         const [ubicacionesData, categoriasData, bodegasData] = await Promise.all([
           getUbicacionesPorBodega(bodegaId),
           getCategorias(),
           getTodasBodegas(),
         ]);
 
-        setUbicaciones(ubicacionesData.map((item) => item.nombre));
-        setUbicacionesConBodega(ubicacionesData.map((item) => ({
+        const ubicacionesFiltradas = ubicacionesData.filter(u => u.idbodega === bodegaId || u.idbodega === null);
+        setUbicaciones(ubicacionesFiltradas.map((item) => item.nombre));
+        setUbicacionesConBodega(ubicacionesFiltradas.map((item) => ({
           idubicacion: item.idubicacion,
           nombre: item.nombre,
           idbodega: item.idbodega
@@ -1239,23 +1681,17 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
 
   useEffect(() => {
     refreshUbicacionesYCategorias();
-  }, [refreshUbicacionesYCategorias]);
+  }, [refreshUbicacionesYCategorias, selectedBodega]);
 
   useEffect(() => {
     const loadUbicacionesSucursal = async () => {
-      if (!selectedSucursal) {
-        setUbicacionesPorSucursal([]);
-        return;
-      }
-      
-      const sucursal = sucursales.find(s => s.nombre === selectedSucursal);
-      if (!sucursal) {
+      if (!selectedSucursalId) {
         setUbicacionesPorSucursal([]);
         return;
       }
 
       try {
-        const ubicaciones = await getUbicacionesPorBodega(sucursal.id);
+        const ubicaciones = await getUbicacionesPorBodega(selectedSucursalId);
         setUbicacionesPorSucursal(ubicaciones.map(u => ({
           idubicacion: u.idubicacion,
           nombre: u.nombre
@@ -1268,7 +1704,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     };
 
     loadUbicacionesSucursal();
-  }, [selectedSucursal, sucursales]);
+  }, [selectedSucursalId]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1320,6 +1756,8 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
     );
   }
 
+  const bodegasActivasParaSelect = bodegas.filter(b => b.estado === 0);
+
   return (
     <div className="space-y-4 md:space-y-6 p-2 md:p-0">
       {/* ============================================
@@ -1336,11 +1774,14 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
             value={selectedBodega || ""}
             onChange={(e) => handleBodegaChange(Number(e.target.value))}
           >
-            {bodegas.map((b) => (
+            {bodegasActivasParaSelect.map((b) => (
               <option key={b.idbodega} value={b.idbodega}>
-                {b.nombre} {b.tipo === 'Principal' ? '⭐' : ''} {b.estado !== 0 ? '(Inactiva)' : ''}
+                {b.nombre} {b.tipo === 'Principal' ? '⭐' : ''}
               </option>
             ))}
+            {bodegasActivasParaSelect.length === 0 && (
+              <option value="">No hay bodegas activas</option>
+            )}
           </select>
 
           <Button
@@ -1394,8 +1835,9 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                     onSubmit={handleFormSubmit}
                     onCancel={handleFormCancel}
                     onRefreshData={refreshUbicacionesYCategorias}
-                    idbodega={1}
+                    idbodega={selectedBodega || 1}
                     ubicacionesConBodega={ubicacionesConBodega}
+                    onUbicacionesChange={refreshUbicacionesYCategorias}
                   />
                 </div>
               </DialogContent>
@@ -1497,7 +1939,6 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
           <div className="block lg:hidden space-y-3 w-full">
             {filteredProducts.map((product) => {
               const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
-              // Obtener todas las categorías del producto
               const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
               
               return (
@@ -1647,7 +2088,6 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                   <TableBody>
                     {filteredProducts.map((product) => {
                       const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
-                      // Obtener todas las categorías del producto
                       const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
                       
                       return (
@@ -1798,6 +2238,11 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
               <p className="text-sm font-medium">Producto</p>
               <p className="text-lg font-semibold text-primary">{selectedProduct?.nombre}</p>
               <p className="text-sm text-muted-foreground">Stock disponible: {selectedProduct?.stock} unidades</p>
+              {selectedProduct?.ubicaciones && selectedProduct.ubicaciones.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ubicaciones actuales: {selectedProduct.ubicaciones.map(u => u.nombre).join(', ')}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1819,7 +2264,12 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
               <select
                 className="w-full p-2 border rounded-md"
                 value={selectedSucursal}
-                onChange={(e) => setSelectedSucursal(e.target.value)}
+                onChange={(e) => {
+                  const nombre = e.target.value;
+                  setSelectedSucursal(nombre);
+                  const sucursal = sucursales.find(s => s.nombre === nombre);
+                  setSelectedSucursalId(sucursal?.id || null);
+                }}
               >
                 <option value="">Seleccionar sucursal...</option>
                 {sucursales
@@ -1836,17 +2286,19 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">Ubicación en la sucursal</label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setIsNewUbicacionDialogOpen(true);
-                    }}
-                    className="h-7 text-xs"
-                  >
-                    <MapPin className="h-3 w-3 mr-1" />
-                    Nueva Ubicación
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsUbicacionManagementOpen(true);
+                      }}
+                      className="h-7 text-xs"
+                    >
+                      <MapPin className="h-3 w-3 mr-1" />
+                      Gestionar
+                    </Button>
+                  </div>
                 </div>
                 <select
                   className="w-full p-2 border rounded-md"
@@ -1861,10 +2313,13 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                   ))}
                 </select>
                 {ubicacionesPorSucursal.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-amber-500">
                     Esta sucursal no tiene ubicaciones registradas
                   </p>
                 )}
+                <p className="text-[10px] text-muted-foreground">
+                  Haz clic en "Gestionar" para crear, editar o eliminar ubicaciones
+                </p>
               </div>
             )}
 
@@ -1905,69 +2360,35 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       </Dialog>
 
       {/* ============================================
-      DIALOG PARA CREAR NUEVA UBICACIÓN (desde transferencia)
+      DIALOG PARA GESTIÓN DE UBICACIONES (desde transferencia)
       ============================================ */}
-      <Dialog open={isNewUbicacionDialogOpen} onOpenChange={setIsNewUbicacionDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5" />
-              Crear Nueva Ubicación
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Nombre de la Ubicación <span className="text-red-500">*</span>
-              </label>
-              <Input
-                placeholder="Ej: Pasillo A, Estante 3"
-                value={newUbicacionData.nombre}
-                onChange={(e) => setNewUbicacionData({ ...newUbicacionData, nombre: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Sucursal</label>
-              <div className="p-2 bg-muted rounded-md text-sm font-medium">
-                {selectedSucursal || "Selecciona una sucursal primero"}
-              </div>
-              {!selectedSucursal && (
-                <p className="text-xs text-red-500">
-                  Debes seleccionar una sucursal destino antes de crear una ubicación
-                </p>
-              )}
-            </div>
-            <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
-              <p>La ubicación se creará en la sucursal seleccionada y estará activa por defecto.</p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsNewUbicacionDialogOpen(false);
-                setNewUbicacionData({ nombre: "" });
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleCrearUbicacionEnTransferencia}
-              className="bg-primary hover:bg-primary/90"
-              disabled={!newUbicacionData.nombre.trim() || !selectedSucursal || isCreatingUbicacion}
-            >
-              {isCreatingUbicacion ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creando...
-                </>
-              ) : (
-                'Crear Ubicación'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <UbicacionManagementDialog
+        open={isUbicacionManagementOpen}
+        onOpenChange={setIsUbicacionManagementOpen}
+        sucursalId={selectedSucursalId}
+        sucursalNombre={selectedSucursal || "Sucursal"}
+        onUbicacionCreada={handleUbicacionCreada}
+        onUbicacionEditada={() => {
+          if (selectedSucursalId) {
+            getUbicacionesPorBodega(selectedSucursalId).then(ubicaciones => {
+              setUbicacionesPorSucursal(ubicaciones.map(u => ({
+                idubicacion: u.idubicacion,
+                nombre: u.nombre
+              })));
+            });
+          }
+        }}
+        onUbicacionEliminada={() => {
+          if (selectedSucursalId) {
+            getUbicacionesPorBodega(selectedSucursalId).then(ubicaciones => {
+              setUbicacionesPorSucursal(ubicaciones.map(u => ({
+                idubicacion: u.idubicacion,
+                nombre: u.nombre
+              })));
+            });
+          }
+        }}
+      />
 
       {/* ============================================
       DIALOG PARA CREAR NUEVA SUCURSAL (desde transferencia)
