@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -18,31 +17,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus,
-  Search,
-  Edit,
   Package,
-  Trash2,
   Eye,
   ChevronLeft,
   ChevronRight,
   Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { FormularioProductos } from "./FormularioProductos";
 import {
   getUbicaciones,
   getCategorias,
@@ -185,10 +168,8 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function ProductosView() {
-  const [isFormOpen, setIsFormOpen] = useState(false);
   const [isStockFormOpen, setIsStockFormOpen] = useState(false);
   const [showAllProducts, setShowAllProducts] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
   const [currentStockProduct, setCurrentStockProduct] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [products, setProducts] = useState<Producto[]>([]);
@@ -197,8 +178,8 @@ export function ProductosView() {
   const [searching, setSearching] = useState(false);
 
   // Estados para las opciones desde la API
-  const [ubicaciones, setUbicaciones] = useState<string[]>([]);
-  const [categorias, setCategorias] = useState<string[]>([]);
+  const [ubicaciones, setUbicaciones] = useState<{idubicacion: number; nombre: string}[]>([]);
+  const [categorias, setCategorias] = useState<{idcategoria: number; nombre: string}[]>([]);
 
   const userRole = localStorage.getItem("userRole") || "admin";
   const isAssistant = userRole === "Asistente";
@@ -223,8 +204,14 @@ export function ProductosView() {
           getCategorias(),
         ]);
 
-        setUbicaciones(ubicacionesData.map((item) => item.nombre));
-        setCategorias(categoriasData.map((item) => item.nombre));
+        setUbicaciones(ubicacionesData.map((item) => ({
+          idubicacion: item.idubicacion,
+          nombre: item.nombre
+        })));
+        setCategorias(categoriasData.map((item) => ({
+          idcategoria: item.idcategoria,
+          nombre: item.nombre
+        })));
       } catch (error) {
         console.error("Error cargando datos básicos:", error);
         toast({
@@ -304,12 +291,6 @@ export function ProductosView() {
     }
   };
 
-  const handleEdit = (product: Producto) => {
-    if (isAssistant) return;
-    setEditingProduct(product);
-    setIsFormOpen(true);
-  };
-
   const handleIncreaseStock = (product: Producto) => {
     setCurrentStockProduct(product);
     setStockFormData({
@@ -361,67 +342,6 @@ export function ProductosView() {
     }
   };
 
-  const handleDelete = async (productId: number, productName: string) => {
-    if (isAssistant) return;
-
-    try {
-      await deleteProducto(productId);
-      toast({
-        title: "Producto eliminado",
-        description: `${productName} ha sido eliminado.`,
-        variant: "destructive",
-      });
-
-      // Recargar productos
-      if (showAllProducts) {
-        const allProducts = await getAllProductos();
-        setProducts(allProducts);
-      } else if (searchTerm.trim().length >= 2) {
-        const results = await buscarProductos(searchTerm);
-        setProducts(results);
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar el producto",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleFormSubmit = async (productData: any, isEditing: boolean) => {
-    try {
-      const action = isEditing ? "editado" : "agregado";
-      toast({
-        title: `Producto ${action}`,
-        description: `${productData.nombre} ha sido ${action} exitosamente.`,
-      });
-
-      // Recargar productos
-      if (showAllProducts) {
-        const allProducts = await getAllProductos();
-        setProducts(allProducts);
-      } else if (searchTerm.trim().length >= 2) {
-        const results = await buscarProductos(searchTerm);
-        setProducts(results);
-      }
-
-      setEditingProduct(null);
-      setIsFormOpen(false);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: `No se pudo ${isEditing ? "editar" : "agregar"} el producto`,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleFormCancel = () => {
-    setIsFormOpen(false);
-    setEditingProduct(null);
-  };
-
   const getTotalStock = (producto: Producto): number => {
     return producto.stock || 0;
   };
@@ -440,43 +360,6 @@ export function ProductosView() {
         <h1 className="text-2xl md:text-3xl font-bold text-primary">
           {isAssistant ? "Visualización de Productos" : "Gestión de Productos"}
         </h1>
-        {!isAssistant && (
-          <Dialog
-            open={isFormOpen}
-            onOpenChange={(open) => {
-              setIsFormOpen(open);
-              if (!open) {
-                handleFormCancel();
-              }
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90 w-full md:w-auto flex-shrink-0">
-                <Plus className="mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Agregar Producto</span>
-                <span className="sm:hidden">Agregar</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0">
-              <DialogHeader className="px-6 pt-6">
-                <DialogTitle>
-                  {editingProduct
-                    ? "Editar Producto"
-                    : "Agregar Nuevo Producto"}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="px-6 pb-6">
-                <FormularioProductos
-                  product={editingProduct}
-                  ubicaciones={ubicaciones}
-                  categorias={categorias}
-                  onSubmit={handleFormSubmit}
-                  onCancel={handleFormCancel}
-                />
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
       </div>
 
       {/* Dialog para aumentar stock */}
@@ -569,7 +452,6 @@ export function ProductosView() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar productos por nombre, categoría, código de barras o tipo... (mín. 2 caracteres)"
               value={searchTerm}

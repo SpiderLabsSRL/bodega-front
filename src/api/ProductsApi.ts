@@ -1,4 +1,5 @@
 import axios from "axios";
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 // Interfaces para las tablas maestras
@@ -20,8 +21,11 @@ interface BackendProducto {
   nombre: string;
   descripcion: string;
   estado: number;
-  ubicacion_nombre: string;
-  idubicacion: number;
+  ubicaciones: Array<{
+    idubicacion: number;
+    nombre: string;
+    idbodega: number;
+  }>;
   categorias: string[];
   imagen: string;
   precio_venta: string;
@@ -39,8 +43,11 @@ export interface Producto {
   idproducto: number;
   nombre: string;
   descripcion: string;
-  idubicacion: number;
-  ubicacion_nombre: string;
+  ubicaciones: Array<{
+    idubicacion: number;
+    nombre: string;
+    idbodega: number;
+  }>;
   ubicacion: string;
   categorias: string[];
   estado: number;
@@ -54,20 +61,6 @@ export interface Producto {
     idproducto: number;
     nombre: string;
   }>;
-}
-
-export interface ProductoRequest {
-  nombre: string;
-  descripcion: string;
-  idubicacion: number;
-  categorias: number[];
-  imagen?: File | string | null;
-  precio_venta: string;
-  precio_compra: string;
-  stock: number;
-  stock_minimo?: number;
-  codigo_barras?: string | null;
-  productos_similares?: number[];
 }
 
 const api = axios.create({
@@ -144,7 +137,6 @@ export const buscarProductos = async (termino: string): Promise<Producto[]> => {
   }
 };
 
-// Obtener todos los productos (filtrados por bodega)
 export const getAllProductos = async (): Promise<Producto[]> => {
   try {
     const idbodega = getUserBodega();
@@ -157,7 +149,6 @@ export const getAllProductos = async (): Promise<Producto[]> => {
   }
 };
 
-// Función original getProductos
 export const getProductos = async (
   searchTerm?: string,
 ): Promise<Producto[]> => {
@@ -184,53 +175,6 @@ export const getProductoById = async (id: number): Promise<Producto> => {
   }
 };
 
-export const createProducto = async (formData: FormData): Promise<Producto> => {
-  try {
-    const idbodega = getUserBodega();
-    if (idbodega) {
-      formData.append("idbodega", idbodega.toString());
-    }
-
-    const response = await api.post<BackendProducto>("/productos", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
-
-    return mapBackendProducto(response.data);
-  } catch (error) {
-    console.error("Error creating producto:", error);
-    throw new Error("No se pudo crear el producto");
-  }
-};
-
-export const updateProducto = async (
-  id: number,
-  formData: FormData,
-): Promise<Producto> => {
-  try {
-    const idbodega = getUserBodega();
-    if (idbodega) {
-      formData.append("idbodega", idbodega.toString());
-    }
-
-    const response = await api.put<BackendProducto>(
-      `/productos/${id}`,
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      },
-    );
-
-    return mapBackendProducto(response.data);
-  } catch (error) {
-    console.error("Error updating producto:", error);
-    throw new Error("No se pudo actualizar el producto");
-  }
-};
-
 export const deleteProducto = async (id: number): Promise<void> => {
   try {
     await api.delete(`/productos/${id}`);
@@ -246,14 +190,15 @@ export const updateStockProducto = async (
 ): Promise<Producto> => {
   try {
     const idbodega = getUserBodega();
-    const url = idbodega 
-      ? `/productos/${idproducto}/stock?bodega=${idbodega}`
-      : `/productos/${idproducto}/stock`;
+    if (!idbodega) {
+      throw new Error("No se pudo obtener la bodega del usuario");
+    }
     
     const response = await api.patch<BackendProducto>(
-      url,
+      `/productos/${idproducto}/stock`,
       {
         cantidad,
+        idbodega,
       },
     );
     return mapBackendProducto(response.data);
@@ -265,20 +210,22 @@ export const updateStockProducto = async (
 
 // Mapeadores
 function mapBackendProducto(producto: BackendProducto): Producto {
+  const ubicaciones = producto.ubicaciones || [];
+  const ubicacionNombre = ubicaciones.length > 0 ? ubicaciones[0].nombre : "Sin ubicación";
+  
   return {
     idproducto: producto.idproducto,
     nombre: producto.nombre,
     descripcion: producto.descripcion,
-    idubicacion: producto.idubicacion,
-    ubicacion: producto.ubicacion_nombre || "Sin ubicación",
+    ubicaciones: ubicaciones,
+    ubicacion: ubicacionNombre,
     estado: producto.estado,
-    categorias: producto.categorias,
-    ubicacion_nombre: producto.ubicacion_nombre,
+    categorias: producto.categorias || [],
     imagen: producto.imagen,
     precio_venta: producto.precio_venta,
     precio_compra: producto.precio_compra,
-    stock: producto.stock,
-    stock_minimo: producto.stock_minimo,
+    stock: producto.stock || 0,
+    stock_minimo: producto.stock_minimo || 0,
     codigo_barras: producto.codigo_barras,
     productos_similares: producto.productos_similares || [],
   };
