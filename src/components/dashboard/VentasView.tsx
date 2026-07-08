@@ -206,8 +206,16 @@ export function VentasView() {
       let totalesData: TotalesVentas = { totalGeneral: 0, totalEfectivo: 0, totalQR: 0 };
 
       if (isAssistant) {
-        // Para asistentes: solo sus ventas de hoy
-        ventas = await getVentasHoyAsistente(username);
+        // Para asistentes: obtener ventas con filtros de fecha
+        const filtros: VentasFiltros = {
+          empleado: username,
+          metodo: filtroMetodo !== "Todos" ? filtroMetodo : undefined,
+          fechaEspecifica: fechaBusqueda,
+          fechaInicio: fechaRangoAplicado.from,
+          fechaFin: fechaRangoAplicado.to
+        };
+        
+        ventas = await getVentas(filtros);
         
         // Calcular totales para asistentes
         const totalGeneral = ventas.reduce((sum, venta) => sum + venta.total, 0);
@@ -459,14 +467,15 @@ export function VentasView() {
         </Card>
       </div>
 
-      {/* Filtros - Solo para Admin */}
-      {!isAssistant && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle>Filtros</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+      {/* Filtros - Admin ve todos los filtros, Asistente solo ve filtros de fecha y método */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            {/* Filtro de Empleado - Solo visible para Admin */}
+            {!isAssistant && (
               <div>
                 <label className="text-sm font-medium">Empleado</label>
                 <Select value={filtroEmpleado} onValueChange={setFiltroEmpleado}>
@@ -482,21 +491,25 @@ export function VentasView() {
                   </SelectContent>
                 </Select>
               </div>
+            )}
 
-              <div>
-                <label className="text-sm font-medium">Método de Pago</label>
-                <Select value={filtroMetodo} onValueChange={setFiltroMetodo}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    <SelectItem value="Efectivo">Efectivo</SelectItem>
-                    <SelectItem value="QR">QR</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            {/* Filtro de Método - Visible para TODOS */}
+            <div>
+              <label className="text-sm font-medium">Método de Pago</label>
+              <Select value={filtroMetodo} onValueChange={setFiltroMetodo}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Todos">Todos</SelectItem>
+                  <SelectItem value="Efectivo">Efectivo</SelectItem>
+                  <SelectItem value="QR">QR</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
+            {/* Filtro de Sucursal - Solo visible para Admin */}
+            {!isAssistant && (
               <div>
                 <label className="text-sm font-medium">Sucursal</label>
                 <Select 
@@ -516,137 +529,128 @@ export function VentasView() {
                   </SelectContent>
                 </Select>
               </div>
+            )}
 
-              <div>
-                <label className="text-sm font-medium">Fecha Específica</label>
-                <Popover open={mostrarCalendario} onOpenChange={setMostrarCalendario}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {fechaBusqueda ? format(fechaBusqueda, "dd/MM/yyyy", { locale: es }) : "Seleccionar"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
+            {/* Filtros de fecha - Visibles para TODOS */}
+            <div>
+              <label className="text-sm font-medium">Fecha Específica</label>
+              <Popover open={mostrarCalendario} onOpenChange={setMostrarCalendario}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {fechaBusqueda ? format(fechaBusqueda, "dd/MM/yyyy", { locale: es }) : "Seleccionar"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={fechaBusqueda}
+                    onSelect={handleFechaBusquedaChange}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                    disabled={(date) => date > new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Rango de Fechas</label>
+              <Popover open={mostrarRango} onOpenChange={setMostrarRango}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarRangeIcon className="mr-2 h-4 w-4" />
+                    {fechaRangoAplicado.from && fechaRangoAplicado.to ? 
+                      `${format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - ${format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}` : 
+                      "Seleccionar rango"
+                    }
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="flex flex-col">
                     <Calendar
-                      mode="single"
-                      selected={fechaBusqueda}
-                      onSelect={handleFechaBusquedaChange}
-                      initialFocus
+                      mode="range"
+                      selected={fechaRangoTemp}
+                      onSelect={handleRangoTempChange}
+                      numberOfMonths={1}
                       className="p-3 pointer-events-auto"
                       disabled={(date) => date > new Date()}
                     />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Rango de Fechas</label>
-                <Popover open={mostrarRango} onOpenChange={setMostrarRango}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal">
-                      <CalendarRangeIcon className="mr-2 h-4 w-4" />
-                      {fechaRangoAplicado.from && fechaRangoAplicado.to ? 
-                        `${format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - ${format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}` : 
-                        "Seleccionar rango"
-                      }
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <div className="flex flex-col">
-                      <Calendar
-                        mode="range"
-                        selected={fechaRangoTemp}
-                        onSelect={handleRangoTempChange}
-                        numberOfMonths={1}
-                        className="p-3 pointer-events-auto"
-                        disabled={(date) => date > new Date()}
-                      />
-                      <div className="flex justify-end gap-2 p-3 border-t">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={cancelarRangoFechas}
-                          disabled={!fechaRangoTemp.from && !fechaRangoTemp.to}
-                        >
-                          <X className="h-4 w-4 mr-1" />
-                          Cancelar
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={aplicarRangoFechas}
-                          disabled={!fechaRangoTemp.from || !fechaRangoTemp.to}
-                        >
-                          <Check className="h-4 w-4 mr-1" />
-                          Aplicar
-                        </Button>
-                      </div>
+                    <div className="flex justify-end gap-2 p-3 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={cancelarRangoFechas}
+                        disabled={!fechaRangoTemp.from && !fechaRangoTemp.to}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Cancelar
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={aplicarRangoFechas}
+                        disabled={!fechaRangoTemp.from || !fechaRangoTemp.to}
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        Aplicar
+                      </Button>
                     </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="flex items-end">
-                <Button variant="outline" onClick={limpiarFiltros} className="w-full">
-                  Limpiar Filtros
-                </Button>
-              </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
-            
-            {/* Indicador de filtros activos */}
-            <div className="mt-4 pt-4 border-t">
-              <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
-                <span>Filtros activos:</span>
-                {fechaBusqueda && (
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                    Fecha: {format(fechaBusqueda, "dd/MM/yyyy", { locale: es })}
-                  </span>
-                )}
-                {fechaRangoAplicado.from && fechaRangoAplicado.to && (
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                    Rango: {format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - {format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}
-                  </span>
-                )}
-                {filtroEmpleado !== "Todos" && (
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                    Empleado: {empleadosOptions.find(e => e.value === filtroEmpleado)?.label}
-                  </span>
-                )}
-                {filtroMetodo !== "Todos" && (
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                    Método: {filtroMetodo}
-                  </span>
-                )}
-                {filtroBodega !== "todos" && (
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
-                    Sucursal: {bodegasOptions.find(b => b.value === filtroBodega)?.label}
-                  </span>
-                )}
-                {!fechaBusqueda && !fechaRangoAplicado.from && !fechaRangoAplicado.to && filtroEmpleado === "Todos" && filtroMetodo === "Todos" && filtroBodega === "todos" && (
-                  <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded">
-                    Ventas de hoy - Todas las sucursales
-                  </span>
-                )}
-                {!fechaBusqueda && !fechaRangoAplicado.from && !fechaRangoAplicado.to && filtroEmpleado === "Todos" && filtroMetodo === "Todos" && filtroBodega !== "todos" && (
-                  <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded">
-                    Ventas de hoy - {bodegasOptions.find(b => b.value === filtroBodega)?.label}
-                  </span>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Información para asistentes */}
+            <div className="flex items-end">
+              <Button variant="outline" onClick={limpiarFiltros} className="w-full">
+                Limpiar Filtros
+              </Button>
+            </div>
+          </div>
+          
+          {/* Indicador de filtros activos */}
+          <div className="mt-4 pt-4 border-t">
+            <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
+              <span>Filtros activos:</span>
+              {fechaBusqueda && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Fecha: {format(fechaBusqueda, "dd/MM/yyyy", { locale: es })}
+                </span>
+              )}
+              {fechaRangoAplicado.from && fechaRangoAplicado.to && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Rango: {format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - {format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}
+                </span>
+              )}
+              {!isAssistant && filtroEmpleado !== "Todos" && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Empleado: {empleadosOptions.find(e => e.value === filtroEmpleado)?.label}
+                </span>
+              )}
+              {filtroMetodo !== "Todos" && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Método: {filtroMetodo}
+                </span>
+              )}
+              {!isAssistant && filtroBodega !== "todos" && (
+                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
+                  Sucursal: {bodegasOptions.find(b => b.value === filtroBodega)?.label}
+                </span>
+              )}
+              {!fechaBusqueda && !fechaRangoAplicado.from && !fechaRangoAplicado.to && filtroMetodo === "Todos" && (
+                <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded">
+                  {isAssistant ? 'Tus ventas' : 'Todas las ventas'}
+                </span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Información para asistentes - Se mantiene pero ahora con los filtros de fecha */}
       {isAssistant && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center text-muted-foreground">
-              <p className="text-lg font-medium">Mostrando tus ventas de hoy</p>
-              <p className="text-sm">{formatDateForDisplay(fechaBoliviaHoy)}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="text-xs text-muted-foreground -mt-4">
+          <p>Mostrando tus ventas con los filtros aplicados</p>
+        </div>
       )}
 
       {/* Tabla de ventas */}
@@ -693,9 +697,9 @@ export function VentasView() {
                             {fechaBusqueda && `Para la fecha: ${format(fechaBusqueda, "dd/MM/yyyy", { locale: es })}`}
                             {fechaRangoAplicado.from && fechaRangoAplicado.to && 
                               `En el rango: ${format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - ${format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}`}
-                            {filtroEmpleado !== "Todos" && ` - Empleado: ${empleadosOptions.find(e => e.value === filtroEmpleado)?.label}`}
+                            {!isAssistant && filtroEmpleado !== "Todos" && ` - Empleado: ${empleadosOptions.find(e => e.value === filtroEmpleado)?.label}`}
                             {filtroMetodo !== "Todos" && ` - Método: ${filtroMetodo}`}
-                            {filtroBodega !== "todos" && ` - Sucursal: ${bodegasOptions.find(b => b.value === filtroBodega)?.label}`}
+                            {!isAssistant && filtroBodega !== "todos" && ` - Sucursal: ${bodegasOptions.find(b => b.value === filtroBodega)?.label}`}
                           </p>
                         </div>
                       </TableCell>

@@ -11,6 +11,7 @@ import {
   Clock,
   Warehouse,
   User,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -82,6 +83,18 @@ const menuItems = [
     title: "Clientes",
     url: "clientes",
     icon: User,
+    roles: ["admin", "asistente"],
+  },
+  {
+    title: "Caja",
+    url: "caja",
+    icon: CreditCard,
+    roles: ["admin", "asistente"],
+  },
+  {
+    title: "Transferencias",
+    url: "transferencias",
+    icon: ArrowLeftRight,
     roles: ["admin", "asistente"],
   },
   {

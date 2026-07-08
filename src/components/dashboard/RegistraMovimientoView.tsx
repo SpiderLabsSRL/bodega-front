@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// src/components/dashboard/RegistraMovimientoView.tsx
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,110 +8,198 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, Wallet, CheckCircle, XCircle, History } from "lucide-react";
-import { getCashStatus, createTransaction, openCash, closeCash, getUserTransactions, Transaction } from "@/api/CashApi";
+import { DollarSign, Wallet, CheckCircle, XCircle, Building2 } from "lucide-react";
 
-export function RegistraMovimientoView() {
-  const [tipo, setTipo] = useState<string>("");
+// Datos mock de usuarios Admin
+const MOCK_ADMIN_USERS = [
+  { id: 1, nombre: "Admin Principal", usuario: "admin1" },
+  { id: 2, nombre: "Admin Secundario", usuario: "admin2" },
+  { id: 3, nombre: "Super Admin", usuario: "superadmin" },
+];
+
+// Tipos de caja
+type TipoCaja = "Efectivo" | "QR" | "";
+
+interface RegistraMovimientoViewProps {
+  onClose?: () => void;
+}
+
+export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps) {
+  // Estado para el paso de selección de tipo de caja (SIEMPRE empieza aquí)
+  const [pasoSeleccionCaja, setPasoSeleccionCaja] = useState<boolean>(true);
+  const [tipoCaja, setTipoCaja] = useState<TipoCaja>("");
+  const [tipoMovimiento, setTipoMovimiento] = useState<string>("");
   const [monto, setMonto] = useState<string>("");
   const [descripcion, setDescripcion] = useState<string>("");
+  const [usuarioTransferencia, setUsuarioTransferencia] = useState<string>("");
+  const [saldoActual, setSaldoActual] = useState<number>(1500);
   const [cajaAbierta, setCajaAbierta] = useState<boolean>(false);
-  const [saldoActual, setSaldoActual] = useState<number>(0);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   const [processing, setProcessing] = useState<boolean>(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadCashData();
-  }, []);
+  // Determinar las opciones de movimiento según el tipo de caja y estado
+  const getMovimientoOptions = () => {
+    if (tipoCaja === "Efectivo") {
+      // Si la caja está cerrada: SOLO Apertura
+      if (!cajaAbierta) {
+        return [{ value: "Apertura", label: "Apertura" }];
+      }
+      // Si la caja está abierta: Ingreso, Egreso, Transferencia, Cierre
+      return [
+        { value: "Ingreso", label: "Ingreso" },
+        { value: "Egreso", label: "Egreso" },
+        { value: "Transferencia", label: "Transferencia" },
+        { value: "Cierre", label: "Cierre" },
+      ];
+    } else if (tipoCaja === "QR") {
+      // Para QR: siempre Ingreso, Egreso y Transferencia
+      return [
+        { value: "Ingreso", label: "Ingreso" },
+        { value: "Egreso", label: "Egreso" },
+        { value: "Transferencia", label: "Transferencia" },
+      ];
+    }
+    return [];
+  };
 
-  const loadCashData = async () => {
-    try {
-      setLoading(true);
-      const [status, userTransactions] = await Promise.all([
-        getCashStatus(),
-        getUserTransactions()
-      ]);
-      
-      setCajaAbierta(status.estado === "abierta");
-      setSaldoActual(parseFloat(status.monto_final));
-      setTransactions(userTransactions);
-    } catch (error) {
-      console.error("Error loading cash data:", error);
-      // Usar valores por defecto en caso de error
-      setCajaAbierta(false);
-      setSaldoActual(0);
-      setTransactions([]);
-    } finally {
-      setLoading(false);
+  const getTipoTexto = (tipo: string) => {
+    const tipoTextos: { [key: string]: string } = {
+      "Ingreso": "Ingreso",
+      "Egreso": "Egreso", 
+      "Apertura": "Apertura de caja",
+      "Cierre": "Cierre de caja",
+      "Transferencia": "Transferencia"
+    };
+    return tipoTextos[tipo] || tipo;
+  };
+
+  // Cuando se selecciona Apertura, se pone automáticamente el saldo actual
+  // Cuando se selecciona Cierre, se pone automáticamente el saldo actual
+  const handleTipoMovimientoChange = (value: string) => {
+    setTipoMovimiento(value);
+    if (value === "Apertura" || value === "Cierre") {
+      setMonto(saldoActual.toString());
+    } else {
+      setMonto("");
     }
   };
 
   const handleSubmit = async () => {
-    if (processing) return; // Prevenir doble ejecución
+    if (processing) return;
     
     setProcessing(true);
     
     try {
-      if (!tipo) {
+      // Validaciones según el tipo de movimiento
+      if (!tipoMovimiento) {
         toast({
           title: "Error",
           description: "Por favor selecciona el tipo de movimiento",
           variant: "destructive",
         });
+        setProcessing(false);
         return;
       }
 
-      if (tipo === "Apertura" && !monto) {
+      // Validar monto
+      if (!monto) {
         toast({
           title: "Error",
-          description: "Por favor ingresa el monto inicial para abrir la caja",
+          description: "Por favor ingresa el monto",
           variant: "destructive",
         });
+        setProcessing(false);
         return;
       }
 
-      if ((tipo === "Ingreso" || tipo === "Egreso") && (!monto || !descripcion)) {
+      // Validar descripción para Ingreso, Egreso y Transferencia
+      if ((tipoMovimiento === "Ingreso" || tipoMovimiento === "Egreso" || tipoMovimiento === "Transferencia") && !descripcion) {
         toast({
-          title: "Error", 
-          description: "Por favor completa monto y descripción para ingresos y egresos",
+          title: "Error",
+          description: "Por favor ingresa una descripción",
           variant: "destructive",
         });
+        setProcessing(false);
         return;
       }
 
-      if (tipo === "Apertura") {
-        await openCash(parseFloat(monto));
+      // Validar usuario para Transferencia
+      if (tipoMovimiento === "Transferencia" && !usuarioTransferencia) {
+        toast({
+          title: "Error",
+          description: "Por favor selecciona el usuario destino para la transferencia",
+          variant: "destructive",
+        });
+        setProcessing(false);
+        return;
+      }
+
+      // Simular la operación con datos mock
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      if (tipoMovimiento === "Apertura") {
+        setCajaAbierta(true);
+        setSaldoActual(parseFloat(monto));
         toast({
           title: "Caja abierta",
-          description: `Caja abierta con monto inicial de ${monto} Bs correctamente`,
+          description: `Caja de ${tipoCaja} abierta con monto inicial de ${monto} Bs correctamente`,
         });
-      } else if (tipo === "Cierre") {
-        await closeCash();
+        // Limpiar y volver a selección de caja para que el usuario pueda elegir otra acción
+        setTipoMovimiento("");
+        setMonto("");
+        setDescripcion("");
+        setUsuarioTransferencia("");
+      } else if (tipoMovimiento === "Cierre") {
+        setCajaAbierta(false);
         toast({
           title: "Caja cerrada",
-          description: `Caja cerrada con saldo final de ${saldoActual.toFixed(2)} Bs correctamente`,
+          description: `Caja de ${tipoCaja} cerrada con saldo final de ${saldoActual.toFixed(2)} Bs correctamente`,
         });
-      } else {
-        await createTransaction({
-          tipoMovimiento: tipo,
-          descripcion,
-          monto: parseFloat(monto)
-        });
+        // Limpiar y volver a selección de caja
+        setTipoMovimiento("");
+        setMonto("");
+        setDescripcion("");
+        setUsuarioTransferencia("");
+        // Volver a la selección de tipo de caja
+        setTipoCaja("");
+        setPasoSeleccionCaja(true);
+      } else if (tipoMovimiento === "Transferencia") {
+        const usuario = MOCK_ADMIN_USERS.find(u => u.usuario === usuarioTransferencia);
         toast({
-          title: "Movimiento registrado",
-          description: `${getTipoTexto(tipo)} de ${monto} Bs registrado correctamente`,
+          title: "Transferencia registrada",
+          description: `Transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} registrada correctamente en caja de ${tipoCaja}`,
         });
+        // Limpiar campos para seguir registrando
+        setTipoMovimiento("");
+        setMonto("");
+        setDescripcion("");
+        setUsuarioTransferencia("");
+      } else if (tipoMovimiento === "Ingreso") {
+        const nuevoSaldo = saldoActual + parseFloat(monto);
+        setSaldoActual(nuevoSaldo);
+        toast({
+          title: "Ingreso registrado",
+          description: `Ingreso de ${monto} Bs registrado correctamente en caja de ${tipoCaja}`,
+        });
+        // Limpiar campos para seguir registrando
+        setTipoMovimiento("");
+        setMonto("");
+        setDescripcion("");
+        setUsuarioTransferencia("");
+      } else if (tipoMovimiento === "Egreso") {
+        const nuevoSaldo = saldoActual - parseFloat(monto);
+        setSaldoActual(nuevoSaldo);
+        toast({
+          title: "Egreso registrado",
+          description: `Egreso de ${monto} Bs registrado correctamente en caja de ${tipoCaja}`,
+        });
+        // Limpiar campos para seguir registrando
+        setTipoMovimiento("");
+        setMonto("");
+        setDescripcion("");
+        setUsuarioTransferencia("");
       }
 
-      // Recargar datos
-      await loadCashData();
-      
-      // Limpiar formulario
-      setTipo("");
-      setMonto("");
-      setDescripcion("");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -122,326 +211,330 @@ export function RegistraMovimientoView() {
     }
   };
 
-  const getTipoTexto = (tipo: string) => {
-    const tipoTextos: { [key: string]: string } = {
-      "Ingreso": "Ingreso",
-      "Egreso": "Egreso", 
-      "Apertura": "Apertura de caja",
-      "Cierre": "Cierre de caja"
-    };
-    return tipoTextos[tipo] || tipo;
-  };
-
   const requiredFields = () => {
-    if (tipo === "Apertura") {
+    if (tipoMovimiento === "Apertura" || tipoMovimiento === "Cierre") {
       return !!monto;
-    } else if (tipo === "Cierre") {
-      return true; // Cierre no requiere monto del frontend
-    } else if (tipo === "Ingreso" || tipo === "Egreso") {
+    } else if (tipoMovimiento === "Transferencia") {
+      return !!monto && !!descripcion && !!usuarioTransferencia;
+    } else if (tipoMovimiento === "Ingreso" || tipoMovimiento === "Egreso") {
       return !!monto && !!descripcion;
     }
     return false;
   };
 
   const getDescripcionPlaceholder = () => {
-    switch (tipo) {
+    switch (tipoMovimiento) {
       case "Apertura":
-        return "Apertura de caja automática";
+        return `Apertura de caja de ${tipoCaja}`;
       case "Cierre":
-        return "Cierre de caja automática";
+        return `Cierre de caja de ${tipoCaja}`;
+      case "Transferencia":
+        return "Descripción de la transferencia...";
       default:
         return "Descripción del movimiento...";
     }
   };
 
   const getButtonText = () => {
-    if (tipo === "Apertura") return processing ? "Abriendo Caja..." : "Abrir Caja";
-    if (tipo === "Cierre") return processing ? "Cerrando Caja..." : "Cerrar Caja";
+    if (tipoMovimiento === "Apertura") return processing ? "Abriendo Caja..." : "Abrir Caja";
+    if (tipoMovimiento === "Cierre") return processing ? "Cerrando Caja..." : "Cerrar Caja";
+    if (tipoMovimiento === "Transferencia") return processing ? "Registrando Transferencia..." : "Registrar Transferencia";
     return processing ? "Registrando..." : "Registrar Movimiento";
   };
 
   const getAlertDescription = () => {
-    if (tipo === "Apertura") {
-      return `¿Estás seguro de que deseas abrir la caja con un monto inicial de ${monto} Bs?`;
-    } else if (tipo === "Cierre") {
-      return `¿Estás seguro de que deseas cerrar la caja con el saldo actual de ${saldoActual.toFixed(2)} Bs?`;
+    if (tipoMovimiento === "Apertura") {
+      return `¿Estás seguro de que deseas abrir la caja de ${tipoCaja} con el saldo actual de ${monto} Bs?`;
+    } else if (tipoMovimiento === "Cierre") {
+      return `¿Estás seguro de que deseas cerrar la caja de ${tipoCaja} con el saldo actual de ${saldoActual.toFixed(2)} Bs?`;
+    } else if (tipoMovimiento === "Transferencia") {
+      const usuario = MOCK_ADMIN_USERS.find(u => u.usuario === usuarioTransferencia);
+      return `¿Estás seguro de que deseas realizar una transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} en caja de ${tipoCaja}?`;
     } else {
-      return `¿Estás seguro de que deseas registrar este ${tipo.toLowerCase()} de ${monto} Bs?${
+      return `¿Estás seguro de que deseas registrar este ${tipoMovimiento.toLowerCase()} de ${monto} Bs en caja de ${tipoCaja}?${
         descripcion ? `\nDescripción: ${descripcion}` : ''
       }`;
     }
   };
 
-  // Formatear fecha UTC exactamente como viene del backend
-  const formatDate = (isoDate: string) => {
-    try {
-      // Crear objeto Date desde el string ISO (UTC)
-      const date = new Date(isoDate);
-      
-      // Extraer componentes UTC para mantener la hora exacta
-      const day = date.getUTCDate();
-      const month = date.getUTCMonth() + 1; // Los meses empiezan en 0
-      const year = date.getUTCFullYear();
-      
-      let hours = date.getUTCHours();
-      const minutes = date.getUTCMinutes();
-      const seconds = date.getUTCSeconds();
-      
-      // Determinar si es AM o PM
-      const period = hours >= 12 ? 'p. m.' : 'a. m.';
-      
-      // Convertir a formato 12 horas
-      if (hours === 0) {
-        hours = 12; // Medianoche
-      } else if (hours > 12) {
-        hours = hours - 12;
-      }
-      
-      // Formatear con ceros iniciales si es necesario
-      const formattedHours = hours.toString();
-      const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes.toString();
-      const formattedSeconds = seconds < 10 ? `0${seconds}` : seconds.toString();
-      
-      // Formato: 16/1/2026, 4:15:51 p. m.
-      return `${day}/${month}/${year}, ${formattedHours}:${formattedMinutes}:${formattedSeconds} ${period}`;
-    } catch (error) {
-      console.error("Error formatting date:", error);
-      return isoDate; // Devolver el original si hay error
-    }
-  };
-
-  const getTipoBadgeClass = (tipo: string) => {
-    switch (tipo) {
-      case 'Ingreso':
-        return 'bg-green-100 text-green-800';
-      case 'Egreso':
-        return 'bg-red-100 text-red-800';
-      case 'Apertura':
-        return 'bg-blue-100 text-blue-800';
-      case 'Cierre':
-        return 'bg-purple-100 text-purple-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  // Función para determinar si el botón debe estar deshabilitado
   const isButtonDisabled = () => {
-    return !requiredFields() || loading || processing;
+    return !requiredFields() || processing || !tipoCaja;
   };
 
-  // Formatear la fecha de hoy para mostrar en el título
-  const formatTodayDate = () => {
-    const today = new Date();
-    const day = today.getDate();
-    const month = today.getMonth() + 1;
-    const year = today.getFullYear();
-    return `${day}/${month}/${year}`;
+  // Mostrar el monto automático para Apertura y Cierre
+  const getMontoLabel = () => {
+    if (tipoMovimiento === "Apertura") {
+      return "Monto Inicial (Bs) - Automático";
+    }
+    if (tipoMovimiento === "Cierre") {
+      return "Monto Final (Bs) - Automático";
+    }
+    return "Monto (Bs)";
   };
 
+  const isMontoDisabled = () => {
+    return tipoMovimiento === "Apertura" || tipoMovimiento === "Cierre";
+  };
+
+  // PASO 1: SIEMPRE mostrar selección de tipo de caja primero
+  if (pasoSeleccionCaja) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-primary">Seleccionar Tipo de Caja</h1>
+          {onClose && (
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+          )}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-center text-xl">¿Qué tipo de caja deseas usar?</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-6 max-w-lg mx-auto">
+              <Button
+                variant="default"
+                className="h-32 text-lg flex flex-col items-center justify-center gap-3 hover:scale-105 transition-transform"
+                onClick={() => {
+                  setTipoCaja("Efectivo");
+                  setPasoSeleccionCaja(false);
+                  setCajaAbierta(false);
+                }}
+              >
+                <DollarSign className="h-12 w-12" />
+                <span className="font-bold">Efectivo</span>
+              </Button>
+              <Button
+                variant="default"
+                className="h-32 text-lg flex flex-col items-center justify-center gap-3 hover:scale-105 transition-transform"
+                onClick={() => {
+                  setTipoCaja("QR");
+                  setPasoSeleccionCaja(false);
+                  setCajaAbierta(false);
+                }}
+              >
+                <Building2 className="h-12 w-12" />
+                <span className="font-bold">QR</span>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // PASO 2: Formulario de registro de movimiento
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-primary">Registrar Movimiento</h1>
-      </div>
-      
-      {/* Estado de Caja y Saldo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="flex items-center justify-center p-6">
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <DollarSign className="h-6 w-6 text-primary" />
-                <h2 className="text-lg font-semibold">Saldo Actual</h2>
-              </div>
-              <div className="text-3xl font-bold text-primary">Bs {saldoActual.toFixed(2)}</div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-center p-6">
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <Wallet className="h-6 w-6 text-primary" />
-                <h2 className="text-lg font-semibold">Estado de Caja</h2>
-              </div>
-              <div className="flex items-center justify-center gap-2">
-                {cajaAbierta ? (
-                  <>
-                    <CheckCircle className="h-6 w-6 text-green-600" />
-                    <span className="text-2xl font-bold text-green-600">ABIERTA</span>
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="h-6 w-6 text-red-600" />
-                    <span className="text-2xl font-bold text-red-600">CERRADA</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-primary">Registrar Movimiento</h1>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              setPasoSeleccionCaja(true);
+              setTipoCaja("");
+              setTipoMovimiento("");
+              setMonto("");
+              setDescripcion("");
+              setUsuarioTransferencia("");
+            }}
+          >
+            Cambiar Caja
+          </Button>
+        </div>
+        {onClose && (
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Formulario Unificado */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Registrar Movimiento de Caja</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      {/* Estado de Caja */}
+      <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-lg flex-wrap">
+        <div className="flex items-center gap-2">
+          <Wallet className="h-5 w-5 text-primary" />
+          <span className="text-sm font-medium">Caja:</span>
+          {tipoCaja === "Efectivo" ? (
+            <>
+              <DollarSign className="h-4 w-4 text-green-600" />
+              <span className="text-sm font-semibold text-green-600">Efectivo</span>
+            </>
+          ) : tipoCaja === "QR" ? (
+            <>
+              <Building2 className="h-4 w-4 text-blue-600" />
+              <span className="text-sm font-semibold text-blue-600">QR</span>
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">No seleccionada</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Estado:</span>
+          {cajaAbierta ? (
+            <>
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <span className="text-sm font-semibold text-green-600">ABIERTA</span>
+            </>
+          ) : (
+            <>
+              <XCircle className="h-4 w-4 text-red-600" />
+              <span className="text-sm font-semibold text-red-600">CERRADA</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Saldo:</span>
+          <span className="text-sm font-bold">Bs {saldoActual.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Registrar Movimiento de Caja</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="tipoMovimiento">Tipo de Movimiento</Label>
+            <Select 
+              value={tipoMovimiento} 
+              onValueChange={handleTipoMovimientoChange} 
+              disabled={processing || !tipoCaja}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={tipoCaja ? "Seleccionar movimiento" : "Selecciona primero el tipo de caja"} />
+              </SelectTrigger>
+              <SelectContent>
+                {getMovimientoOptions().map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Selección de usuario para Transferencia */}
+          {tipoMovimiento === "Transferencia" && (
             <div className="space-y-2">
-              <Label htmlFor="tipo">Tipo de Movimiento</Label>
-              <Select value={tipo} onValueChange={setTipo} disabled={processing}>
+              <Label htmlFor="usuarioTransferencia">Usuario Destino (Admin)</Label>
+              <Select 
+                value={usuarioTransferencia} 
+                onValueChange={setUsuarioTransferencia} 
+                disabled={processing}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar tipo" />
+                  <SelectValue placeholder="Seleccionar usuario Admin" />
                 </SelectTrigger>
                 <SelectContent>
-                  {cajaAbierta ? (
-                    <>
-                      <SelectItem value="Ingreso">Ingreso</SelectItem>
-                      <SelectItem value="Egreso">Egreso</SelectItem>
-                      <SelectItem value="Cierre">Cierre de Caja</SelectItem>
-                    </>
-                  ) : (
-                    <SelectItem value="Apertura">Apertura de Caja</SelectItem>
-                  )}
+                  {MOCK_ADMIN_USERS.map((user) => (
+                    <SelectItem key={user.id} value={user.usuario}>
+                      {user.nombre} ({user.usuario})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+          )}
 
-            {/* Mostrar campo de monto solo para Apertura, Ingreso y Egreso */}
-            {(tipo === "Apertura" || tipo === "Ingreso" || tipo === "Egreso") && (
-              <div className="space-y-2">
-                <Label htmlFor="monto">
-                  {tipo === "Apertura" ? "Monto Inicial (Bs)" : "Monto (Bs)"}
-                </Label>
-                <Input
-                  id="monto"
-                  type="number"
-                  placeholder="0.00"
-                  value={monto}
-                  onChange={(e) => setMonto(e.target.value)}
-                  min="0"
-                  step="0.01"
-                  className="number-input-no-scroll"
-                  onWheel={(e) => e.currentTarget.blur()}
-                  disabled={processing}
-                />
-              </div>
-            )}
-
-            {/* Mostrar descripción solo para Ingreso y Egreso */}
-            {(tipo === "Ingreso" || tipo === "Egreso") && (
-              <div className="space-y-2">
-                <Label htmlFor="descripcion">Descripción</Label>
-                <Textarea
-                  id="descripcion"
-                  placeholder={getDescripcionPlaceholder()}
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  rows={3}
-                  disabled={processing}
-                />
-              </div>
-            )}
-
-            {/* Información para Cierre */}
-            {tipo === "Cierre" && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 text-blue-800">
-                  <Wallet className="h-4 w-4" />
-                  <span className="font-semibold">Información de Cierre</span>
-                </div>
-                <p className="text-sm text-blue-700 mt-1">
-                  La caja se cerrará con el saldo actual de <strong>Bs {saldoActual.toFixed(2)}</strong>
+          {/* Campo de monto - Deshabilitado para Apertura y Cierre (automático) */}
+          {(tipoMovimiento === "Apertura" || tipoMovimiento === "Ingreso" || tipoMovimiento === "Egreso" || tipoMovimiento === "Transferencia" || tipoMovimiento === "Cierre") && (
+            <div className="space-y-2">
+              <Label htmlFor="monto">{getMontoLabel()}</Label>
+              <Input
+                id="monto"
+                type="number"
+                placeholder="0.00"
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+                min="0"
+                step="0.01"
+                className="number-input-no-scroll"
+                onWheel={(e) => e.currentTarget.blur()}
+                disabled={processing || isMontoDisabled()}
+              />
+              {isMontoDisabled() && (
+                <p className="text-xs text-muted-foreground">
+                  El monto se asigna automáticamente con el saldo actual
                 </p>
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button 
-                  className="w-full" 
-                  disabled={isButtonDisabled()}
+          {/* Campo de descripción */}
+          {(tipoMovimiento === "Ingreso" || tipoMovimiento === "Egreso" || tipoMovimiento === "Transferencia") && (
+            <div className="space-y-2">
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Textarea
+                id="descripcion"
+                placeholder={getDescripcionPlaceholder()}
+                value={descripcion}
+                onChange={(e) => setDescripcion(e.target.value)}
+                rows={3}
+                disabled={processing}
+              />
+            </div>
+          )}
+
+          {/* Información para Apertura */}
+          {tipoMovimiento === "Apertura" && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-green-800">
+                <CheckCircle className="h-4 w-4" />
+                <span className="font-semibold">Información de Apertura</span>
+              </div>
+              <p className="text-sm text-green-700 mt-1">
+                La caja de {tipoCaja} se abrirá con el saldo actual de <strong>Bs {saldoActual.toFixed(2)}</strong>
+              </p>
+            </div>
+          )}
+
+          {/* Información para Cierre */}
+          {tipoMovimiento === "Cierre" && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-blue-800">
+                <Wallet className="h-4 w-4" />
+                <span className="font-semibold">Información de Cierre</span>
+              </div>
+              <p className="text-sm text-blue-700 mt-1">
+                La caja de {tipoCaja} se cerrará con el saldo actual de <strong>Bs {saldoActual.toFixed(2)}</strong>
+              </p>
+            </div>
+          )}
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button 
+                className="w-full" 
+                disabled={isButtonDisabled()}
+              >
+                {getButtonText()}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Confirmar operación?</AlertDialogTitle>
+                <AlertDialogDescription className="whitespace-pre-line">
+                  {getAlertDescription()}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleSubmit}
+                  disabled={processing}
                 >
-                  {getButtonText()}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>¿Confirmar operación?</AlertDialogTitle>
-                  <AlertDialogDescription className="whitespace-pre-line">
-                    {getAlertDescription()}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction 
-                    onClick={handleSubmit}
-                    disabled={processing}
-                  >
-                    {processing ? "Procesando..." : "Confirmar"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </CardContent>
-        </Card>
-
-        {/* Historial de Movimientos del Usuario - SOLO HOY */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <History className="h-5 w-5" />
-              Mis Movimientos de Hoy ({formatTodayDate()})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                <p className="mt-2 text-sm text-muted-foreground">Cargando movimientos...</p>
-              </div>
-            ) : transactions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No hay movimientos registrados hoy</p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {transactions.map((transaction) => (
-                  <div key={transaction.idTransaccion} className="border rounded-lg p-3">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTipoBadgeClass(transaction.tipoMovimiento)}`}>
-                        {transaction.tipoMovimiento}
-                      </span>
-                      <span className={`text-lg font-semibold ${
-                        transaction.tipoMovimiento === 'Ingreso' ? 'text-green-600' : 
-                        transaction.tipoMovimiento === 'Egreso' ? 'text-red-600' : 
-                        'text-blue-600'
-                      }`}>
-                        Bs {transaction.monto.toFixed(2)}
-                      </span>
-                    </div>
-                    {transaction.descripcion && (
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {transaction.descripcion}
-                      </p>
-                    )}
-                    <div className="flex justify-between items-center text-xs text-muted-foreground">
-                      {/* Usar la función formatDate que mantiene la hora UTC */}
-                      <span>{formatDate(transaction.fecha)}</span>
-                      <span>{transaction.nombreUsuario}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  {processing ? "Procesando..." : "Confirmar"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CardContent>
+      </Card>
     </div>
   );
 }

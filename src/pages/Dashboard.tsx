@@ -7,13 +7,15 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { isAuthenticated, getCurrentUser } from "@/api/AuthApi";
 import { BodegaView } from "@/components/dashboard/BodegaView";
 import { InventarioView } from "@/components/dashboard/InventarioView";
+import { TransferenciasView } from "@/components/dashboard/TransferenciasView";
+import { CajaView } from "@/components/dashboard/CajaView";
 
-export type DashboardView = "vender" | "notas" | "productos" | "inventario" | "ventas" | "cotizacion" | "pagos-pendientes" | "caja" | "registra-movimiento" | "reportes" | "ecommerce" | "configuracion" | "alertas" | "usuarios" | "bodega" | "clientes";
+export type DashboardView = "vender" | "notas" | "productos" | "inventario" | "ventas" | "cotizacion" | "pagos-pendientes" | "caja" | "registra-movimiento" | "transferencias" | "reportes" | "ecommerce" | "configuracion" | "alertas" | "usuarios" | "bodega" | "clientes";
 
 // Definir vistas permitidas por rol
 const roleViewPermissions = {
-  admin: ["bodega", "inventario", "ventas", "cotizacion", "pagos-pendientes", "clientes", "usuarios", "caja", "registra-movimiento", "reportes", "ecommerce", "alertas"],
-  asistente: ["vender", "productos", "ventas", "cotizacion", "pagos-pendientes", "clientes"]
+  admin: ["bodega", "inventario", "ventas", "cotizacion", "pagos-pendientes", "clientes", "usuarios", "caja", "transferencias", "registra-movimiento", "reportes", "ecommerce", "alertas"],
+  asistente: ["vender", "productos", "ventas", "cotizacion", "pagos-pendientes", "clientes", "caja", "transferencias"]
 };
 
 // Vista por defecto según rol
@@ -167,6 +169,10 @@ const Dashboard = () => {
             searchBodegaId={viewParams.searchBodegaId}
           />
         );
+      case 'caja':
+        return <CajaView />;
+      case 'transferencias':
+        return <TransferenciasView />;
       default:
         return <Outlet />;
     }

@@ -18,6 +18,9 @@ import { PagosPendientesView } from "@/components/dashboard/PagosPendientesView"
 import { GestionUsuariosView } from "@/components/dashboard/GestionUsuariosView";
 import { BodegaView } from "@/components/dashboard/BodegaView";
 import { ClientesView } from "@/components/dashboard/ClientesView";
+import { CajaView } from "@/components/dashboard/CajaView";
+import { RegistraMovimientoView } from "@/components/dashboard/RegistraMovimientoView";
+import { TransferenciasView } from "@/components/dashboard/TransferenciasView";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +50,9 @@ const App = () => (
             <Route path="ventas" element={<VentasView />} />
             <Route path="cotizacion" element={<CotizacionView />} />
             <Route path="pagos-pendientes" element={<PagosPendientesView />} />
+            <Route path="caja" element={<CajaView />} />
+            <Route path="registrar-movimiento" element={<RegistraMovimientoView />} />
+            <Route path="transferencias" element={<TransferenciasView />} />
             <Route path="usuarios" element={<GestionUsuariosView />} />
             <Route path="bodega" element={<BodegaView />} />
             <Route path="clientes" element={<ClientesView />} />
