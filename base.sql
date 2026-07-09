@@ -87,6 +87,7 @@ CREATE TABLE producto_ubicacion_bodega (
     idubicacion INTEGER REFERENCES ubicaciones(idubicacion) ON DELETE CASCADE,
     PRIMARY KEY (idproducto, idbodega, idubicacion)
 );
+
 -- Relación muchos a muchos: Productos - Categorías
 CREATE TABLE producto_categorias (
     idproducto INTEGER REFERENCES productos(idproducto) ON DELETE CASCADE,
@@ -125,29 +126,6 @@ CREATE TABLE detalle_ventas (
     cantidad INTEGER NOT NULL CHECK (cantidad > 0),
     precio_unitario DECIMAL(10,2) NOT NULL CHECK (precio_unitario >= 0),
     subtotal_linea DECIMAL(10,2) NOT NULL CHECK (subtotal_linea >= 0)
-);
-
--- Estado caja
-CREATE TABLE estado_caja (
-    idestado_caja SERIAL PRIMARY KEY,
-    estado VARCHAR(20) CHECK (estado IN ('abierta', 'cerrada')),
-    monto_inicial DECIMAL(15, 2) DEFAULT 0,
-    monto_final DECIMAL(15, 2) DEFAULT 0,
-    idusuario INTEGER REFERENCES usuarios(idusuario) NOT NULL,
-    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE SET NULL
-);
-
--- Transacciones caja
-CREATE TABLE transacciones_caja (
-    idtransaccion SERIAL PRIMARY KEY,
-    idestado_caja INTEGER REFERENCES estado_caja(idestado_caja),
-    tipo_movimiento VARCHAR(20) CHECK (tipo_movimiento IN ('Apertura', 'Ingreso', 'Egreso', 'Cierre')),
-    descripcion TEXT,
-    monto DECIMAL(15, 2) NOT NULL,
-    fecha TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    idusuario INTEGER REFERENCES usuarios(idusuario) NOT NULL,
-    idventa INTEGER REFERENCES ventas(idventa) NULL,
-    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE SET NULL
 );
 
 -- Cotizaciones
@@ -227,19 +205,76 @@ CREATE TABLE productos_similares (
     idproducto_similar INTEGER REFERENCES productos(idproducto) ON DELETE CASCADE,
     PRIMARY KEY (idproducto, idproducto_similar),
     CHECK (idproducto != idproducto_similar)
+);-- Tabla Caja
+CREATE TABLE caja (
+    idcaja SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) UNIQUE NOT NULL,
+    tipo VARCHAR(10) CHECK (tipo IN ('Efectivo', 'QR')) NOT NULL,
+    total DECIMAL(10,2) DEFAULT 0
 );
+
+INSERT INTO caja (nombre, tipo, total) VALUES
+('Caja Efectivo', 'Efectivo', 0),
+('Caja QR', 'QR', 0);
+
+-- Tabla de movimientos de caja
+CREATE TABLE movimiento_caja (
+    idmovimiento_caja SERIAL PRIMARY KEY,
+    idcaja INTEGER REFERENCES caja(idcaja),
+    idusuario INTEGER REFERENCES usuarios(idusuario),
+    monto DECIMAL(10,2) NOT NULL,
+    tipo VARCHAR(20) CHECK (tipo IN ('apertura', 'ingreso', 'egreso', 'transferencia', 'cierre')) NOT NULL,
+    descripcion TEXT,
+    monto_anterior DECIMAL(10,2) DEFAULT 0,
+    monto_actual DECIMAL(10,2) DEFAULT 0,
+    fecha TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('America/La_Paz', NOW()),
+    idventa INTEGER REFERENCES ventas(idventa) ON DELETE SET NULL,
+    idtransferencia INTEGER REFERENCES transferencias_caja(idtransferencia) ON DELETE SET NULL
+);
+
+-- Tabla de transferencias (de usuario a administrador)
+CREATE TABLE transferencias_caja (
+    idtransferencia SERIAL PRIMARY KEY,
+    idcaja_origen INTEGER REFERENCES caja(idcaja),
+    monto DECIMAL(10,2) NOT NULL,
+    descripcion TEXT,
+    estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'aprobada', 'rechazada', 'observada')),
+    idusuario_solicitante INTEGER REFERENCES usuarios(idusuario),
+    idusuario_aprobador INTEGER REFERENCES usuarios(idusuario),
+    fecha_solicitud TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('America/La_Paz', NOW()),
+    fecha_resolucion TIMESTAMP WITH TIME ZONE,
+    observacion TEXT
+);
+
+-- Tabla de observaciones de transferencias
+CREATE TABLE transferencia_observaciones (
+    idobservacion SERIAL PRIMARY KEY,
+    idtransferencia INTEGER REFERENCES transferencias_caja(idtransferencia) ON DELETE CASCADE,
+    idusuario INTEGER REFERENCES usuarios(idusuario),
+    observacion TEXT NOT NULL,
+    fecha TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('America/La_Paz', NOW())
+);
+
+
 
 -- ============================================
 -- ÍNDICES MEJORADOS
 -- ============================================
-
+CREATE INDEX idx_caja_tipo ON caja(tipo);
+CREATE INDEX idx_movimiento_caja_caja ON movimiento_caja(idcaja);
+CREATE INDEX idx_movimiento_caja_usuario ON movimiento_caja(idusuario);
+CREATE INDEX idx_movimiento_caja_tipo ON movimiento_caja(tipo);
+CREATE INDEX idx_movimiento_caja_venta ON movimiento_caja(idventa);
+CREATE INDEX idx_movimiento_caja_transferencia ON movimiento_caja(idtransferencia);
+CREATE INDEX idx_transferencias_origen ON transferencias_caja(idcaja_origen);
+CREATE INDEX idx_transferencias_estado ON transferencias_caja(estado);
+CREATE INDEX idx_transferencias_solicitante ON transferencias_caja(idusuario_solicitante);
+CREATE INDEX idx_transferencias_aprobador ON transferencias_caja(idusuario_aprobador);
+CREATE INDEX idx_transferencia_observaciones_transferencia ON transferencia_observaciones(idtransferencia);
 CREATE INDEX idx_ventas_fecha ON ventas(fecha_hora);
 CREATE INDEX idx_ventas_usuario ON ventas(idusuario);
 CREATE INDEX idx_ventas_cliente ON ventas(idcliente);
 CREATE INDEX idx_ventas_bodega ON ventas(idbodega);
-CREATE INDEX idx_transacciones_caja_fecha ON transacciones_caja(fecha);
-CREATE INDEX idx_transacciones_caja_usuario ON transacciones_caja(idusuario);
-CREATE INDEX idx_transacciones_caja_bodega ON transacciones_caja(idbodega);
 CREATE INDEX idx_detalle_ventas_venta ON detalle_ventas(idventa);
 CREATE INDEX idx_detalle_cotizaciones_cotizacion ON detalle_cotizaciones(idcotizacion);
 CREATE INDEX idx_productos_codigo_barras ON productos(codigo_barras);
@@ -250,7 +285,6 @@ CREATE INDEX idx_clientes_carnet ON clientes(carnet);
 CREATE INDEX idx_cotizaciones_cliente ON cotizaciones(idcliente);
 CREATE INDEX idx_cotizaciones_bodega ON cotizaciones(idbodega);
 CREATE INDEX idx_usuarios_bodega ON usuarios(idbodega);
-CREATE INDEX idx_estado_caja_bodega ON estado_caja(idbodega);
 CREATE INDEX idx_producto_bodega_producto ON producto_bodega(idproducto);
 CREATE INDEX idx_producto_bodega_bodega ON producto_bodega(idbodega);
 CREATE INDEX idx_detalle_ventas_bodega ON detalle_ventas(idbodega);
