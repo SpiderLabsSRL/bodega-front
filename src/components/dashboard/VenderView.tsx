@@ -139,6 +139,14 @@ export const getImageUrl = (imagen: any): string | null => {
   return 'https://static.vecteezy.com/system/resources/previews/011/781/801/non_2x/medicine-3d-render-icon-illustration-png.png';
 };
 
+// Función para obtener ubicaciones para mostrar
+const getUbicacionDisplay = (product: Product): string => {
+  if (product.ubicaciones && product.ubicaciones.length > 0) {
+    return product.ubicaciones.map(u => u.nombre_ubicacion).join(", ");
+  }
+  return "Sin ubicación";
+};
+
 export function VenderView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -402,9 +410,11 @@ export function VenderView() {
       }
     } else {
       if (product.stock > 0) {
+        const ubicacionDisplay = getUbicacionDisplay(product);
         const nuevoItem: SaleItem = {
           ...product,
           cantidad: 1,
+          ubicacion: ubicacionDisplay,
         };
         setVentaItems([...ventaItems, nuevoItem]);
       } else {
@@ -613,9 +623,11 @@ export function VenderView() {
       }
     } else {
       if (product.stock > 0) {
+        const ubicacionDisplay = getUbicacionDisplay(product);
         const nuevoItem: SaleItem = {
           ...product,
           cantidad: 1,
+          ubicacion: ubicacionDisplay,
         };
         setVentaItems([...ventaItems, nuevoItem]);
       } else {
@@ -1012,6 +1024,7 @@ export function VenderView() {
                     loadingSimilars.get(product.idproducto) || false;
                   const cantidadEnCarrito = getCantidadEnCarrito(product.idproducto);
                   const stockRestante = product.stock - cantidadEnCarrito;
+                  const ubicacionesDisplay = getUbicacionDisplay(product);
 
                   return (
                     <div
@@ -1050,7 +1063,7 @@ export function VenderView() {
                             </p>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <Badge variant="outline" className="text-xs">
-                                {product.nombre_ubicacion}
+                                {ubicacionesDisplay}
                               </Badge>
                               {cantidadEnCarrito > 0 && (
                                 <Badge variant="secondary" className="text-xs">
@@ -1117,6 +1130,7 @@ export function VenderView() {
                             similarProducts.map((similar) => {
                               const cantSimilarEnCarrito = getCantidadEnCarrito(similar.idproducto);
                               const stockRestanteSimilar = similar.stock - cantSimilarEnCarrito;
+                              const ubicacionesSimilar = getUbicacionDisplay(similar);
                               return (
                                 <div
                                   key={similar.idproducto}
@@ -1159,7 +1173,7 @@ export function VenderView() {
                                             variant="outline"
                                             className="text-xs"
                                           >
-                                            {similar.nombre_ubicacion}
+                                            {ubicacionesSimilar}
                                           </Badge>
                                         </div>
                                         <p className="text-xs font-medium mt-1">
@@ -1494,6 +1508,11 @@ export function VenderView() {
                         <p className="text-sm font-medium text-green-600 mt-1">
                           Bs {formatBs(item.precio_venta)} c/u
                         </p>
+                        {item.ubicacion && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Ubicación: {item.ubicacion}
+                          </p>
+                        )}
                       </div>
                     </div>
 

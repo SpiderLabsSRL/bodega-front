@@ -7,11 +7,14 @@ export interface BackendProduct {
   nombre: string;
   descripcion: string;
   estado: number;
-  idubicacion: number;
-  nombre_ubicacion: string;
+  // Ya no hay idubicacion directo
   imagen: string;
   precio_venta: string;
   stock: number;
+  ubicaciones?: Array<{
+    idubicacion: number;
+    nombre_ubicacion: string;
+  }>; // Array de ubicaciones donde está disponible
   productos_similares?: Array<{
     idproducto: number;
     nombre: string;
@@ -23,11 +26,13 @@ export interface Product {
   nombre: string;
   descripcion: string;
   estado: number;
-  idubicacion: number;
-  nombre_ubicacion: string;
   imagen: string;
   precio_venta: number;
   stock: number;
+  ubicaciones?: Array<{
+    idubicacion: number;
+    nombre_ubicacion: string;
+  }>;
   productos_similares?: Array<{
     idproducto: number;
     nombre: string;
@@ -169,16 +174,20 @@ export const processSale = async (
 };
 
 export function mapBackendProduct(product: BackendProduct): Product {
+  // Obtener el nombre de la primera ubicación si existe, o un valor por defecto
+  const ubicacionNombre = product.ubicaciones && product.ubicaciones.length > 0 
+    ? product.ubicaciones[0].nombre_ubicacion 
+    : "Sin ubicación";
+  
   return {
     idproducto: product.idproducto,
     nombre: product.nombre,
     descripcion: product.descripcion,
     estado: product.estado,
-    idubicacion: product.idubicacion,
-    nombre_ubicacion: product.nombre_ubicacion,
     imagen: product.imagen,
     precio_venta: parseFloat(product.precio_venta),
     stock: product.stock,
+    ubicaciones: product.ubicaciones || [],
     productos_similares: product.productos_similares || [],
   };
 }
