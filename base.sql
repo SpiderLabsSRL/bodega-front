@@ -238,21 +238,12 @@ CREATE TABLE transferencias_caja (
     idcaja_origen INTEGER REFERENCES caja(idcaja),
     monto DECIMAL(10,2) NOT NULL,
     descripcion TEXT,
-    estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'aprobada', 'rechazada', 'observada')),
+    estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'aprobada', 'observada')),
     idusuario_solicitante INTEGER REFERENCES usuarios(idusuario),
     idusuario_aprobador INTEGER REFERENCES usuarios(idusuario),
     fecha_solicitud TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('America/La_Paz', NOW()),
     fecha_resolucion TIMESTAMP WITH TIME ZONE,
     observacion TEXT
-);
-
--- Tabla de observaciones de transferencias
-CREATE TABLE transferencia_observaciones (
-    idobservacion SERIAL PRIMARY KEY,
-    idtransferencia INTEGER REFERENCES transferencias_caja(idtransferencia) ON DELETE CASCADE,
-    idusuario INTEGER REFERENCES usuarios(idusuario),
-    observacion TEXT NOT NULL,
-    fecha TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('America/La_Paz', NOW())
 );
 
 
@@ -270,7 +261,6 @@ CREATE INDEX idx_transferencias_origen ON transferencias_caja(idcaja_origen);
 CREATE INDEX idx_transferencias_estado ON transferencias_caja(estado);
 CREATE INDEX idx_transferencias_solicitante ON transferencias_caja(idusuario_solicitante);
 CREATE INDEX idx_transferencias_aprobador ON transferencias_caja(idusuario_aprobador);
-CREATE INDEX idx_transferencia_observaciones_transferencia ON transferencia_observaciones(idtransferencia);
 CREATE INDEX idx_ventas_fecha ON ventas(fecha_hora);
 CREATE INDEX idx_ventas_usuario ON ventas(idusuario);
 CREATE INDEX idx_ventas_cliente ON ventas(idcliente);
