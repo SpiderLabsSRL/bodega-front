@@ -11,6 +11,8 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { 
   getTransaccionesCaja,
+  getUsuariosCaja,
+  getSaldoActual,
   TransaccionCaja
 } from "@/api/CajaApi";
 import { RegistraMovimientoView } from "./RegistraMovimientoView";
@@ -55,12 +57,6 @@ const formatTimeForDisplay = (dateInput: string | Date) => {
   }
 };
 
-// Datos mock para pruebas
-const MOCK_SALDO = {
-  monto_final: "1500.00",
-  estado: "cerrada"
-};
-
 export function CajaView() {
   // Obtener usuario real
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -80,7 +76,7 @@ export function CajaView() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [datosCargados, setDatosCargados] = useState(false);
-  const [saldoActual, setSaldoActual] = useState<number>(1500);
+  const [saldoActual, setSaldoActual] = useState<number>(0);
   const [estadoCaja, setEstadoCaja] = useState<string>("cerrada");
   const [tipoCajaSeleccionado, setTipoCajaSeleccionado] = useState<"Efectivo" | "QR" | "">("");
   
@@ -123,27 +119,64 @@ export function CajaView() {
       setDatosCargados(false);
       setError(null);
 
-      // Usar datos mock
-      setSaldoActual(parseFloat(MOCK_SALDO.monto_final));
-      setEstadoCaja(MOCK_SALDO.estado);
-      
-      // Cargar usuarios mock
-      const usuariosList = ["Usuario Prueba", "Admin Test", "Asistente Test"];
-      const opcionesUsuarios = usuariosList.map(user => ({
-        value: user,
-        label: user
-      }));
-      
-      // Si es asistente, solo mostrar su nombre y seleccionarlo automáticamente
-      if (isAssistant) {
-        const opcionesFiltradas = [{ value: currentUserName, label: currentUserName }];
-        setEmpleadosOptions(opcionesFiltradas);
-        setFiltroEmpleado(currentUserName);
-      } else {
-        setEmpleadosOptions([{ value: "Todos", label: "Todos" }, ...opcionesUsuarios]);
-        setFiltroEmpleado("Todos");
+      try {
+        const saldoData = await getSaldoActual();
+        setSaldoActual(parseFloat(saldoData.monto_final));
+        setEstadoCaja(saldoData.estado);
+      } catch (saldoError) {
+        console.error("Error cargando saldo:", saldoError);
+        // Valores por defecto en caso de error
+        setSaldoActual(0);
+        setEstadoCaja("cerrada");
       }
-
+      
+      try {
+        const usuarios = await getUsuariosCaja();
+        console.log(usuarios)
+        const opcionesUsuarios = usuarios.map(usuario => ({
+          value: usuario.idusuario.toString(),
+          label: usuario.empleado_nombre
+        }));
+        
+        if (isAssistant) {
+          const usuarioActual = usuarios.find(u => 
+            u.empleado_nombre === currentUserName || 
+            u.idusuario === currentUser?.idUsuario
+          );
+          
+          if (usuarioActual) {
+            const opcionesFiltradas = [{ 
+              value: usuarioActual.idusuario.toString(), 
+              label: usuarioActual.empleado_nombre 
+            }];
+            setEmpleadosOptions(opcionesFiltradas);
+            setFiltroEmpleado(usuarioActual.idusuario.toString());
+          } else {
+            const opcionesFiltradas = [{ value: currentUser.idUsuario, label: currentUserName }];
+            setEmpleadosOptions(opcionesFiltradas);
+            setFiltroEmpleado(currentUserName);
+          }
+        } else {
+          console.log(opcionesUsuarios)
+          const opcionesCompletas = [
+            { value: "Todos", label: "Todos" }, 
+            ...opcionesUsuarios
+          ];
+          setEmpleadosOptions(opcionesCompletas);
+          setFiltroEmpleado("Todos");
+        }
+      } catch (usuariosError) {
+        console.error("Error cargando usuarios:", usuariosError);
+        // Si hay error al cargar usuarios, establecer opciones por defecto
+        if (isAssistant) {
+          setEmpleadosOptions([{ value: currentUserName, label: currentUserName }]);
+          setFiltroEmpleado(currentUserName);
+        } else {
+          setEmpleadosOptions([{ value: "Todos", label: "Todos" }]);
+          setFiltroEmpleado("Todos");
+        }
+      }
+      console.log(empleadosOptions);
       // Marcar que los datos iniciales están cargados
       setDatosCargados(true);
       setInitialLoading(false);
@@ -176,10 +209,17 @@ export function CajaView() {
       } = {tipoCaja : tipoCajaSeleccionado};
 
       if (isAssistant) {
-        params.idusuario = currentUser?.idUsuario;
+        if (currentUser?.idUsuario) {
+          params.idusuario = currentUser.idUsuario;
+        } else {
+          const usuario = empleadosOptions.find(u => u.label === currentUserName);
+          if (usuario && usuario.value !== "Todos") {
+            params.idusuario = parseInt(usuario.value);
+          }
+        }
       }
       else if (isAdmin && filtroEmpleado !== "Todos") {
-        params.idusuario = Number(filtroEmpleado);
+        params.idusuario = parseInt(filtroEmpleado);
       }
       
       if (fechaBusqueda) {
@@ -193,9 +233,7 @@ export function CajaView() {
       }
 
       const transacciones = await getTransaccionesCaja(params);
-
       setMovimientosCaja(transacciones);
-
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar los movimientos");
       console.error("Error cargando movimientos:", err);
@@ -221,7 +259,12 @@ export function CajaView() {
     setFechaRangoTemp({ from: undefined, to: undefined });
     setFechaRangoAplicado({ from: undefined, to: undefined });
     if (isAssistant) {
-      setFiltroEmpleado(currentUserName);
+      const usuarioActual = empleadosOptions.find(u => u.label === currentUserName);
+      if (usuarioActual) {
+        setFiltroEmpleado(usuarioActual.value);
+      } else {
+        setFiltroEmpleado(currentUserName);
+      }
     } else {
       setFiltroEmpleado("Todos");
     }
@@ -396,7 +439,7 @@ export function CajaView() {
                 <label className="text-sm font-medium">Empleado</label>
                 <Select value={filtroEmpleado} onValueChange={setFiltroEmpleado}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Seleccionar empleado" />
                   </SelectTrigger>
                   <SelectContent>
                     {empleadosOptions.map(empleado => (
@@ -505,7 +548,12 @@ export function CajaView() {
               )}
               {isAdmin && filtroEmpleado !== "Todos" && (
                 <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                  Empleado: {filtroEmpleado}
+                  Empleado: {empleadosOptions.find(e => e.value === filtroEmpleado)?.label || filtroEmpleado}
+                </span>
+              )}
+              {isAdmin && filtroEmpleado === "Todos" && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Empleado: Todos
                 </span>
               )}
               {!tipoCajaSeleccionado && (
@@ -581,7 +629,7 @@ export function CajaView() {
                             {fechaBusqueda && `Para la fecha: ${format(fechaBusqueda, "dd/MM/yyyy", { locale: es })}`}
                             {fechaRangoAplicado.from && fechaRangoAplicado.to && 
                               `En el rango: ${format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - ${format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}`}
-                            {isAdmin && filtroEmpleado !== "Todos" && ` - Empleado: ${filtroEmpleado}`}
+                            {isAdmin && filtroEmpleado !== "Todos" && ` - Empleado: ${empleadosOptions.find(e => e.value === filtroEmpleado)?.label || filtroEmpleado}`}
                           </p>
                         </div>
                       </TableCell>
