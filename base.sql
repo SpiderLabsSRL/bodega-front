@@ -283,3 +283,19 @@ CREATE INDEX idx_usuarios_bodega ON usuarios(idbodega);
 CREATE INDEX idx_producto_bodega_producto ON producto_bodega(idproducto);
 CREATE INDEX idx_producto_bodega_bodega ON producto_bodega(idbodega);
 CREATE INDEX idx_detalle_ventas_bodega ON detalle_ventas(idbodega);
+
+-- Función para crear cajas automáticamente
+CREATE OR REPLACE FUNCTION crear_cajas_bodega()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO caja (nombre, tipo, total, idbodega) VALUES 
+    ('Caja Efectivo', 'Efectivo', 0, NEW.idbodega),
+    ('Caja QR', 'QR', 0, NEW.idbodega);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_crear_cajas_bodega
+AFTER INSERT ON bodegas
+FOR EACH ROW
+EXECUTE FUNCTION crear_cajas_bodega();
