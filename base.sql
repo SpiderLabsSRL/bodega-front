@@ -1,5 +1,5 @@
 -- ============================================
--- CREACIÓN DE TABLAS
+-- CREACIÓN DE TABLAS (VERSIÓN ACTUALIZADA)
 -- ============================================
 
 -- Tabla Bodega/Sucursal
@@ -205,19 +205,23 @@ CREATE TABLE productos_similares (
     idproducto_similar INTEGER REFERENCES productos(idproducto) ON DELETE CASCADE,
     PRIMARY KEY (idproducto, idproducto_similar),
     CHECK (idproducto != idproducto_similar)
-);-- Tabla Caja
-CREATE TABLE caja (
-    idcaja SERIAL PRIMARY KEY,
-    nombre VARCHAR(50) UNIQUE NOT NULL,
-    tipo VARCHAR(10) CHECK (tipo IN ('Efectivo', 'QR')) NOT NULL,
-    total DECIMAL(10,2) DEFAULT 0
 );
 
-INSERT INTO caja (nombre, tipo, total) VALUES
-('Caja Efectivo', 'Efectivo', 0),
-('Caja QR', 'QR', 0);
+-- ============================================
+-- TABLA CAJA ACTUALIZADA
+-- ============================================
+CREATE TABLE caja (
+    idcaja SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    tipo VARCHAR(10) CHECK (tipo IN ('Efectivo', 'QR')) NOT NULL,
+    total DECIMAL(10,2) DEFAULT 0,
+    idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE CASCADE,
+    CONSTRAINT caja_nombre_bodega_unique UNIQUE (nombre, idbodega)
+);
 
--- Tabla de movimientos de caja
+-- ============================================
+-- TABLA DE MOVIMIENTOS DE CAJA
+-- ============================================
 CREATE TABLE movimiento_caja (
     idmovimiento_caja SERIAL PRIMARY KEY,
     idcaja INTEGER REFERENCES caja(idcaja),
@@ -232,7 +236,9 @@ CREATE TABLE movimiento_caja (
     idtransferencia INTEGER REFERENCES transferencias_caja(idtransferencia) ON DELETE SET NULL
 );
 
--- Tabla de transferencias (de usuario a administrador)
+-- ============================================
+-- TABLA DE TRANSFERENCIAS
+-- ============================================
 CREATE TABLE transferencias_caja (
     idtransferencia SERIAL PRIMARY KEY,
     idcaja_origen INTEGER REFERENCES caja(idcaja),
@@ -246,12 +252,11 @@ CREATE TABLE transferencias_caja (
     observacion TEXT
 );
 
-
-
 -- ============================================
 -- ÍNDICES MEJORADOS
 -- ============================================
 CREATE INDEX idx_caja_tipo ON caja(tipo);
+CREATE INDEX idx_caja_bodega ON caja(idbodega);
 CREATE INDEX idx_movimiento_caja_caja ON movimiento_caja(idcaja);
 CREATE INDEX idx_movimiento_caja_usuario ON movimiento_caja(idusuario);
 CREATE INDEX idx_movimiento_caja_tipo ON movimiento_caja(tipo);
