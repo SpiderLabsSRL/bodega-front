@@ -7,110 +7,38 @@ import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { CheckCircle, XCircle, Loader2, User, Users, DollarSign, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getCurrentUser } from "@/api/AuthApi";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { 
+  getTransferencias, 
+  aprobarTransferencia, 
+  observarTransferencia,
+  Transferencia 
+} from "@/api/TransferenciaApi";
 
-// Tipos para las transferencias
-interface Transferencia {
-  id: number;
-  fecha: string;
-  monto: number;
-  descripcion: string;
-  usuarioOrigen: string;
-  usuarioDestino: string;
-  estado: "pendiente" | "aprobada" | "observada";
-  tipo: "Efectivo" | "QR";
-  fechaAprobacion?: string;
-  observacion?: string;
-}
-
-// Datos mock - TODAS las transferencias empiezan como "pendiente"
-const MOCK_TRANSFERENCIAS_ADMIN: Transferencia[] = [
-  {
-    id: 1,
-    fecha: new Date().toISOString(),
-    monto: 500,
-    descripcion: "Transferencia por venta de productos",
-    usuarioOrigen: "Usuario Prueba",
-    usuarioDestino: "Admin Principal",
-    estado: "pendiente",
-    tipo: "Efectivo"
-  },
-  {
-    id: 2,
-    fecha: new Date(Date.now() - 3600000).toISOString(),
-    monto: 350,
-    descripcion: "Pago de comisiones",
-    usuarioOrigen: "Asistente Test",
-    usuarioDestino: "Admin Principal",
-    estado: "pendiente",
-    tipo: "QR"
-  },
-  {
-    id: 3,
-    fecha: new Date(Date.now() - 7200000).toISOString(),
-    monto: 200,
-    descripcion: "Reembolso de gastos",
-    usuarioOrigen: "Usuario Prueba",
-    usuarioDestino: "Admin Principal",
-    estado: "pendiente",
-    tipo: "Efectivo"
-  },
-  {
-    id: 4,
-    fecha: new Date(Date.now() - 10800000).toISOString(),
-    monto: 150,
-    descripcion: "Pago de servicios",
-    usuarioOrigen: "Asistente Test",
-    usuarioDestino: "Admin Principal",
-    estado: "pendiente",
-    tipo: "QR"
+// Función para obtener el usuario del localStorage
+const getCurrentUser = (): { idusuario: number; rol: string; nombres: string; apellidos: string } | null => {
+  try {
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return null;
+    const user = JSON.parse(userStr);
+    return {
+      idusuario: user.idUsuario || user.idusuario || 0,
+      rol: user.rol || "asistente",
+      nombres: user.nombres || "",
+      apellidos: user.apellidos || ""
+    };
+  } catch (error) {
+    console.error("Error getting current user:", error);
+    return null;
   }
-];
-
-// Datos mock para asistente - sus transferencias ya procesadas
-const MOCK_TRANSFERENCIAS_ASISTENTE: Transferencia[] = [
-  {
-    id: 5,
-    fecha: new Date().toISOString(),
-    monto: 500,
-    descripcion: "Transferencia por venta de productos",
-    usuarioOrigen: "Usuario Prueba",
-    usuarioDestino: "Admin Principal",
-    estado: "aprobada",
-    tipo: "Efectivo",
-    fechaAprobacion: new Date().toISOString()
-  },
-  {
-    id: 6,
-    fecha: new Date(Date.now() - 7200000).toISOString(),
-    monto: 200,
-    descripcion: "Reembolso de gastos",
-    usuarioOrigen: "Usuario Prueba",
-    usuarioDestino: "Admin Principal",
-    estado: "aprobada",
-    tipo: "QR",
-    fechaAprobacion: new Date(Date.now() - 3600000).toISOString()
-  },
-  {
-    id: 7,
-    fecha: new Date(Date.now() - 10800000).toISOString(),
-    monto: 150,
-    descripcion: "Pago de servicios",
-    usuarioOrigen: "Usuario Prueba",
-    usuarioDestino: "Admin Principal",
-    estado: "observada",
-    tipo: "Efectivo",
-    fechaAprobacion: new Date(Date.now() - 5400000).toISOString(),
-    observacion: "Falta comprobante de pago"
-  }
-];
+};
 
 export function TransferenciasView() {
   const { toast } = useToast();
   const currentUser = getCurrentUser();
-  const userRole = currentUser?.rol?.toLowerCase() || "admin";
+  const userRole = currentUser?.rol?.toLowerCase() || "asistente";
+  const userId = currentUser?.idusuario || 0;
   const isAdmin = userRole === "admin";
   const isAssistant = userRole === "asistente";
 
@@ -119,29 +47,36 @@ export function TransferenciasView() {
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [observacionInput, setObservacionInput] = useState<string>("");
 
-  // Cargar datos mock según el rol
+  // Cargar transferencias desde la API
   useEffect(() => {
-    const loadData = () => {
-      setLoading(true);
-      
-      // Simular carga
-      setTimeout(() => {
-        if (isAdmin) {
-          // Admin ve todas las transferencias con estado "pendiente"
-          setTransferencias(MOCK_TRANSFERENCIAS_ADMIN);
-        } else if (isAssistant) {
-          // Asistente ve sus transferencias (aprobadas y observadas)
-          const transferenciasFiltradas = MOCK_TRANSFERENCIAS_ASISTENTE.filter(
-            t => t.estado === "aprobada" || t.estado === "observada"
-          );
-          setTransferencias(transferenciasFiltradas);
-        }
-        setLoading(false);
-      }, 800);
-    };
+    if (userId > 0) {
+      cargarTransferencias();
+    } else {
+      setLoading(false);
+      toast({
+        title: "Error",
+        description: "No se pudo identificar al usuario",
+        variant: "destructive",
+      });
+    }
+  }, [userId]);
 
-    loadData();
-  }, [isAdmin, isAssistant]);
+  const cargarTransferencias = async () => {
+    setLoading(true);
+    try {
+      const data = await getTransferencias(userId, userRole);
+      setTransferencias(data);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudieron cargar las transferencias",
+        variant: "destructive",
+      });
+      setTransferencias([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Función para formatear fecha
   const formatDate = (dateStr: string) => {
@@ -157,6 +92,11 @@ export function TransferenciasView() {
     } catch {
       return dateStr;
     }
+  };
+
+  // Función para obtener el monto como número
+  const getMontoNumber = (monto: number | string): number => {
+    return typeof monto === 'string' ? parseFloat(monto) : monto;
   };
 
   // Función para obtener el badge según el estado
@@ -186,58 +126,79 @@ export function TransferenciasView() {
   const handleAprobar = async (id: number) => {
     setProcessingId(id);
     
-    // Simular proceso
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setTransferencias(prev => 
-      prev.map(t => 
-        t.id === id 
-          ? { 
-              ...t, 
-              estado: "aprobada", 
-              fechaAprobacion: new Date().toISOString() 
-            } 
-          : t
-      )
-    );
-    
-    toast({
-      title: "Transferencia aprobada",
-      description: "La transferencia ha sido aprobada correctamente",
-    });
-    
-    setProcessingId(null);
+    try {
+      await aprobarTransferencia(id, userId);
+      
+      setTransferencias(prev => 
+        prev.map(t => 
+          t.id === id 
+            ? { 
+                ...t, 
+                estado: "aprobada", 
+                fecha_aprobacion: new Date().toISOString() 
+              } 
+            : t
+        )
+      );
+      
+      toast({
+        title: "Transferencia aprobada",
+        description: "La transferencia ha sido aprobada correctamente",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo aprobar la transferencia",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  // Función para observar transferencia (solo admin) con observación
+  // Función para observar transferencia (solo admin)
   const handleObservar = async (id: number) => {
     setProcessingId(id);
     
-    // Simular proceso
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setTransferencias(prev => 
-      prev.map(t => 
-        t.id === id 
-          ? { 
-              ...t, 
-              estado: "observada",
-              fechaAprobacion: new Date().toISOString(),
-              observacion: observacionInput || "Revisar documentación adjunta"
-            } 
-          : t
-      )
-    );
-    
-    toast({
-      title: "Transferencia observada",
-      description: "La transferencia ha sido marcada como observada",
-      variant: "destructive",
-    });
-    
-    setObservacionInput("");
-    setProcessingId(null);
+    try {
+      await observarTransferencia(id, userId, observacionInput || "Revisar documentación adjunta");
+      
+      setTransferencias(prev => 
+        prev.map(t => 
+          t.id === id 
+            ? { 
+                ...t, 
+                estado: "observada",
+                fecha_aprobacion: new Date().toISOString(),
+                observacion: observacionInput || "Revisar documentación adjunta"
+              } 
+            : t
+        )
+      );
+      
+      toast({
+        title: "Transferencia observada",
+        description: "La transferencia ha sido marcada como observada",
+        variant: "destructive",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo observar la transferencia",
+        variant: "destructive",
+      });
+    } finally {
+      setObservacionInput("");
+      setProcessingId(null);
+    }
   };
+
+  // Filtrar transferencias según el rol
+  // Para Asistente: mostrar solo sus transferencias (todas, incluyendo pendientes, aprobadas y observadas)
+  // Para Admin: mostrar todas las transferencias pendientes
+  const transferenciasFiltradas = isAssistant 
+    ? transferencias // El backend ya filtra por usuario
+    : transferencias;
 
   if (loading) {
     return (
@@ -263,7 +224,7 @@ export function TransferenciasView() {
           ) : (
             <Badge variant="outline" className="flex items-center gap-1">
               <User className="h-3 w-3" />
-              {transferencias.length} registros
+              {transferenciasFiltradas.length} registros
             </Badge>
           )}
         </div>
@@ -274,14 +235,19 @@ export function TransferenciasView() {
           <CardTitle>
             {isAdmin ? "Lista de Transferencias Recibidas" : "Historial de Transferencias Realizadas"}
             <span className="ml-2 text-sm font-normal text-muted-foreground">
-              ({transferencias.length} registros)
+              ({transferenciasFiltradas.length} registros)
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {transferencias.length === 0 ? (
+          {transferenciasFiltradas.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>No hay transferencias para mostrar</p>
+              {isAssistant && (
+                <p className="text-sm mt-2">
+                  Cuando realices una transferencia, aparecerá aquí.
+                </p>
+              )}
             </div>
           ) : (
             <div className="block md:overflow-x-auto">
@@ -298,168 +264,171 @@ export function TransferenciasView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transferencias.map((transferencia) => (
-                    <TableRow key={transferencia.id} className="md:table-row block border-b p-4 md:p-0">
-                      {/* Fecha */}
-                      <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
-                        <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">FECHA</div>
-                        <div className="text-sm">{formatDate(transferencia.fecha)}</div>
-                      </TableCell>
-
-                      {/* Monto */}
-                      <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
-                        <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">MONTO</div>
-                        <div className="text-sm font-bold text-primary">Bs {transferencia.monto.toFixed(2)}</div>
-                      </TableCell>
-
-                      {/* Tipo */}
-                      <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
-                        <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">TIPO</div>
-                        <div className="flex justify-start md:justify-start">
-                          {getTipoBadge(transferencia.tipo)}
-                        </div>
-                      </TableCell>
-
-                      {/* Descripción */}
-                      <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
-                        <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">DESCRIPCIÓN</div>
-                        <div className="text-sm">{transferencia.descripcion}</div>
-                        {transferencia.observacion && (
-                          <div className="text-xs text-red-600 mt-1">
-                            <span className="font-medium">Observación:</span> {transferencia.observacion}
-                          </div>
-                        )}
-                        {transferencia.fechaAprobacion && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            <span className="font-medium">Fecha de aprobación:</span> {formatDate(transferencia.fechaAprobacion)}
-                          </div>
-                        )}
-                      </TableCell>
-
-                      {/* Usuario Origen (solo admin) */}
-                      {isAdmin && (
+                  {transferenciasFiltradas.map((transferencia) => {
+                    const montoNumerico = getMontoNumber(transferencia.monto);
+                    return (
+                      <TableRow key={transferencia.id} className="md:table-row block border-b p-4 md:p-0">
+                        {/* Fecha */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
-                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">USUARIO ORIGEN</div>
-                          <div className="text-sm font-medium">{transferencia.usuarioOrigen}</div>
+                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">FECHA</div>
+                          <div className="text-sm">{formatDate(transferencia.fecha)}</div>
                         </TableCell>
-                      )}
 
-                      {/* Estado */}
-                      <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
-                        <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">ESTADO</div>
-                        <div className="flex justify-start md:justify-start">
-                          {getEstadoBadge(transferencia.estado)}
-                        </div>
-                      </TableCell>
+                        {/* Monto */}
+                        <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
+                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">MONTO</div>
+                          <div className="text-sm font-bold text-primary">Bs {montoNumerico.toFixed(2)}</div>
+                        </TableCell>
 
-                      {/* Acciones (solo admin y solo para pendientes) */}
-                      {isAdmin && transferencia.estado === "pendiente" && (
-                        <TableCell className="md:table-cell block md:border-0 border-0 p-0">
-                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">ACCIONES</div>
-                          <div className="flex flex-wrap gap-2">
-                            {/* Botón Aprobar con confirmación */}
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                  size="sm" 
-                                  className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1"
-                                  disabled={processingId === transferencia.id}
-                                >
-                                  {processingId === transferencia.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <CheckCircle className="h-3 w-3" />
-                                  )}
-                                  Aprobar
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Aprobar transferencia?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    ¿Estás seguro de que deseas aprobar la transferencia de <strong>Bs {transferencia.monto.toFixed(2)}</strong> 
-                                    realizada por <strong>{transferencia.usuarioOrigen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction 
-                                    onClick={() => handleAprobar(transferencia.id)}
-                                    className="bg-green-600 hover:bg-green-700"
-                                  >
-                                    Aprobar
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-
-                            {/* Botón Observar con confirmación y campo de observación */}
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                  size="sm" 
-                                  variant="destructive" 
-                                  className="flex items-center gap-1"
-                                  disabled={processingId === transferencia.id}
-                                >
-                                  {processingId === transferencia.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <XCircle className="h-3 w-3" />
-                                  )}
-                                  Observar
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Observar transferencia?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    ¿Estás seguro de que deseas marcar como observada la transferencia de <strong>Bs {transferencia.monto.toFixed(2)}</strong> 
-                                    realizada por <strong>{transferencia.usuarioOrigen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <div className="py-4">
-                                  <Label htmlFor="observacion" className="text-sm font-medium">
-                                    Motivo de la observación
-                                  </Label>
-                                  <Input
-                                    id="observacion"
-                                    placeholder="Ej: Falta comprobante de pago..."
-                                    value={observacionInput}
-                                    onChange={(e) => setObservacionInput(e.target.value)}
-                                    className="mt-2"
-                                  />
-                                </div>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel 
-                                    onClick={() => setObservacionInput("")}
-                                  >
-                                    Cancelar
-                                  </AlertDialogCancel>
-                                  <AlertDialogAction 
-                                    onClick={() => {
-                                      handleObservar(transferencia.id);
-                                    }}
-                                    className="bg-red-600 hover:bg-red-700"
-                                  >
-                                    Observar
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                        {/* Tipo */}
+                        <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
+                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">TIPO</div>
+                          <div className="flex justify-start md:justify-start">
+                            {getTipoBadge(transferencia.tipo)}
                           </div>
                         </TableCell>
-                      )}
-                      
-                      {/* Para admin con transferencias ya procesadas */}
-                      {isAdmin && transferencia.estado !== "pendiente" && (
-                        <TableCell className="md:table-cell block md:border-0 border-0 p-0">
-                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">ACCIONES</div>
-                          <span className="text-xs text-muted-foreground">Procesada</span>
+
+                        {/* Descripción */}
+                        <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
+                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">DESCRIPCIÓN</div>
+                          <div className="text-sm">{transferencia.descripcion}</div>
+                          {transferencia.observacion && (
+                            <div className="text-xs text-red-600 mt-1">
+                              <span className="font-medium">Observación:</span> {transferencia.observacion}
+                            </div>
+                          )}
+                          {transferencia.fecha_aprobacion && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              <span className="font-medium">Fecha de aprobación:</span> {formatDate(transferencia.fecha_aprobacion)}
+                            </div>
+                          )}
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
+
+                        {/* Usuario Origen (solo admin) */}
+                        {isAdmin && (
+                          <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
+                            <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">USUARIO ORIGEN</div>
+                            <div className="text-sm font-medium">{transferencia.usuario_origen}</div>
+                          </TableCell>
+                        )}
+
+                        {/* Estado */}
+                        <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-2 md:mb-0">
+                          <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">ESTADO</div>
+                          <div className="flex justify-start md:justify-start">
+                            {getEstadoBadge(transferencia.estado)}
+                          </div>
+                        </TableCell>
+
+                        {/* Acciones (solo admin y solo para pendientes) */}
+                        {isAdmin && transferencia.estado === "pendiente" && (
+                          <TableCell className="md:table-cell block md:border-0 border-0 p-0">
+                            <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">ACCIONES</div>
+                            <div className="flex flex-wrap gap-2">
+                              {/* Botón Aprobar con confirmación */}
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1"
+                                    disabled={processingId === transferencia.id}
+                                  >
+                                    {processingId === transferencia.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <CheckCircle className="h-3 w-3" />
+                                    )}
+                                    Aprobar
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Aprobar transferencia?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      ¿Estás seguro de que deseas aprobar la transferencia de <strong>Bs {montoNumerico.toFixed(2)}</strong> 
+                                      realizada por <strong>{transferencia.usuario_origen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => handleAprobar(transferencia.id)}
+                                      className="bg-green-600 hover:bg-green-700"
+                                    >
+                                      Aprobar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+
+                              {/* Botón Observar con confirmación y campo de observación */}
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="destructive" 
+                                    className="flex items-center gap-1"
+                                    disabled={processingId === transferencia.id}
+                                  >
+                                    {processingId === transferencia.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <XCircle className="h-3 w-3" />
+                                    )}
+                                    Observar
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Observar transferencia?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      ¿Estás seguro de que deseas marcar como observada la transferencia de <strong>Bs {montoNumerico.toFixed(2)}</strong> 
+                                      realizada por <strong>{transferencia.usuario_origen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <div className="py-4">
+                                    <Label htmlFor="observacion" className="text-sm font-medium">
+                                      Motivo de la observación
+                                    </Label>
+                                    <Input
+                                      id="observacion"
+                                      placeholder="Ej: Falta comprobante de pago..."
+                                      value={observacionInput}
+                                      onChange={(e) => setObservacionInput(e.target.value)}
+                                      className="mt-2"
+                                    />
+                                  </div>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel 
+                                      onClick={() => setObservacionInput("")}
+                                    >
+                                      Cancelar
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => {
+                                        handleObservar(transferencia.id);
+                                      }}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Observar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        )}
+                        
+                        {/* Para admin con transferencias ya procesadas */}
+                        {isAdmin && transferencia.estado !== "pendiente" && (
+                          <TableCell className="md:table-cell block md:border-0 border-0 p-0">
+                            <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">ACCIONES</div>
+                            <span className="text-xs text-muted-foreground">Procesada</span>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

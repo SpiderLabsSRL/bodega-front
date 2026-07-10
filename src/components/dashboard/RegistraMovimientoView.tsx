@@ -8,12 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, Wallet, CheckCircle, XCircle, Building2 } from "lucide-react";
+import { DollarSign, Wallet, CheckCircle, XCircle, Building2, Loader2 } from "lucide-react";
 import { 
-  getAdminUsers
+  getAdminUsers,
+  getSaldoActual,
+  createTransaccionCaja
 } from "@/api/CajaApi";
 
-// Tipos de caja
 type TipoCaja = "Efectivo" | "QR" | "";
 
 interface RegistraMovimientoViewProps {
@@ -21,36 +22,70 @@ interface RegistraMovimientoViewProps {
 }
 
 export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps) {
-  // Estado para el paso de selección de tipo de caja (SIEMPRE empieza aquí)
   const [pasoSeleccionCaja, setPasoSeleccionCaja] = useState<boolean>(true);
   const [tipoCaja, setTipoCaja] = useState<TipoCaja>("");
   const [tipoMovimiento, setTipoMovimiento] = useState<string>("");
   const [monto, setMonto] = useState<string>("");
   const [descripcion, setDescripcion] = useState<string>("");
   const [usuarioTransferencia, setUsuarioTransferencia] = useState<string>("");
-  const [saldoActual, setSaldoActual] = useState<number>(1500);
+  const [saldoActual, setSaldoActual] = useState<number>(0);
   const [cajaAbierta, setCajaAbierta] = useState<boolean>(false);
   const [processing, setProcessing] = useState<boolean>(false);
+  const [loadingSaldo, setLoadingSaldo] = useState<boolean>(false);
   const [usuariosAdmin, setUsuariosAdmin] = useState<{id: number; nombre: string; usuario: string}[]>([]);
   const { toast } = useToast();
+
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const userId = currentUser?.idusuario || currentUser?.idUsuario || 1;
+  const idbodega = currentUser?.idbodega || 1;
 
   useEffect(() => {
     cargarUsuariosAdmin();
   }, []);
 
-  const cargarUsuariosAdmin = async () => {
-    const usuarios = await getAdminUsers();
-    setUsuariosAdmin(usuarios)
-  }
+  useEffect(() => {
+    if (tipoCaja && idbodega) {
+      cargarSaldoActual();
+    }
+  }, [tipoCaja, idbodega]);
 
-  // Determinar las opciones de movimiento según el tipo de caja y estado
+  const cargarUsuariosAdmin = async () => {
+    try {
+      const usuarios = await getAdminUsers();
+      setUsuariosAdmin(usuarios);
+    } catch (error) {
+      console.error("Error cargando usuarios admin:", error);
+    }
+  };
+
+  const cargarSaldoActual = async () => {
+    if (!tipoCaja || !idbodega) return;
+    
+    setLoadingSaldo(true);
+    try {
+      const saldoData = await getSaldoActual({ idbodega, tipoCaja });
+      const saldo = parseFloat(saldoData.monto_final);
+      setSaldoActual(saldo);
+      // Solo mostrar estado si es Efectivo
+      if (tipoCaja === "Efectivo") {
+        setCajaAbierta(saldoData.estado === 'abierta');
+      } else {
+        setCajaAbierta(false); // QR no tiene estado
+      }
+    } catch (error) {
+      console.error("Error cargando saldo:", error);
+      setSaldoActual(0);
+      setCajaAbierta(false);
+    } finally {
+      setLoadingSaldo(false);
+    }
+  };
+
   const getMovimientoOptions = () => {
     if (tipoCaja === "Efectivo") {
-      // Si la caja está cerrada: SOLO Apertura
       if (!cajaAbierta) {
         return [{ value: "Apertura", label: "Apertura" }];
       }
-      // Si la caja está abierta: Ingreso, Egreso, Transferencia, Cierre
       return [
         { value: "Ingreso", label: "Ingreso" },
         { value: "Egreso", label: "Egreso" },
@@ -58,7 +93,7 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
         { value: "Cierre", label: "Cierre" },
       ];
     } else if (tipoCaja === "QR") {
-      // Para QR: siempre Ingreso, Egreso y Transferencia
+      // QR solo tiene Ingreso, Egreso y Transferencia (sin apertura/cierre)
       return [
         { value: "Ingreso", label: "Ingreso" },
         { value: "Egreso", label: "Egreso" },
@@ -68,22 +103,11 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
     return [];
   };
 
-  const getTipoTexto = (tipo: string) => {
-    const tipoTextos: { [key: string]: string } = {
-      "Ingreso": "Ingreso",
-      "Egreso": "Egreso", 
-      "Apertura": "Apertura de caja",
-      "Cierre": "Cierre de caja",
-      "Transferencia": "Transferencia"
-    };
-    return tipoTextos[tipo] || tipo;
-  };
-
-  // Cuando se selecciona Apertura, se pone automáticamente el saldo actual
-  // Cuando se selecciona Cierre, se pone automáticamente el saldo actual
   const handleTipoMovimientoChange = (value: string) => {
     setTipoMovimiento(value);
-    if (value === "Apertura" || value === "Cierre") {
+    if (value === "Apertura") {
+      setMonto(saldoActual.toString());
+    } else if (value === "Cierre") {
       setMonto(saldoActual.toString());
     } else {
       setMonto("");
@@ -96,7 +120,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
     setProcessing(true);
     
     try {
-      // Validaciones según el tipo de movimiento
       if (!tipoMovimiento) {
         toast({
           title: "Error",
@@ -107,18 +130,16 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
         return;
       }
 
-      // Validar monto
-      if (!monto) {
+      if (!monto || parseFloat(monto) < 0) {
         toast({
           title: "Error",
-          description: "Por favor ingresa el monto",
+          description: "Por favor ingresa un monto válido",
           variant: "destructive",
         });
         setProcessing(false);
         return;
       }
 
-      // Validar descripción para Ingreso, Egreso y Transferencia
       if ((tipoMovimiento === "Ingreso" || tipoMovimiento === "Egreso" || tipoMovimiento === "Transferencia") && !descripcion) {
         toast({
           title: "Error",
@@ -129,7 +150,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
         return;
       }
 
-      // Validar usuario para Transferencia
       if (tipoMovimiento === "Transferencia" && !usuarioTransferencia) {
         toast({
           title: "Error",
@@ -140,17 +160,28 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
         return;
       }
 
-      // Simular la operación con datos mock
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const data: any = {
+        tipoCaja,
+        tipoMovimiento,
+        monto: parseFloat(monto),
+        descripcion,
+        idbodega,
+        idusuario: userId,
+      };
+
+      if (tipoMovimiento === "Transferencia") {
+        data.usuarioTransferencia = usuarioTransferencia;
+      }
+
+      const resultado = await createTransaccionCaja(data);
 
       if (tipoMovimiento === "Apertura") {
         setCajaAbierta(true);
-        setSaldoActual(parseFloat(monto));
+        await cargarSaldoActual();
         toast({
           title: "Caja abierta",
-          description: `Caja de ${tipoCaja} abierta con monto inicial de ${monto} Bs correctamente`,
+          description: `Caja de ${tipoCaja} abierta con saldo de ${monto} Bs correctamente`,
         });
-        // Limpiar y volver a selección de caja para que el usuario pueda elegir otra acción
         setTipoMovimiento("");
         setMonto("");
         setDescripcion("");
@@ -161,45 +192,44 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
           title: "Caja cerrada",
           description: `Caja de ${tipoCaja} cerrada con saldo final de ${saldoActual.toFixed(2)} Bs correctamente`,
         });
-        // Limpiar y volver a selección de caja
         setTipoMovimiento("");
         setMonto("");
         setDescripcion("");
         setUsuarioTransferencia("");
-        // Volver a la selección de tipo de caja
         setTipoCaja("");
         setPasoSeleccionCaja(true);
       } else if (tipoMovimiento === "Transferencia") {
         const usuario = usuariosAdmin.find(u => u.usuario === usuarioTransferencia);
+        const mensaje = resultado.estado === 'pendiente' 
+          ? `Transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} registrada. Pendiente de aprobación.`
+          : `Transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} aprobada automáticamente.`;
+        
         toast({
-          title: "Transferencia registrada",
-          description: `Transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} registrada correctamente en caja de ${tipoCaja}`,
+          title: resultado.estado === 'pendiente' ? "Transferencia registrada" : "Transferencia aprobada",
+          description: mensaje,
         });
-        // Limpiar campos para seguir registrando
+        
+        await cargarSaldoActual();
         setTipoMovimiento("");
         setMonto("");
         setDescripcion("");
         setUsuarioTransferencia("");
       } else if (tipoMovimiento === "Ingreso") {
-        const nuevoSaldo = saldoActual + parseFloat(monto);
-        setSaldoActual(nuevoSaldo);
+        await cargarSaldoActual();
         toast({
           title: "Ingreso registrado",
           description: `Ingreso de ${monto} Bs registrado correctamente en caja de ${tipoCaja}`,
         });
-        // Limpiar campos para seguir registrando
         setTipoMovimiento("");
         setMonto("");
         setDescripcion("");
         setUsuarioTransferencia("");
       } else if (tipoMovimiento === "Egreso") {
-        const nuevoSaldo = saldoActual - parseFloat(monto);
-        setSaldoActual(nuevoSaldo);
+        await cargarSaldoActual();
         toast({
           title: "Egreso registrado",
           description: `Egreso de ${monto} Bs registrado correctamente en caja de ${tipoCaja}`,
         });
-        // Limpiar campos para seguir registrando
         setTipoMovimiento("");
         setMonto("");
         setDescripcion("");
@@ -219,11 +249,11 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
 
   const requiredFields = () => {
     if (tipoMovimiento === "Apertura" || tipoMovimiento === "Cierre") {
-      return !!monto;
+      return !!monto && parseFloat(monto) >= 0;
     } else if (tipoMovimiento === "Transferencia") {
-      return !!monto && !!descripcion && !!usuarioTransferencia;
+      return !!monto && parseFloat(monto) > 0 && !!descripcion && !!usuarioTransferencia;
     } else if (tipoMovimiento === "Ingreso" || tipoMovimiento === "Egreso") {
-      return !!monto && !!descripcion;
+      return !!monto && parseFloat(monto) > 0 && !!descripcion;
     }
     return false;
   };
@@ -231,9 +261,9 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
   const getDescripcionPlaceholder = () => {
     switch (tipoMovimiento) {
       case "Apertura":
-        return `Apertura de caja de ${tipoCaja}`;
+        return `Apertura de caja de ${tipoCaja} con saldo de ${monto || '0'} Bs`;
       case "Cierre":
-        return `Cierre de caja de ${tipoCaja}`;
+        return `Cierre de caja de ${tipoCaja} con saldo de ${saldoActual.toFixed(2)} Bs`;
       case "Transferencia":
         return "Descripción de la transferencia...";
       default:
@@ -264,16 +294,15 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
   };
 
   const isButtonDisabled = () => {
-    return !requiredFields() || processing || !tipoCaja;
+    return !requiredFields() || processing || !tipoCaja || loadingSaldo;
   };
 
-  // Mostrar el monto automático para Apertura y Cierre
   const getMontoLabel = () => {
     if (tipoMovimiento === "Apertura") {
-      return "Monto Inicial (Bs) - Automático";
+      return "Saldo con el que se abre (Bs) - Automático";
     }
     if (tipoMovimiento === "Cierre") {
-      return "Monto Final (Bs) - Automático";
+      return "Saldo con el que se cierra (Bs) - Automático";
     }
     return "Monto (Bs)";
   };
@@ -282,7 +311,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
     return tipoMovimiento === "Apertura" || tipoMovimiento === "Cierre";
   };
 
-  // PASO 1: SIEMPRE mostrar selección de tipo de caja primero
   if (pasoSeleccionCaja) {
     return (
       <div className="space-y-6">
@@ -307,7 +335,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
                 onClick={() => {
                   setTipoCaja("Efectivo");
                   setPasoSeleccionCaja(false);
-                  setCajaAbierta(false);
                 }}
               >
                 <DollarSign className="h-12 w-12" />
@@ -319,7 +346,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
                 onClick={() => {
                   setTipoCaja("QR");
                   setPasoSeleccionCaja(false);
-                  setCajaAbierta(false);
                 }}
               >
                 <Building2 className="h-12 w-12" />
@@ -332,7 +358,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
     );
   }
 
-  // PASO 2: Formulario de registro de movimiento
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -360,7 +385,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
         )}
       </div>
 
-      {/* Estado de Caja */}
       <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-lg flex-wrap">
         <div className="flex items-center gap-2">
           <Wallet className="h-5 w-5 text-primary" />
@@ -379,23 +403,32 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
             <span className="text-sm text-muted-foreground">No seleccionada</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Estado:</span>
-          {cajaAbierta ? (
-            <>
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-semibold text-green-600">ABIERTA</span>
-            </>
-          ) : (
-            <>
-              <XCircle className="h-4 w-4 text-red-600" />
-              <span className="text-sm font-semibold text-red-600">CERRADA</span>
-            </>
-          )}
-        </div>
+        {/* Solo mostrar estado si es Efectivo */}
+        {tipoCaja === "Efectivo" && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Estado:</span>
+            {loadingSaldo ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : cajaAbierta ? (
+              <>
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-semibold text-green-600">ABIERTA</span>
+              </>
+            ) : (
+              <>
+                <XCircle className="h-4 w-4 text-red-600" />
+                <span className="text-sm font-semibold text-red-600">CERRADA</span>
+              </>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Saldo:</span>
-          <span className="text-sm font-bold">Bs {saldoActual.toFixed(2)}</span>
+          {loadingSaldo ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <span className="text-sm font-bold">Bs {saldoActual.toFixed(2)}</span>
+          )}
         </div>
       </div>
 
@@ -409,7 +442,7 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
             <Select 
               value={tipoMovimiento} 
               onValueChange={handleTipoMovimientoChange} 
-              disabled={processing || !tipoCaja}
+              disabled={processing || !tipoCaja || loadingSaldo}
             >
               <SelectTrigger>
                 <SelectValue placeholder={tipoCaja ? "Seleccionar movimiento" : "Selecciona primero el tipo de caja"} />
@@ -424,7 +457,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
             </Select>
           </div>
 
-          {/* Selección de usuario para Transferencia */}
           {tipoMovimiento === "Transferencia" && (
             <div className="space-y-2">
               <Label htmlFor="usuarioTransferencia">Usuario Destino (Admin)</Label>
@@ -447,7 +479,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
             </div>
           )}
 
-          {/* Campo de monto - Deshabilitado para Apertura y Cierre (automático) */}
           {(tipoMovimiento === "Apertura" || tipoMovimiento === "Ingreso" || tipoMovimiento === "Egreso" || tipoMovimiento === "Transferencia" || tipoMovimiento === "Cierre") && (
             <div className="space-y-2">
               <Label htmlFor="monto">{getMontoLabel()}</Label>
@@ -456,22 +487,27 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
                 type="number"
                 placeholder="0.00"
                 value={monto}
-                onChange={(e) => setMonto(e.target.value)}
+                onChange={(e) => {
+                  if (!isMontoDisabled()) {
+                    setMonto(e.target.value);
+                  }
+                }}
                 min="0"
                 step="0.01"
                 className="number-input-no-scroll"
                 onWheel={(e) => e.currentTarget.blur()}
-                disabled={processing || isMontoDisabled()}
+                disabled={processing || isMontoDisabled() || loadingSaldo}
               />
               {isMontoDisabled() && (
                 <p className="text-xs text-muted-foreground">
-                  El monto se asigna automáticamente con el saldo actual
+                  {tipoMovimiento === "Apertura" 
+                    ? "El saldo actual se usa automáticamente para la apertura" 
+                    : "El saldo final se calcula automáticamente"}
                 </p>
               )}
             </div>
           )}
 
-          {/* Campo de descripción */}
           {(tipoMovimiento === "Ingreso" || tipoMovimiento === "Egreso" || tipoMovimiento === "Transferencia") && (
             <div className="space-y-2">
               <Label htmlFor="descripcion">Descripción</Label>
@@ -486,7 +522,6 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
             </div>
           )}
 
-          {/* Información para Apertura */}
           {tipoMovimiento === "Apertura" && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-center gap-2 text-green-800">
@@ -494,12 +529,16 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
                 <span className="font-semibold">Información de Apertura</span>
               </div>
               <p className="text-sm text-green-700 mt-1">
-                La caja de {tipoCaja} se abrirá con el saldo actual de <strong>Bs {saldoActual.toFixed(2)}</strong>
+                La caja de {tipoCaja} se abrirá con el saldo actual de <strong>Bs {monto || '0.00'}</strong>
               </p>
+              {parseFloat(monto) > 0 && (
+                <p className="text-xs text-green-600 mt-1">
+                  Este saldo incluye todos los movimientos previos registrados
+                </p>
+              )}
             </div>
           )}
 
-          {/* Información para Cierre */}
           {tipoMovimiento === "Cierre" && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center gap-2 text-blue-800">
@@ -518,7 +557,14 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
                 className="w-full" 
                 disabled={isButtonDisabled()}
               >
-                {getButtonText()}
+                {processing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  getButtonText()
+                )}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>

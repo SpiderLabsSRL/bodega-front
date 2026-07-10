@@ -111,7 +111,6 @@ export function CajaView() {
       setDatosCargados(false);
       setError(null);
 
-      // Solo cargar saldo si hay una caja seleccionada
       if (tipoCajaSeleccionado) {
         try {
           const params: { idbodega?: number; tipoCaja: string } = { 
@@ -120,16 +119,20 @@ export function CajaView() {
           };
           const saldoData = await getSaldoActual(params);
           setSaldoActual(parseFloat(saldoData.monto_final));
-          setEstadoCaja(saldoData.estado);
+          // Solo mostrar estado si es Efectivo
+          if (tipoCajaSeleccionado === "Efectivo") {
+            setEstadoCaja(saldoData.estado);
+          } else {
+            setEstadoCaja(""); // QR no tiene estado
+          }
         } catch (saldoError) {
           console.error("Error cargando saldo:", saldoError);
           setSaldoActual(0);
-          setEstadoCaja("cerrada");
+          setEstadoCaja("");
         }
       } else {
-        // Si no hay caja seleccionada, mostrar 0.00
         setSaldoActual(0);
-        setEstadoCaja("cerrada");
+        setEstadoCaja("");
       }
       
       try {
@@ -367,11 +370,14 @@ export function CajaView() {
             <CardTitle className="text-sm font-medium">Saldo Actual</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xs text-muted-foreground mb-1">
-              Estado: <span className={`font-medium ${estadoCaja === 'abierta' ? 'text-green-600' : 'text-red-600'}`}>
-                {tipoCajaSeleccionado ? (estadoCaja === 'abierta' ? 'ABIERTA' : 'CERRADA') : 'SIN SELECCIÓN'}
-              </span>
-            </div>
+            {/* Solo mostrar estado si es Efectivo */}
+            {tipoCajaSeleccionado === "Efectivo" && (
+              <div className="text-xs text-muted-foreground mb-1">
+                Estado: <span className={`font-medium ${estadoCaja === 'abierta' ? 'text-green-600' : 'text-red-600'}`}>
+                  {estadoCaja === 'abierta' ? 'ABIERTA' : 'CERRADA'}
+                </span>
+              </div>
+            )}
             <div className={`text-2xl font-bold ${saldoActual >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               Bs {saldoActual.toFixed(2)}
             </div>
