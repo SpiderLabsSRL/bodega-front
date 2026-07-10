@@ -127,6 +127,16 @@ export const getSaldoActual = async (params : GetSaldoParams): Promise<SaldoActu
   }
 };
 
+export const getAdminUsers = async (): Promise<{id: number, nombre: string, usuario: string}[]> => {
+  try {
+    const response = await api.get<{id: number; nombre: string; usuario: string}[]>("/caja/usuariosAdmins");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching usuarios caja:", error);
+    throw new Error("No se pudieron cargar los usuarios");
+  }
+}
+
 // Obtener usuarios únicos para filtros
 export const getUsuariosCaja = async (): Promise<{idusuario: number; empleado_nombre: string}[]> => {
   try {

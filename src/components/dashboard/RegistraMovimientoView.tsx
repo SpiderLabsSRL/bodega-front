@@ -1,5 +1,5 @@
 // src/components/dashboard/RegistraMovimientoView.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,13 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { DollarSign, Wallet, CheckCircle, XCircle, Building2 } from "lucide-react";
-
-// Datos mock de usuarios Admin
-const MOCK_ADMIN_USERS = [
-  { id: 1, nombre: "Admin Principal", usuario: "admin1" },
-  { id: 2, nombre: "Admin Secundario", usuario: "admin2" },
-  { id: 3, nombre: "Super Admin", usuario: "superadmin" },
-];
+import { 
+  getAdminUsers
+} from "@/api/CajaApi";
 
 // Tipos de caja
 type TipoCaja = "Efectivo" | "QR" | "";
@@ -35,7 +31,17 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
   const [saldoActual, setSaldoActual] = useState<number>(1500);
   const [cajaAbierta, setCajaAbierta] = useState<boolean>(false);
   const [processing, setProcessing] = useState<boolean>(false);
+  const [usuariosAdmin, setUsuariosAdmin] = useState<{id: number; nombre: string; usuario: string}[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    cargarUsuariosAdmin();
+  }, []);
+
+  const cargarUsuariosAdmin = async () => {
+    const usuarios = await getAdminUsers();
+    setUsuariosAdmin(usuarios)
+  }
 
   // Determinar las opciones de movimiento según el tipo de caja y estado
   const getMovimientoOptions = () => {
@@ -164,7 +170,7 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
         setTipoCaja("");
         setPasoSeleccionCaja(true);
       } else if (tipoMovimiento === "Transferencia") {
-        const usuario = MOCK_ADMIN_USERS.find(u => u.usuario === usuarioTransferencia);
+        const usuario = usuariosAdmin.find(u => u.usuario === usuarioTransferencia);
         toast({
           title: "Transferencia registrada",
           description: `Transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} registrada correctamente en caja de ${tipoCaja}`,
@@ -248,7 +254,7 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
     } else if (tipoMovimiento === "Cierre") {
       return `¿Estás seguro de que deseas cerrar la caja de ${tipoCaja} con el saldo actual de ${saldoActual.toFixed(2)} Bs?`;
     } else if (tipoMovimiento === "Transferencia") {
-      const usuario = MOCK_ADMIN_USERS.find(u => u.usuario === usuarioTransferencia);
+      const usuario = usuariosAdmin.find(u => u.usuario === usuarioTransferencia);
       return `¿Estás seguro de que deseas realizar una transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} en caja de ${tipoCaja}?`;
     } else {
       return `¿Estás seguro de que deseas registrar este ${tipoMovimiento.toLowerCase()} de ${monto} Bs en caja de ${tipoCaja}?${
@@ -431,7 +437,7 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
                   <SelectValue placeholder="Seleccionar usuario Admin" />
                 </SelectTrigger>
                 <SelectContent>
-                  {MOCK_ADMIN_USERS.map((user) => (
+                  {usuariosAdmin.map((user) => (
                     <SelectItem key={user.id} value={user.usuario}>
                       {user.nombre} ({user.usuario})
                     </SelectItem>
