@@ -214,6 +214,7 @@ CREATE TABLE caja (
     idcaja SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
     tipo VARCHAR(10) CHECK (tipo IN ('Efectivo', 'QR')) NOT NULL,
+    estado_caja VARCHAR(20) CHECK (estado_caja IN ('abierta', 'cerrada')),
     total DECIMAL(10,2) DEFAULT 0,
     idbodega INTEGER REFERENCES bodegas(idbodega) ON DELETE CASCADE,
     CONSTRAINT caja_nombre_bodega_unique UNIQUE (nombre, idbodega)
