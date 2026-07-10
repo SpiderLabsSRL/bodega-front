@@ -49,12 +49,31 @@ const api = axios.create({
 });
 
 // Obtener todas las transacciones de caja (para Admin)
-export const getTransaccionesCaja = async (): Promise<TransaccionCaja[]> => {
+interface GetTransaccionesCajaParams {
+  idusuario?: number;
+  fecha?: string;
+  fechaInicio?: string;
+  fechaFin?: string;
+  tipoCaja?: string;
+}
+
+export const getTransaccionesCaja = async (
+  params: GetTransaccionesCajaParams = {}
+): Promise<TransaccionCaja[]> => {
   try {
-    const response = await api.get<BackendTransaccionCaja[]>("/caja/transacciones");
+    const response = await api.get<BackendTransaccionCaja[]>("/caja/transacciones", {
+      params: {
+        idusuario: params.idusuario,
+        fecha: params.fecha,
+        fechaInicio: params.fechaInicio,
+        fechaFin: params.fechaFin,
+        tipoCaja: params.tipoCaja,
+      },
+    });
+
     return response.data.map((transaccion) => ({
       idtransaccion: transaccion.idtransaccion,
-      idestado_caja: transaccion.idestado_caja,
+      idestado_caja: transaccion?.idestado_caja || 1,
       tipo_movimiento: transaccion.tipo_movimiento,
       descripcion: transaccion.descripcion,
       monto: parseFloat(transaccion.monto),
@@ -65,115 +84,6 @@ export const getTransaccionesCaja = async (): Promise<TransaccionCaja[]> => {
     }));
   } catch (error) {
     console.error("Error fetching transacciones caja:", error);
-    throw new Error("No se pudieron cargar las transacciones de caja");
-  }
-};
-
-// Obtener transacciones de caja por fecha (Admin)
-export const getTransaccionesCajaByFecha = async (fecha: string): Promise<TransaccionCaja[]> => {
-  try {
-    console.log("API: Buscando transacciones por fecha:", fecha); // Debug
-    const response = await api.get<BackendTransaccionCaja[]>(`/caja/transacciones/fecha/${fecha}`);
-    console.log("API: Resultados encontrados:", response.data.length); // Debug
-    return response.data.map((transaccion) => ({
-      idtransaccion: transaccion.idtransaccion,
-      idestado_caja: transaccion.idestado_caja,
-      tipo_movimiento: transaccion.tipo_movimiento,
-      descripcion: transaccion.descripcion,
-      monto: parseFloat(transaccion.monto),
-      fecha: transaccion.fecha,
-      idusuario: transaccion.idusuario,
-      idventa: transaccion.idventa,
-      empleado: `${transaccion.nombres} ${transaccion.apellidos}`,
-    }));
-  } catch (error) {
-    console.error("Error fetching transacciones caja por fecha:", error);
-    throw new Error("No se pudieron cargar las transacciones de caja");
-  }
-};
-
-// Obtener transacciones de caja por rango de fechas (Admin)
-export const getTransaccionesCajaByRango = async (fechaInicio: string, fechaFin: string): Promise<TransaccionCaja[]> => {
-  try {
-    console.log("API: Buscando transacciones por rango:", fechaInicio, "a", fechaFin); // Debug
-    const response = await api.get<BackendTransaccionCaja[]>(`/caja/transacciones/rango/${fechaInicio}/${fechaFin}`);
-    console.log("API: Resultados encontrados en rango:", response.data.length); // Debug
-    return response.data.map((transaccion) => ({
-      idtransaccion: transaccion.idtransaccion,
-      idestado_caja: transaccion.idestado_caja,
-      tipo_movimiento: transaccion.tipo_movimiento,
-      descripcion: transaccion.descripcion,
-      monto: parseFloat(transaccion.monto),
-      fecha: transaccion.fecha,
-      idusuario: transaccion.idusuario,
-      idventa: transaccion.idventa,
-      empleado: `${transaccion.nombres} ${transaccion.apellidos}`,
-    }));
-  } catch (error) {
-    console.error("Error fetching transacciones caja por rango:", error);
-    throw new Error("No se pudieron cargar las transacciones de caja");
-  }
-};
-
-// Obtener transacciones de caja por usuario (para Asistente)
-export const getTransaccionesCajaByUsuario = async (idusuario: number): Promise<TransaccionCaja[]> => {
-  try {
-    const response = await api.get<BackendTransaccionCaja[]>(`/caja/transacciones/usuario/${idusuario}`);
-    return response.data.map((transaccion) => ({
-      idtransaccion: transaccion.idtransaccion,
-      idestado_caja: transaccion.idestado_caja,
-      tipo_movimiento: transaccion.tipo_movimiento,
-      descripcion: transaccion.descripcion,
-      monto: parseFloat(transaccion.monto),
-      fecha: transaccion.fecha,
-      idusuario: transaccion.idusuario,
-      idventa: transaccion.idventa,
-      empleado: `${transaccion.nombres} ${transaccion.apellidos}`,
-    }));
-  } catch (error) {
-    console.error("Error fetching transacciones caja por usuario:", error);
-    throw new Error("No se pudieron cargar las transacciones de caja");
-  }
-};
-
-// Obtener transacciones de caja por usuario y fecha
-export const getTransaccionesCajaByUsuarioFecha = async (idusuario: number, fecha: string): Promise<TransaccionCaja[]> => {
-  try {
-    const response = await api.get<BackendTransaccionCaja[]>(`/caja/transacciones/usuario/${idusuario}/fecha/${fecha}`);
-    return response.data.map((transaccion) => ({
-      idtransaccion: transaccion.idtransaccion,
-      idestado_caja: transaccion.idestado_caja,
-      tipo_movimiento: transaccion.tipo_movimiento,
-      descripcion: transaccion.descripcion,
-      monto: parseFloat(transaccion.monto),
-      fecha: transaccion.fecha,
-      idusuario: transaccion.idusuario,
-      idventa: transaccion.idventa,
-      empleado: `${transaccion.nombres} ${transaccion.apellidos}`,
-    }));
-  } catch (error) {
-    console.error("Error fetching transacciones caja por usuario y fecha:", error);
-    throw new Error("No se pudieron cargar las transacciones de caja");
-  }
-};
-
-// Obtener transacciones de caja por usuario y rango de fechas
-export const getTransaccionesCajaByUsuarioRango = async (idusuario: number, fechaInicio: string, fechaFin: string): Promise<TransaccionCaja[]> => {
-  try {
-    const response = await api.get<BackendTransaccionCaja[]>(`/caja/transacciones/usuario/${idusuario}/rango/${fechaInicio}/${fechaFin}`);
-    return response.data.map((transaccion) => ({
-      idtransaccion: transaccion.idtransaccion,
-      idestado_caja: transaccion.idestado_caja,
-      tipo_movimiento: transaccion.tipo_movimiento,
-      descripcion: transaccion.descripcion,
-      monto: parseFloat(transaccion.monto),
-      fecha: transaccion.fecha,
-      idusuario: transaccion.idusuario,
-      idventa: transaccion.idventa,
-      empleado: `${transaccion.nombres} ${transaccion.apellidos}`,
-    }));
-  } catch (error) {
-    console.error("Error fetching transacciones caja por usuario y rango:", error);
     throw new Error("No se pudieron cargar las transacciones de caja");
   }
 };
@@ -208,9 +118,9 @@ export const getSaldoActual = async (): Promise<SaldoActualResponse> => {
 };
 
 // Obtener usuarios únicos para filtros
-export const getUsuariosCaja = async (): Promise<string[]> => {
+export const getUsuariosCaja = async (): Promise<{idusuario: number; nombre: string}[]> => {
   try {
-    const response = await api.get<string[]>("/caja/usuarios");
+    const response = await api.get<{idusuario: number; nombre: string}[]>("/caja/usuarios");
     return response.data;
   } catch (error) {
     console.error("Error fetching usuarios caja:", error);

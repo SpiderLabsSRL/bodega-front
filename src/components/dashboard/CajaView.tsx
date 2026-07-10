@@ -10,6 +10,7 @@ import { CalendarIcon, CalendarRange as CalendarRangeIcon, Loader2, Check, X, Pl
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { 
+  getTransaccionesCaja,
   TransaccionCaja
 } from "@/api/CajaApi";
 import { RegistraMovimientoView } from "./RegistraMovimientoView";
@@ -59,68 +60,6 @@ const MOCK_SALDO = {
   monto_final: "1500.00",
   estado: "cerrada"
 };
-
-// Datos mock de movimientos por tipo de caja - con todas las propiedades requeridas
-const MOCK_MOVIMIENTOS_EFECTIVO: TransaccionCaja[] = [
-  {
-    idtransaccion: 1,
-    fecha: new Date().toISOString(),
-    tipo_movimiento: "Ingreso",
-    descripcion: "Venta de producto en efectivo - Cliente Juan",
-    monto: 500,
-    empleado: "Usuario Prueba",
-    idestado_caja: 1,
-    idusuario: 1,
-    idventa: 100
-  },
-  {
-    idtransaccion: 2,
-    fecha: new Date(Date.now() - 3600000).toISOString(),
-    tipo_movimiento: "Egreso",
-    descripcion: "Compra de insumos en efectivo",
-    monto: 200,
-    empleado: "Usuario Prueba",
-    idestado_caja: 1,
-    idusuario: 1,
-    idventa: null
-  },
-  {
-    idtransaccion: 3,
-    fecha: new Date(Date.now() - 7200000).toISOString(),
-    tipo_movimiento: "Ingreso",
-    descripcion: "Venta de producto en efectivo - Cliente María",
-    monto: 350,
-    empleado: "Admin Test",
-    idestado_caja: 1,
-    idusuario: 2,
-    idventa: 101
-  }
-];
-
-const MOCK_MOVIMIENTOS_QR: TransaccionCaja[] = [
-  {
-    idtransaccion: 4,
-    fecha: new Date().toISOString(),
-    tipo_movimiento: "Ingreso",
-    descripcion: "Venta de producto por QR - Cliente Pedro",
-    monto: 450,
-    empleado: "Usuario Prueba",
-    idestado_caja: 1,
-    idusuario: 1,
-    idventa: 102
-  },
-  {
-    idtransaccion: 5,
-    fecha: new Date(Date.now() - 3600000).toISOString(),
-    tipo_movimiento: "Egreso",
-    descripcion: "Compra de insumos por QR",
-    monto: 150,
-    empleado: "Usuario Prueba",
-    idestado_caja: 1,
-    idusuario: 1,
-    idventa: null
-  }
-];
 
 export function CajaView() {
   // Obtener usuario real
@@ -216,56 +155,47 @@ export function CajaView() {
     }
   };
 
-  // Función principal para buscar datos con los filtros actuales
   const buscarDatos = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Si no hay tipo de caja seleccionado, mostrar vacío
       if (!tipoCajaSeleccionado) {
         setMovimientosCaja([]);
         setLoading(false);
         return;
       }
-      
-      // Datos mock según el tipo de caja seleccionado
-      let datosFiltrados = tipoCajaSeleccionado === "Efectivo" 
-        ? [...MOCK_MOVIMIENTOS_EFECTIVO] 
-        : [...MOCK_MOVIMIENTOS_QR];
-      
-      // Si es asistente, filtrar solo sus movimientos
+
+      const params: {
+        idusuario?: number;
+        fecha?: string;
+        fechaInicio?: string;
+        fechaFin?: string;
+        tipoCaja: string;
+      } = {tipoCaja : tipoCajaSeleccionado};
+
       if (isAssistant) {
-        datosFiltrados = datosFiltrados.filter(mov => mov.empleado === currentUserName);
-      } 
-      // Si es admin, filtrar por empleado seleccionado
-      else if (filtroEmpleado !== "Todos") {
-        datosFiltrados = datosFiltrados.filter(mov => mov.empleado === filtroEmpleado);
+        params.idusuario = currentUser?.idUsuario;
       }
-
-      // Filtrar por fecha específica si está seleccionada
-      if (fechaBusqueda) {
-        const fechaStr = format(fechaBusqueda, "yyyy-MM-dd");
-        datosFiltrados = datosFiltrados.filter(mov => {
-          const movFecha = new Date(mov.fecha);
-          const movFechaStr = format(movFecha, "yyyy-MM-dd");
-          return movFechaStr === fechaStr;
-        });
+      else if (isAdmin && filtroEmpleado !== "Todos") {
+        params.idusuario = Number(filtroEmpleado);
       }
-
-      // Filtrar por rango de fechas si está seleccionado
-      if (fechaRangoAplicado.from && fechaRangoAplicado.to) {
-        const fromStr = format(fechaRangoAplicado.from, "yyyy-MM-dd");
-        const toStr = format(fechaRangoAplicado.to, "yyyy-MM-dd");
-        datosFiltrados = datosFiltrados.filter(mov => {
-          const movFecha = new Date(mov.fecha);
-          const movFechaStr = format(movFecha, "yyyy-MM-dd");
-          return movFechaStr >= fromStr && movFechaStr <= toStr;
-        });
-      }
-
-      setMovimientosCaja(datosFiltrados);
       
+      if (fechaBusqueda) {
+        params.fecha = format(fechaBusqueda, "yyyy-MM-dd");
+      }
+
+      if (fechaRangoAplicado.from && fechaRangoAplicado.to) {
+        params.fechaInicio = format(fechaRangoAplicado.from, "yyyy-MM-dd");
+        params.fechaFin = format(fechaRangoAplicado.to, "yyyy-MM-dd");
+        delete params.fecha;
+      }
+
+      const transacciones = await getTransaccionesCaja(params);
+
+      setMovimientosCaja(transacciones);
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar los movimientos");
       console.error("Error cargando movimientos:", err);
