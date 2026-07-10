@@ -19,9 +19,10 @@ type TipoCaja = "Efectivo" | "QR" | "";
 
 interface RegistraMovimientoViewProps {
   onClose?: () => void;
+  onTransaccionExitosa?: () => void; // Nueva prop
 }
 
-export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps) {
+export function RegistraMovimientoView({ onClose, onTransaccionExitosa }: RegistraMovimientoViewProps) {
   const [pasoSeleccionCaja, setPasoSeleccionCaja] = useState<boolean>(true);
   const [tipoCaja, setTipoCaja] = useState<TipoCaja>("");
   const [tipoMovimiento, setTipoMovimiento] = useState<string>("");
@@ -234,6 +235,20 @@ export function RegistraMovimientoView({ onClose }: RegistraMovimientoViewProps)
         setMonto("");
         setDescripcion("");
         setUsuarioTransferencia("");
+      }
+
+      // ✅ NOTIFICAR AL COMPONENTE PADRE QUE HUBO UNA TRANSACCIÓN EXITOSA
+      if (onTransaccionExitosa) {
+        onTransaccionExitosa();
+      }
+
+      // Si es Cierre, cerramos el modal automáticamente
+      if (tipoMovimiento === "Cierre") {
+        if (onClose) {
+          setTimeout(() => {
+            onClose();
+          }, 500);
+        }
       }
 
     } catch (error: any) {

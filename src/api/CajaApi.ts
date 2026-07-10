@@ -15,6 +15,8 @@ interface BackendTransaccionCaja {
   apellidos: string;
   tipo_caja: string;
   idcaja: number;
+  idbodega: number;
+  bodega_nombre: string;
 }
 
 export interface TransaccionCaja {
@@ -29,6 +31,8 @@ export interface TransaccionCaja {
   empleado: string;
   tipo_caja: string;
   idcaja: number;
+  idbodega: number;
+  bodega_nombre: string;
 }
 
 export interface EstadoCaja {
@@ -42,6 +46,7 @@ export interface EstadoCaja {
 interface SaldoActualResponse {
   estado: string;
   monto_final: string;
+  idcaja: number | null;
 }
 
 export interface TransferenciaCaja {
@@ -63,6 +68,15 @@ export interface TransferenciaCaja {
   caja_destino_tipo: string;
 }
 
+export interface Bodega {
+  idbodega: number;
+  nombre: string;
+  tipo: string;
+  direccion: string;
+  telefono: string;
+  estado: number;
+}
+
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -77,6 +91,7 @@ interface GetTransaccionesCajaParams {
   fechaInicio?: string;
   fechaFin?: string;
   tipoCaja?: string;
+  idbodega?: number;
 }
 
 interface GetSaldoParams {
@@ -95,6 +110,7 @@ export const getTransaccionesCaja = async (
         fechaInicio: params.fechaInicio,
         fechaFin: params.fechaFin,
         tipoCaja: params.tipoCaja,
+        idbodega: params.idbodega,
       },
     });
 
@@ -110,6 +126,8 @@ export const getTransaccionesCaja = async (
       empleado: `${transaccion.nombres} ${transaccion.apellidos}`,
       tipo_caja: transaccion.tipo_caja,
       idcaja: transaccion.idcaja,
+      idbodega: transaccion.idbodega,
+      bodega_nombre: transaccion.bodega_nombre,
     }));
   } catch (error) {
     console.error("Error fetching transacciones caja:", error);
@@ -130,7 +148,8 @@ export const getEstadoCajaActual = async (params: GetSaldoParams): Promise<Saldo
     console.error("Error fetching estado caja:", error);
     return {
       estado: "cerrada",
-      monto_final: "0.00"
+      monto_final: "0.00",
+      idcaja: null
     };
   }
 };
@@ -250,5 +269,16 @@ export const getCajaInfo = async (idcaja: number): Promise<any> => {
   } catch (error) {
     console.error("Error fetching caja info:", error);
     throw new Error("No se pudo obtener la información de la caja");
+  }
+};
+
+// Obtener todas las bodegas activas
+export const getBodegas = async (): Promise<Bodega[]> => {
+  try {
+    const response = await api.get<Bodega[]>("/bodegas/activas");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching bodegas:", error);
+    throw new Error("No se pudieron cargar las bodegas");
   }
 };

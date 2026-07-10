@@ -238,12 +238,11 @@ CREATE TABLE movimiento_caja (
 );
 
 -- ============================================
--- TABLA DE TRANSFERENCIAS
+-- TABLA DE TRANSFERENCIAS (MODIFICADA)
 -- ============================================
 CREATE TABLE transferencias_caja (
     idtransferencia SERIAL PRIMARY KEY,
     idcaja_origen INTEGER REFERENCES caja(idcaja),
-    idcaja_destino INTEGER REFERENCES caja(idcaja),
     monto DECIMAL(10,2) NOT NULL,
     tipo VARCHAR(10) CHECK (tipo IN ('Efectivo', 'QR')) NOT NULL,
     descripcion TEXT,
@@ -266,7 +265,6 @@ CREATE INDEX idx_movimiento_caja_tipo ON movimiento_caja(tipo);
 CREATE INDEX idx_movimiento_caja_venta ON movimiento_caja(idventa);
 CREATE INDEX idx_movimiento_caja_transferencia ON movimiento_caja(idtransferencia);
 CREATE INDEX idx_transferencias_origen ON transferencias_caja(idcaja_origen);
-CREATE INDEX idx_transferencias_destino ON transferencias_caja(idcaja_destino);
 CREATE INDEX idx_transferencias_estado ON transferencias_caja(estado);
 CREATE INDEX idx_transferencias_tipo ON transferencias_caja(tipo);
 CREATE INDEX idx_transferencias_solicitante ON transferencias_caja(idusuario_solicitante);

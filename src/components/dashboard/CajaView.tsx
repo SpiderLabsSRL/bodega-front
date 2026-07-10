@@ -13,7 +13,9 @@ import {
   getTransaccionesCaja,
   getUsuariosCaja,
   getSaldoActual,
-  TransaccionCaja
+  getBodegas,
+  TransaccionCaja,
+  Bodega
 } from "@/api/CajaApi";
 import { RegistraMovimientoView } from "./RegistraMovimientoView";
 
@@ -78,6 +80,11 @@ export function CajaView() {
   const [estadoCaja, setEstadoCaja] = useState<string>("cerrada");
   const [tipoCajaSeleccionado, setTipoCajaSeleccionado] = useState<"Efectivo" | "QR" | "">("");
   
+  // Estado para bodegas
+  const [bodegas, setBodegas] = useState<Bodega[]>([]);
+  const [selectedBodega, setSelectedBodega] = useState<number | null>(null);
+  const [loadingBodegas, setLoadingBodegas] = useState(false);
+  
   const [showRegistroMovimiento, setShowRegistroMovimiento] = useState(false);
   
   const [filtroEmpleado, setFiltroEmpleado] = useState("Todos");
@@ -95,15 +102,41 @@ export function CajaView() {
   });
   const [mostrarRango, setMostrarRango] = useState(false);
 
+  // Cargar bodegas al inicio
+  useEffect(() => {
+    const cargarBodegas = async () => {
+      setLoadingBodegas(true);
+      try {
+        const bodegasData = await getBodegas();
+        setBodegas(bodegasData);
+        // Seleccionar la primera bodega por defecto
+        if (bodegasData.length > 0 && selectedBodega === null) {
+          // Buscar la bodega del usuario actual si existe
+          const userBodegaId = currentUser?.idbodega;
+          if (userBodegaId && bodegasData.some(b => b.idbodega === userBodegaId)) {
+            setSelectedBodega(userBodegaId);
+          } else {
+            setSelectedBodega(bodegasData[0].idbodega);
+          }
+        }
+      } catch (error) {
+        console.error("Error cargando bodegas:", error);
+      } finally {
+        setLoadingBodegas(false);
+      }
+    };
+    cargarBodegas();
+  }, []);
+
   useEffect(() => {
     cargarDatosIniciales();
-  }, [tipoCajaSeleccionado]);
+  }, [tipoCajaSeleccionado, selectedBodega]);
 
   useEffect(() => {
     if (datosCargados) {
       buscarDatos();
     }
-  }, [filtroEmpleado, fechaBusqueda, fechaRangoAplicado, datosCargados, tipoCajaSeleccionado]);
+  }, [filtroEmpleado, fechaBusqueda, fechaRangoAplicado, datosCargados, tipoCajaSeleccionado, selectedBodega]);
 
   const cargarDatosIniciales = async () => {
     try {
@@ -111,10 +144,10 @@ export function CajaView() {
       setDatosCargados(false);
       setError(null);
 
-      if (tipoCajaSeleccionado) {
+      if (tipoCajaSeleccionado && selectedBodega) {
         try {
-          const params: { idbodega?: number; tipoCaja: string } = { 
-            idbodega: currentUser.idbodega, 
+          const params: { idbodega: number; tipoCaja: string } = { 
+            idbodega: selectedBodega, 
             tipoCaja: tipoCajaSeleccionado
           };
           const saldoData = await getSaldoActual(params);
@@ -194,7 +227,7 @@ export function CajaView() {
       setLoading(true);
       setError(null);
 
-      if (!tipoCajaSeleccionado) {
+      if (!tipoCajaSeleccionado || !selectedBodega) {
         setMovimientosCaja([]);
         setLoading(false);
         return;
@@ -206,7 +239,11 @@ export function CajaView() {
         fechaInicio?: string;
         fechaFin?: string;
         tipoCaja: string;
-      } = { tipoCaja: tipoCajaSeleccionado };
+        idbodega: number;
+      } = { 
+        tipoCaja: tipoCajaSeleccionado,
+        idbodega: selectedBodega
+      };
 
       if (isAssistant) {
         if (currentUser?.idUsuario) {
@@ -242,13 +279,20 @@ export function CajaView() {
     }
   };
 
+  // Función para recargar todos los datos después de una transacción
+  const recargarDatosCompletos = async () => {
+    await cargarDatosIniciales();
+    await buscarDatos();
+  };
+
   const handleRegistrarMovimiento = () => {
     setShowRegistroMovimiento(true);
   };
 
   const handleCloseRegistroMovimiento = () => {
     setShowRegistroMovimiento(false);
-    buscarDatos();
+    // Recargar datos al cerrar el modal
+    recargarDatosCompletos();
   };
 
   const limpiarFiltros = () => {
@@ -309,6 +353,9 @@ export function CajaView() {
     .reduce((sum, mov) => sum + mov.monto, 0);
 
   const saldoFiltrado = totalIngresos - totalEgresos;
+
+  // Obtener nombre de la bodega seleccionada
+  const bodegaSeleccionada = bodegas.find(b => b.idbodega === selectedBodega);
 
   if (initialLoading) {
     return (
@@ -430,7 +477,35 @@ export function CajaView() {
           <CardTitle>Filtros</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            {/* Filtro de Bodega - SOLO PARA ADMIN */}
+            {isAdmin && (
+              <div>
+                <label className="text-sm font-medium">Bodega</label>
+                <Select 
+                  value={selectedBodega?.toString() || ""} 
+                  onValueChange={(value) => setSelectedBodega(parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar bodega" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingBodegas ? (
+                      <SelectItem value="loading" disabled>Cargando...</SelectItem>
+                    ) : bodegas.length === 0 ? (
+                      <SelectItem value="none" disabled>No hay bodegas</SelectItem>
+                    ) : (
+                      bodegas.map((bodega) => (
+                        <SelectItem key={bodega.idbodega} value={bodega.idbodega.toString()}>
+                          {bodega.nombre}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {isAdmin && (
               <div>
                 <label className="text-sm font-medium">Empleado</label>
@@ -526,6 +601,11 @@ export function CajaView() {
           <div className="mt-4 pt-4 border-t">
             <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
               <span>Filtros activos:</span>
+              {selectedBodega && (
+                <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded">
+                  Bodega: {bodegaSeleccionada?.nombre || selectedBodega}
+                </span>
+              )}
               {tipoCajaSeleccionado && (
                 <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
                   Caja: {tipoCajaSeleccionado}
@@ -571,6 +651,7 @@ export function CajaView() {
         <CardHeader>
           <CardTitle>
             Movimientos de Caja {tipoCajaSeleccionado ? `- ${tipoCajaSeleccionado}` : ''}
+            {bodegaSeleccionada && ` - ${bodegaSeleccionada.nombre}`}
             <span className="ml-2 text-sm font-normal text-muted-foreground">
               ({movimientosCaja.length} registros)
             </span>
@@ -591,13 +672,14 @@ export function CajaView() {
                     <TableHead className="w-[120px]">Tipo</TableHead>
                     <TableHead className="min-w-[300px]">Descripción</TableHead>
                     {isAdmin && <TableHead className="w-[150px]">Empleado</TableHead>}
+                    {isAdmin && <TableHead className="w-[120px]">Bodega</TableHead>}
                     <TableHead className="w-[130px] text-right">Monto (Bs)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {!tipoCajaSeleccionado ? (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 5 : 4} className="text-center py-8">
+                      <TableCell colSpan={isAdmin ? 6 : 4} className="text-center py-8">
                         <div className="flex flex-col items-center">
                           <p className="text-muted-foreground mb-2">Selecciona un tipo de caja para ver sus movimientos</p>
                           <div className="flex gap-4">
@@ -615,13 +697,14 @@ export function CajaView() {
                     </TableRow>
                   ) : movimientosCaja.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 5 : 4} className="text-center py-8">
+                      <TableCell colSpan={isAdmin ? 6 : 4} className="text-center py-8">
                         <div className="flex flex-col items-center">
                           <p className="text-muted-foreground mb-2">No se encontraron movimientos para {tipoCajaSeleccionado}</p>
                           <p className="text-sm text-muted-foreground">
-                            {fechaBusqueda && `Para la fecha: ${format(fechaBusqueda, "dd/MM/yyyy", { locale: es })}`}
+                            {bodegaSeleccionada && `Bodega: ${bodegaSeleccionada.nombre}`}
+                            {fechaBusqueda && ` - Fecha: ${format(fechaBusqueda, "dd/MM/yyyy", { locale: es })}`}
                             {fechaRangoAplicado.from && fechaRangoAplicado.to && 
-                              `En el rango: ${format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - ${format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}`}
+                              ` - Rango: ${format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - ${format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}`}
                             {isAdmin && filtroEmpleado !== "Todos" && ` - Empleado: ${empleadosOptions.find(e => e.value === filtroEmpleado)?.label || filtroEmpleado}`}
                           </p>
                         </div>
@@ -666,12 +749,20 @@ export function CajaView() {
                         </TableCell>
                         
                         {isAdmin && (
-                          <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
-                            <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">EMPLEADO</div>
-                            <div className="text-sm">
-                              {movimiento.empleado}
-                            </div>
-                          </TableCell>
+                          <>
+                            <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
+                              <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">EMPLEADO</div>
+                              <div className="text-sm">
+                                {movimiento.empleado}
+                              </div>
+                            </TableCell>
+                            <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
+                              <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">BODEGA</div>
+                              <div className="text-sm">
+                                {movimiento.bodega_nombre || "—"}
+                              </div>
+                            </TableCell>
+                          </>
                         )}
                         
                         <TableCell className={`md:table-cell block md:border-0 border-0 p-0 font-medium ${
@@ -704,6 +795,11 @@ export function CajaView() {
             </button>
             <RegistraMovimientoView 
               onClose={handleCloseRegistroMovimiento}
+              onTransaccionExitosa={async () => {
+                // ✅ Esta función se ejecuta después de cada transacción exitosa
+                // Recargar saldo y movimientos
+                await recargarDatosCompletos();
+              }}
             />
           </div>
         </div>
