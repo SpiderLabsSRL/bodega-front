@@ -122,7 +122,7 @@ CREATE TABLE detalle_ventas (
     iddetalle_venta SERIAL PRIMARY KEY,
     idventa INTEGER REFERENCES ventas(idventa) ON DELETE CASCADE,
     idproducto INTEGER REFERENCES productos(idproducto) NOT NULL,
-    idbodega INTEGER REFERENCES bodegas(idbodega) NOT NULL, -- Bodega específica de donde se tomó el producto
+    idbodega INTEGER REFERENCES bodegas(idbodega) NOT NULL,
     cantidad INTEGER NOT NULL CHECK (cantidad > 0),
     precio_unitario DECIMAL(10,2) NOT NULL CHECK (precio_unitario >= 0),
     subtotal_linea DECIMAL(10,2) NOT NULL CHECK (subtotal_linea >= 0)
@@ -208,7 +208,7 @@ CREATE TABLE productos_similares (
 );
 
 -- ============================================
--- TABLA CAJA ACTUALIZADA
+-- TABLA CAJA
 -- ============================================
 CREATE TABLE caja (
     idcaja SERIAL PRIMARY KEY,
@@ -227,7 +227,7 @@ CREATE TABLE movimiento_caja (
     idcaja INTEGER REFERENCES caja(idcaja),
     idusuario INTEGER REFERENCES usuarios(idusuario),
     monto DECIMAL(10,2) NOT NULL,
-    tipo VARCHAR(20) CHECK (tipo IN ('apertura', 'ingreso', 'egreso', 'transferencia', 'cierre')) NOT NULL,
+    tipo VARCHAR(20) CHECK (tipo IN ('apertura', 'ingreso', 'egreso', 'transferencia_efectivo', 'transferencia_qr', 'cierre')) NOT NULL,
     descripcion TEXT,
     monto_anterior DECIMAL(10,2) DEFAULT 0,
     monto_actual DECIMAL(10,2) DEFAULT 0,
@@ -242,7 +242,9 @@ CREATE TABLE movimiento_caja (
 CREATE TABLE transferencias_caja (
     idtransferencia SERIAL PRIMARY KEY,
     idcaja_origen INTEGER REFERENCES caja(idcaja),
+    idcaja_destino INTEGER REFERENCES caja(idcaja),
     monto DECIMAL(10,2) NOT NULL,
+    tipo VARCHAR(10) CHECK (tipo IN ('Efectivo', 'QR')) NOT NULL,
     descripcion TEXT,
     estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'aprobada', 'observada')),
     idusuario_solicitante INTEGER REFERENCES usuarios(idusuario),
@@ -253,7 +255,7 @@ CREATE TABLE transferencias_caja (
 );
 
 -- ============================================
--- ÍNDICES MEJORADOS
+-- ÍNDICES
 -- ============================================
 CREATE INDEX idx_caja_tipo ON caja(tipo);
 CREATE INDEX idx_caja_bodega ON caja(idbodega);
@@ -263,7 +265,9 @@ CREATE INDEX idx_movimiento_caja_tipo ON movimiento_caja(tipo);
 CREATE INDEX idx_movimiento_caja_venta ON movimiento_caja(idventa);
 CREATE INDEX idx_movimiento_caja_transferencia ON movimiento_caja(idtransferencia);
 CREATE INDEX idx_transferencias_origen ON transferencias_caja(idcaja_origen);
+CREATE INDEX idx_transferencias_destino ON transferencias_caja(idcaja_destino);
 CREATE INDEX idx_transferencias_estado ON transferencias_caja(estado);
+CREATE INDEX idx_transferencias_tipo ON transferencias_caja(tipo);
 CREATE INDEX idx_transferencias_solicitante ON transferencias_caja(idusuario_solicitante);
 CREATE INDEX idx_transferencias_aprobador ON transferencias_caja(idusuario_aprobador);
 CREATE INDEX idx_ventas_fecha ON ventas(fecha_hora);
@@ -284,7 +288,9 @@ CREATE INDEX idx_producto_bodega_producto ON producto_bodega(idproducto);
 CREATE INDEX idx_producto_bodega_bodega ON producto_bodega(idbodega);
 CREATE INDEX idx_detalle_ventas_bodega ON detalle_ventas(idbodega);
 
--- Función para crear cajas automáticamente
+-- ============================================
+-- TRIGGER PARA CREAR CAJAS AUTOMÁTICAMENTE
+-- ============================================
 CREATE OR REPLACE FUNCTION crear_cajas_bodega()
 RETURNS TRIGGER AS $$
 BEGIN
