@@ -104,7 +104,7 @@ export function CajaView() {
   // Cargar datos iniciales
   useEffect(() => {
     cargarDatosIniciales();
-  }, []);
+  }, [tipoCajaSeleccionado]);
 
   // Efecto para buscar datos cuando cambian los filtros O el tipo de caja seleccionado
   useEffect(() => {
@@ -115,12 +115,18 @@ export function CajaView() {
 
   const cargarDatosIniciales = async () => {
     try {
-      setInitialLoading(true);
-      setDatosCargados(false);
-      setError(null);
+      if(!tipoCajaSeleccionado){
+        setInitialLoading(true);
+        setDatosCargados(false);
+        setError(null);
+      }
 
       try {
-        const saldoData = await getSaldoActual();
+        const params: {
+          idbodega?: number;
+          tipoCaja: string;
+        } = { idbodega: currentUser.idbodega, tipoCaja : tipoCajaSeleccionado || 'Efectivo'};
+        const saldoData = await getSaldoActual(params);
         setSaldoActual(parseFloat(saldoData.monto_final));
         setEstadoCaja(saldoData.estado);
       } catch (saldoError) {

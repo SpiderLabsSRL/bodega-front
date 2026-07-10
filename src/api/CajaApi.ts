@@ -57,6 +57,11 @@ interface GetTransaccionesCajaParams {
   tipoCaja?: string;
 }
 
+interface GetSaldoParams {
+  idbodega?: number;
+  tipoCaja: string;
+}
+
 export const getTransaccionesCaja = async (
   params: GetTransaccionesCajaParams = {}
 ): Promise<TransaccionCaja[]> => {
@@ -104,9 +109,14 @@ export const getEstadoCajaActual = async (): Promise<EstadoCaja | null> => {
 };
 
 // Obtener saldo actual
-export const getSaldoActual = async (): Promise<SaldoActualResponse> => {
+export const getSaldoActual = async (params : GetSaldoParams): Promise<SaldoActualResponse> => {
   try {
-    const response = await api.get<SaldoActualResponse>("/cash/status");
+    const response = await api.get<SaldoActualResponse>("/cash/status", {
+      params: {
+        idbodega: params.idbodega,
+        tipoCaja: params.tipoCaja,
+      }
+    });
     return response.data;
   } catch (error) {
     console.error("Error fetching saldo actual:", error);
