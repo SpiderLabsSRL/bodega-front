@@ -28,7 +28,7 @@ const getFechaBolivia = () => {
   return fechaBolivia;
 };
 
-// Función para formatear fecha para mostrar (sin conversiones UTC)
+// Función para formatear fecha para mostrar
 const formatDateForDisplay = (dateInput: string | Date) => {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
@@ -42,7 +42,7 @@ const formatDateForDisplay = (dateInput: string | Date) => {
   }
 };
 
-// Función para formatear hora para mostrar (sin conversiones UTC)
+// Función para formatear hora para mostrar
 const formatTimeForDisplay = (dateInput: string | Date) => {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
@@ -58,7 +58,6 @@ const formatTimeForDisplay = (dateInput: string | Date) => {
 };
 
 export function CajaView() {
-  // Obtener usuario real
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const userRole = currentUser?.rol?.toLowerCase() || "admin";
   const currentUserName = currentUser?.nombres && currentUser?.apellidos 
@@ -67,7 +66,6 @@ export function CajaView() {
   const isAdmin = userRole === "admin";
   const isAssistant = userRole === "asistente";
   
-  // Configurar fecha actual de Bolivia por defecto
   const [fechaBoliviaHoy] = useState(() => getFechaBolivia());
   
   const [empleadosOptions, setEmpleadosOptions] = useState<{ value: string; label: string }[]>([]);
@@ -80,17 +78,13 @@ export function CajaView() {
   const [estadoCaja, setEstadoCaja] = useState<string>("cerrada");
   const [tipoCajaSeleccionado, setTipoCajaSeleccionado] = useState<"Efectivo" | "QR" | "">("");
   
-  // Estado para controlar el diálogo de registro de movimiento
   const [showRegistroMovimiento, setShowRegistroMovimiento] = useState(false);
   
-  // Estados para filtros
   const [filtroEmpleado, setFiltroEmpleado] = useState("Todos");
   
-  // Estados para fecha específica
   const [fechaBusqueda, setFechaBusqueda] = useState<Date | undefined>(fechaBoliviaHoy);
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   
-  // Estados para rango de fechas
   const [fechaRangoTemp, setFechaRangoTemp] = useState<{ from: Date | undefined; to: Date | undefined }>({
     from: undefined,
     to: undefined,
@@ -101,12 +95,10 @@ export function CajaView() {
   });
   const [mostrarRango, setMostrarRango] = useState(false);
 
-  // Cargar datos iniciales
   useEffect(() => {
     cargarDatosIniciales();
   }, [tipoCajaSeleccionado]);
 
-  // Efecto para buscar datos cuando cambian los filtros O el tipo de caja seleccionado
   useEffect(() => {
     if (datosCargados) {
       buscarDatos();
@@ -115,30 +107,33 @@ export function CajaView() {
 
   const cargarDatosIniciales = async () => {
     try {
-      if(!tipoCajaSeleccionado){
-        setInitialLoading(true);
-        setDatosCargados(false);
-        setError(null);
-      }
+      setInitialLoading(true);
+      setDatosCargados(false);
+      setError(null);
 
-      try {
-        const params: {
-          idbodega?: number;
-          tipoCaja: string;
-        } = { idbodega: currentUser.idbodega, tipoCaja : tipoCajaSeleccionado || 'Efectivo'};
-        const saldoData = await getSaldoActual(params);
-        setSaldoActual(parseFloat(saldoData.monto_final));
-        setEstadoCaja(saldoData.estado);
-      } catch (saldoError) {
-        console.error("Error cargando saldo:", saldoError);
-        // Valores por defecto en caso de error
+      // Solo cargar saldo si hay una caja seleccionada
+      if (tipoCajaSeleccionado) {
+        try {
+          const params: { idbodega?: number; tipoCaja: string } = { 
+            idbodega: currentUser.idbodega, 
+            tipoCaja: tipoCajaSeleccionado
+          };
+          const saldoData = await getSaldoActual(params);
+          setSaldoActual(parseFloat(saldoData.monto_final));
+          setEstadoCaja(saldoData.estado);
+        } catch (saldoError) {
+          console.error("Error cargando saldo:", saldoError);
+          setSaldoActual(0);
+          setEstadoCaja("cerrada");
+        }
+      } else {
+        // Si no hay caja seleccionada, mostrar 0.00
         setSaldoActual(0);
         setEstadoCaja("cerrada");
       }
       
       try {
         const usuarios = await getUsuariosCaja();
-        console.log(usuarios)
         const opcionesUsuarios = usuarios.map(usuario => ({
           value: usuario.idusuario.toString(),
           label: usuario.empleado_nombre
@@ -163,7 +158,6 @@ export function CajaView() {
             setFiltroEmpleado(currentUserName);
           }
         } else {
-          console.log(opcionesUsuarios)
           const opcionesCompletas = [
             { value: "Todos", label: "Todos" }, 
             ...opcionesUsuarios
@@ -173,7 +167,6 @@ export function CajaView() {
         }
       } catch (usuariosError) {
         console.error("Error cargando usuarios:", usuariosError);
-        // Si hay error al cargar usuarios, establecer opciones por defecto
         if (isAssistant) {
           setEmpleadosOptions([{ value: currentUserName, label: currentUserName }]);
           setFiltroEmpleado(currentUserName);
@@ -182,8 +175,7 @@ export function CajaView() {
           setFiltroEmpleado("Todos");
         }
       }
-      console.log(empleadosOptions);
-      // Marcar que los datos iniciales están cargados
+      
       setDatosCargados(true);
       setInitialLoading(false);
       
@@ -199,7 +191,6 @@ export function CajaView() {
       setLoading(true);
       setError(null);
 
-      // Si no hay tipo de caja seleccionado, mostrar vacío
       if (!tipoCajaSeleccionado) {
         setMovimientosCaja([]);
         setLoading(false);
@@ -212,7 +203,7 @@ export function CajaView() {
         fechaInicio?: string;
         fechaFin?: string;
         tipoCaja: string;
-      } = {tipoCaja : tipoCajaSeleccionado};
+      } = { tipoCaja: tipoCajaSeleccionado };
 
       if (isAssistant) {
         if (currentUser?.idUsuario) {
@@ -223,8 +214,7 @@ export function CajaView() {
             params.idusuario = parseInt(usuario.value);
           }
         }
-      }
-      else if (isAdmin && filtroEmpleado !== "Todos") {
+      } else if (isAdmin && filtroEmpleado !== "Todos") {
         params.idusuario = parseInt(filtroEmpleado);
       }
       
@@ -255,7 +245,6 @@ export function CajaView() {
 
   const handleCloseRegistroMovimiento = () => {
     setShowRegistroMovimiento(false);
-    // Recargar movimientos después de cerrar
     buscarDatos();
   };
 
@@ -276,7 +265,6 @@ export function CajaView() {
     }
   };
 
-  // Manejar cambio en filtro de fecha específica
   const handleFechaBusquedaChange = async (date: Date | undefined) => {
     if (date) {
       setFechaBusqueda(date);
@@ -286,12 +274,10 @@ export function CajaView() {
     }
   };
 
-  // Manejar cambio temporal en filtro de rango de fechas
   const handleRangoTempChange = (range: { from: Date | undefined; to: Date | undefined }) => {
     setFechaRangoTemp(range);
   };
 
-  // Aplicar rango seleccionado
   const aplicarRangoFechas = async () => {
     if (fechaRangoTemp.from && fechaRangoTemp.to) {
       setFechaRangoAplicado({
@@ -303,7 +289,6 @@ export function CajaView() {
     }
   };
 
-  // Cancelar selección de rango
   const cancelarRangoFechas = () => {
     setFechaRangoTemp({
       from: fechaRangoAplicado.from,
@@ -312,13 +297,12 @@ export function CajaView() {
     setMostrarRango(false);
   };
 
-  // Calcular totales de los movimientos
   const totalIngresos = movimientosCaja
-    .filter(mov => mov.tipo_movimiento === "Ingreso" || mov.tipo_movimiento === "Apertura")
+    .filter(mov => mov.tipo_movimiento === "ingreso" || mov.tipo_movimiento === "apertura")
     .reduce((sum, mov) => sum + mov.monto, 0);
 
   const totalEgresos = movimientosCaja
-    .filter(mov => mov.tipo_movimiento === "Egreso" || mov.tipo_movimiento === "Cierre")
+    .filter(mov => mov.tipo_movimiento === "egreso" || mov.tipo_movimiento === "cierre")
     .reduce((sum, mov) => sum + mov.monto, 0);
 
   const saldoFiltrado = totalIngresos - totalEgresos;
@@ -336,7 +320,6 @@ export function CajaView() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">Gestión de Caja</h1>
-        {/* Botón Registrar Movimiento - Solo visible para Asistente */}
         {isAssistant && (
           <Button 
             onClick={handleRegistrarMovimiento}
@@ -354,7 +337,6 @@ export function CajaView() {
         </div>
       )}
 
-      {/* Cards de totales */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -363,7 +345,7 @@ export function CajaView() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">Bs {totalEgresos.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1">
-              En los movimientos mostrados
+              {tipoCajaSeleccionado ? 'En los movimientos mostrados' : 'Selecciona una caja'}
             </div>
           </CardContent>
         </Card>
@@ -375,7 +357,7 @@ export function CajaView() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">Bs {totalIngresos.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1">
-              En los movimientos mostrados
+              {tipoCajaSeleccionado ? 'En los movimientos mostrados' : 'Selecciona una caja'}
             </div>
           </CardContent>
         </Card>
@@ -387,21 +369,26 @@ export function CajaView() {
           <CardContent>
             <div className="text-xs text-muted-foreground mb-1">
               Estado: <span className={`font-medium ${estadoCaja === 'abierta' ? 'text-green-600' : 'text-red-600'}`}>
-                {estadoCaja === 'abierta' ? 'ABIERTA' : 'CERRADA'}
+                {tipoCajaSeleccionado ? (estadoCaja === 'abierta' ? 'ABIERTA' : 'CERRADA') : 'SIN SELECCIÓN'}
               </span>
             </div>
             <div className={`text-2xl font-bold ${saldoActual >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               Bs {saldoActual.toFixed(2)}
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              Saldo filtrado: <span className={`font-medium ${saldoFiltrado >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                Bs {saldoFiltrado.toFixed(2)}
-              </span>
+              {tipoCajaSeleccionado ? (
+                <>
+                  Saldo filtrado: <span className={`font-medium ${saldoFiltrado >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    Bs {saldoFiltrado.toFixed(2)}
+                  </span>
+                </>
+              ) : (
+                <span className="text-gray-400">Selecciona una caja para ver el saldo</span>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Card para seleccionar el tipo de caja a visualizar */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Seleccionar Caja</CardTitle>
@@ -410,7 +397,7 @@ export function CajaView() {
             <div className="grid grid-cols-2 gap-2">
               <Button
                 variant={tipoCajaSeleccionado === "Efectivo" ? "default" : "outline"}
-                className="flex items-center gap-2 h-12"
+                className={`flex items-center gap-2 h-12 ${tipoCajaSeleccionado === "Efectivo" ? "ring-2 ring-primary ring-offset-2" : ""}`}
                 onClick={() => setTipoCajaSeleccionado("Efectivo")}
               >
                 <DollarSign className="h-4 w-4" />
@@ -418,7 +405,7 @@ export function CajaView() {
               </Button>
               <Button
                 variant={tipoCajaSeleccionado === "QR" ? "default" : "outline"}
-                className="flex items-center gap-2 h-12"
+                className={`flex items-center gap-2 h-12 ${tipoCajaSeleccionado === "QR" ? "ring-2 ring-primary ring-offset-2" : ""}`}
                 onClick={() => setTipoCajaSeleccionado("QR")}
               >
                 <Building2 className="h-4 w-4" />
@@ -432,14 +419,12 @@ export function CajaView() {
         </Card>
       </div>
 
-      {/* Filtros - Admin ve todos los filtros, Asistente solo ve filtros de fecha */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle>Filtros</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Filtro de Empleado - Solo visible para Admin */}
             {isAdmin && (
               <div>
                 <label className="text-sm font-medium">Empleado</label>
@@ -458,7 +443,6 @@ export function CajaView() {
               </div>
             )}
 
-            {/* Filtros de fecha - Visibles para TODOS */}
             <div>
               <label className="text-sm font-medium">Fecha Específica</label>
               <Popover open={mostrarCalendario} onOpenChange={setMostrarCalendario}>
@@ -533,7 +517,6 @@ export function CajaView() {
             </div>
           </div>
           
-          {/* Indicador de filtros activos */}
           <div className="mt-4 pt-4 border-t">
             <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
               <span>Filtros activos:</span>
@@ -572,14 +555,12 @@ export function CajaView() {
         </CardContent>
       </Card>
 
-      {/* Información para asistentes */}
       {isAssistant && (
         <div className="text-xs text-muted-foreground -mt-2">
           <p>Mostrando tus movimientos de caja</p>
         </div>
       )}
 
-      {/* Tabla de movimientos de caja */}
       <Card>
         <CardHeader>
           <CardTitle>
@@ -643,7 +624,6 @@ export function CajaView() {
                   ) : (
                     movimientosCaja.map((movimiento) => (
                       <TableRow key={movimiento.idtransaccion} className="md:table-row block border-b p-4 md:p-0">
-                        {/* Fecha y Hora */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
                           <div className="font-medium">
                             {formatDateForDisplay(movimiento.fecha)}
@@ -653,23 +633,25 @@ export function CajaView() {
                           </div>
                         </TableCell>
                         
-                        {/* Tipo */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
                           <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">TIPO</div>
                           <div className="flex justify-start md:justify-start">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              movimiento.tipo_movimiento === "Ingreso" || movimiento.tipo_movimiento === "Apertura"
+                              movimiento.tipo_movimiento === "ingreso" || movimiento.tipo_movimiento === "apertura"
                                 ? "bg-green-100 text-green-800" 
-                                : movimiento.tipo_movimiento === "Cierre"
+                                : movimiento.tipo_movimiento === "cierre"
                                 ? "bg-blue-100 text-blue-800"
                                 : "bg-red-100 text-red-800"
                             }`}>
-                              {movimiento.tipo_movimiento}
+                              {movimiento.tipo_movimiento === "ingreso" ? "Ingreso" :
+                               movimiento.tipo_movimiento === "egreso" ? "Egreso" :
+                               movimiento.tipo_movimiento === "apertura" ? "Apertura" :
+                               movimiento.tipo_movimiento === "cierre" ? "Cierre" :
+                               movimiento.tipo_movimiento}
                             </span>
                           </div>
                         </TableCell>
                         
-                        {/* Descripción */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
                           <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">DESCRIPCIÓN</div>
                           <div className="text-sm leading-relaxed">
@@ -677,7 +659,6 @@ export function CajaView() {
                           </div>
                         </TableCell>
                         
-                        {/* Empleado - Solo para Admin */}
                         {isAdmin && (
                           <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
                             <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">EMPLEADO</div>
@@ -687,14 +668,13 @@ export function CajaView() {
                           </TableCell>
                         )}
                         
-                        {/* Monto */}
                         <TableCell className={`md:table-cell block md:border-0 border-0 p-0 font-medium ${
-                          movimiento.tipo_movimiento === "Ingreso" || movimiento.tipo_movimiento === "Apertura" ? "text-green-600" : 
-                          movimiento.tipo_movimiento === "Cierre" ? "text-blue-600" : "text-red-600"
+                          movimiento.tipo_movimiento === "ingreso" || movimiento.tipo_movimiento === "apertura" ? "text-green-600" : 
+                          movimiento.tipo_movimiento === "cierre" ? "text-blue-600" : "text-red-600"
                         }`}>
                           <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">MONTO</div>
                           <div className="text-lg font-bold text-right md:text-right">
-                            {movimiento.tipo_movimiento === "Egreso" || movimiento.tipo_movimiento === "Cierre" ? "-" : ""}Bs {movimiento.monto.toFixed(2)}
+                            {movimiento.tipo_movimiento === "egreso" || movimiento.tipo_movimiento === "cierre" ? "-" : ""}Bs {movimiento.monto.toFixed(2)}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -707,7 +687,6 @@ export function CajaView() {
         </CardContent>
       </Card>
 
-      {/* Diálogo para registrar movimiento - Solo visible para Asistente */}
       {isAssistant && showRegistroMovimiento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-lg p-6">
