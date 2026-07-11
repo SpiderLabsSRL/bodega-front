@@ -78,7 +78,8 @@ export function CajaView() {
   const [datosCargados, setDatosCargados] = useState(false);
   const [saldoActual, setSaldoActual] = useState<number>(0);
   const [estadoCaja, setEstadoCaja] = useState<string>("cerrada");
-  const [tipoCajaSeleccionado, setTipoCajaSeleccionado] = useState<"Efectivo" | "QR" | "">("");
+  // ✅ CAMBIO: Inicializar con "Efectivo" por defecto
+  const [tipoCajaSeleccionado, setTipoCajaSeleccionado] = useState<"Efectivo" | "QR" | "">("Efectivo");
   
   // Estado para bodegas
   const [bodegas, setBodegas] = useState<Bodega[]>([]);

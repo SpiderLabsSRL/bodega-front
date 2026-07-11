@@ -7,14 +7,13 @@ export interface BackendProduct {
   nombre: string;
   descripcion: string;
   estado: number;
-  // Ya no hay idubicacion directo
   imagen: string;
   precio_venta: string;
   stock: number;
   ubicaciones?: Array<{
     idubicacion: number;
     nombre_ubicacion: string;
-  }>; // Array de ubicaciones donde está disponible
+  }>;
   productos_similares?: Array<{
     idproducto: number;
     nombre: string;
@@ -169,16 +168,27 @@ export const processSale = async (
     return response.data;
   } catch (error) {
     console.error("Error processing sale:", error);
+    if (axios.isAxiosError(error) && error.response?.data?.error) {
+      throw new Error(error.response.data.error);
+    }
     throw new Error("No se pudo procesar la venta");
   }
 };
 
+// Nueva función para obtener el estado de la caja
+export const getEstadoCaja = async (idbodega: number, tipo: string): Promise<string> => {
+  try {
+    const response = await api.get<{ estado: string }>(
+      `/sales/caja/estado?idbodega=${idbodega}&tipo=${encodeURIComponent(tipo)}`
+    );
+    return response.data.estado;
+  } catch (error) {
+    console.error("Error getting caja estado:", error);
+    return 'cerrada';
+  }
+};
+
 export function mapBackendProduct(product: BackendProduct): Product {
-  // Obtener el nombre de la primera ubicación si existe, o un valor por defecto
-  const ubicacionNombre = product.ubicaciones && product.ubicaciones.length > 0 
-    ? product.ubicaciones[0].nombre_ubicacion 
-    : "Sin ubicación";
-  
   return {
     idproducto: product.idproducto,
     nombre: product.nombre,

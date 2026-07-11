@@ -38,6 +38,7 @@ import {
   searchProducts,
   searchClientes,
   processSale,
+  getEstadoCaja,
   type Product,
   type SaleRequest,
   type ClienteSearchResult,
@@ -64,6 +65,11 @@ interface ClienteFormData {
 interface BodegaInfo {
   id: number;
   nombre: string;
+}
+
+interface CajaEstado {
+  efectivo: string;
+  qr: string;
 }
 
 const formatBs = (value: number) => {
@@ -181,6 +187,7 @@ export function VenderView() {
   const [searchingClientes, setSearchingClientes] = useState(false);
   const [showClienteNota, setShowClienteNota] = useState(false);
   const [bodegaInfo, setBodegaInfo] = useState<BodegaInfo | null>(null);
+  const [cajaEstado, setCajaEstado] = useState<CajaEstado>({ efectivo: 'cerrada', qr: 'cerrada' });
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const cartRef = useRef<HTMLDivElement>(null);
@@ -228,7 +235,34 @@ export function VenderView() {
     fetchBodegaInfo();
   }, [userBodegaId]);
 
+  // Obtener estado de las cajas
+  const fetchEstadoCajas = async () => {
+    if (!userBodegaId) return;
+    
+    try {
+      const [estadoEfectivo, estadoQR] = await Promise.all([
+        getEstadoCaja(userBodegaId, 'Efectivo'),
+        getEstadoCaja(userBodegaId, 'QR')
+      ]);
+      
+      setCajaEstado({
+        efectivo: estadoEfectivo,
+        qr: estadoQR
+      });
+    } catch (error) {
+      console.error("Error fetching caja estados:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchEstadoCajas();
+    // Refrescar cada 30 segundos
+    const interval = setInterval(fetchEstadoCajas, 30000);
+    return () => clearInterval(interval);
+  }, [userBodegaId]);
+
   console.log("👤 Usuario actual:", { userId, userBodegaId, username, bodegaInfo });
+  console.log("💰 Estado de cajas:", cajaEstado);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const debouncedClienteSearch = useDebounce(clienteSearchTerm, 500);
@@ -831,6 +865,17 @@ export function VenderView() {
       return;
     }
 
+    // Verificar si la caja está abierta antes de procesar
+    const estadoActual = metodoPago === "Efectivo" ? cajaEstado.efectivo : cajaEstado.qr;
+    if (estadoActual !== 'abierta') {
+      toast({
+        title: "Caja Cerrada",
+        description: `La caja de ${metodoPago} está cerrada. No se pueden realizar ventas.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (metodoPago === "Efectivo" && montoPagado > 0 && montoPagado < total) {
       toast({
         title: "Error",
@@ -870,11 +915,9 @@ export function VenderView() {
     setLoading(true);
 
     try {
+      // Crear descripción solo con los nombres de productos y cantidades (sin precios)
       const descripcion = ventaItems
-        .map(
-          (item) =>
-            `${item.cantidad} ${item.nombre} - Bs ${formatBs(item.precio_venta)}`,
-        )
+        .map((item) => `${item.cantidad} ${item.nombre}`)
         .join(", ");
 
       const items = ventaItems.map((item) => ({
@@ -909,6 +952,9 @@ export function VenderView() {
       setSelectedCliente(null);
       setShowClienteNota(false);
 
+      // Actualizar estado de cajas después de la venta
+      await fetchEstadoCajas();
+
       toast({
         title: "¡Venta procesada!",
         description: `Venta completada por Bs. ${formatBs(total)}`,
@@ -916,11 +962,22 @@ export function VenderView() {
 
     } catch (error) {
       console.error("❌ Error en procesarVenta:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Error al procesar la venta",
-        variant: "destructive",
-      });
+      let errorMessage = error instanceof Error ? error.message : "Error al procesar la venta";
+      
+      // Si el error es por caja cerrada, mostrar mensaje específico
+      if (errorMessage.includes("caja está cerrada")) {
+        toast({
+          title: "Caja Cerrada",
+          description: "No se pueden realizar ventas porque la caja está cerrada. Por favor, abra la caja primero.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -931,6 +988,10 @@ export function VenderView() {
     month: "2-digit",
     year: "numeric",
   });
+
+  // Determinar el estado de la caja seleccionada
+  const cajaSeleccionadaEstado = metodoPago === "Efectivo" ? cajaEstado.efectivo : cajaEstado.qr;
+  const cajaAbierta = cajaSeleccionadaEstado === 'abierta';
 
   return (
     <div className="space-y-6">
@@ -960,7 +1021,7 @@ export function VenderView() {
             <p className="font-medium">{currentDate}</p>
           </div>
         </div>
-        <div className="mt-2 flex gap-2 flex-wrap">
+        <div className="mt-2 flex gap-2 flex-wrap items-center">
           {currentUser && (
             <Badge variant="outline">
               {currentUser.rol}
@@ -971,6 +1032,16 @@ export function VenderView() {
               {bodegaInfo.nombre}
             </Badge>
           )}
+          <Badge 
+            variant={cajaAbierta ? "default" : "destructive"}
+            className="flex items-center gap-1"
+          >
+            <span className={`h-2 w-2 rounded-full ${cajaAbierta ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+            Caja {cajaAbierta ? 'Abierta' : 'Cerrada'}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {metodoPago}
+          </Badge>
         </div>
       </div>
 
@@ -1083,10 +1154,10 @@ export function VenderView() {
                             e.stopPropagation();
                             agregarProducto(product);
                           }}
-                          disabled={stockRestante === 0}
+                          disabled={stockRestante === 0 || !cajaAbierta}
                           className="ml-2 flex-shrink-0"
                         >
-                          {stockRestante === 0 ? "Sin Stock" : "Agregar"}
+                          {!cajaAbierta ? "Caja Cerrada" : stockRestante === 0 ? "Sin Stock" : "Agregar"}
                         </Button>
                       </div>
 
@@ -1189,12 +1260,10 @@ export function VenderView() {
                                         e.stopPropagation();
                                         agregarProducto(similar);
                                       }}
-                                      disabled={stockRestanteSimilar === 0}
+                                      disabled={stockRestanteSimilar === 0 || !cajaAbierta}
                                       className="ml-2 flex-shrink-0 h-8"
                                     >
-                                      {stockRestanteSimilar === 0
-                                        ? "Sin Stock"
-                                        : "Agregar"}
+                                      {!cajaAbierta ? "Caja Cerrada" : stockRestanteSimilar === 0 ? "Sin Stock" : "Agregar"}
                                     </Button>
                                   </div>
                                 </div>
@@ -1621,7 +1690,15 @@ export function VenderView() {
             </div>
 
             <div className="space-y-3">
-              <Label>Método de Pago:</Label>
+              <div className="flex items-center justify-between">
+                <Label>Método de Pago:</Label>
+                <Badge 
+                  variant={cajaAbierta ? "default" : "destructive"}
+                  className="text-xs"
+                >
+                  {cajaAbierta ? 'Caja Abierta' : 'Caja Cerrada'}
+                </Badge>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <Button
                   type="button"
@@ -1635,6 +1712,9 @@ export function VenderView() {
                   )}
                 >
                   Efectivo
+                  {cajaEstado.efectivo === 'abierta' && (
+                    <span className="ml-2 h-2 w-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
+                  )}
                 </Button>
                 <Button
                   type="button"
@@ -1648,6 +1728,9 @@ export function VenderView() {
                   )}
                 >
                   QR
+                  {cajaEstado.qr === 'abierta' && (
+                    <span className="ml-2 h-2 w-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
+                  )}
                 </Button>
               </div>
 
@@ -1686,10 +1769,13 @@ export function VenderView() {
                   className="w-full"
                   disabled={
                     ventaItems.length === 0 ||
-                    tieneItemsInvalidos
+                    tieneItemsInvalidos ||
+                    !cajaAbierta
                   }
                 >
-                  {tieneItemsInvalidos
+                  {!cajaAbierta
+                    ? "Caja Cerrada"
+                    : tieneItemsInvalidos
                     ? "Cantidades inválidas"
                     : "Procesar Venta"}
                 </Button>
