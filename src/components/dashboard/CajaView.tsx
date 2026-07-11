@@ -86,6 +86,7 @@ export function CajaView() {
   const [loadingBodegas, setLoadingBodegas] = useState(false);
   
   const [showRegistroMovimiento, setShowRegistroMovimiento] = useState(false);
+  const [tipoCajaModal, setTipoCajaModal] = useState<"Efectivo" | "QR" | "">("");
   
   const [filtroEmpleado, setFiltroEmpleado] = useState("Todos");
   
@@ -286,12 +287,14 @@ export function CajaView() {
   };
 
   const handleRegistrarMovimiento = () => {
+    setTipoCajaModal(""); // Resetear al abrir
     setShowRegistroMovimiento(true);
   };
 
   const handleCloseRegistroMovimiento = () => {
     setShowRegistroMovimiento(false);
-    // Recargar datos al cerrar el modal
+    setTipoCajaModal("");
+    // Recargar datos al cerrar el modal manualmente
     recargarDatosCompletos();
   };
 
@@ -427,17 +430,6 @@ export function CajaView() {
             )}
             <div className={`text-2xl font-bold ${saldoActual >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               Bs {saldoActual.toFixed(2)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {tipoCajaSeleccionado ? (
-                <>
-                  Saldo filtrado: <span className={`font-medium ${saldoFiltrado >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    Bs {saldoFiltrado.toFixed(2)}
-                  </span>
-                </>
-              ) : (
-                <span className="text-gray-400">Selecciona una caja para ver el saldo</span>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -784,20 +776,27 @@ export function CajaView() {
         </CardContent>
       </Card>
 
+      {/* MODAL DE REGISTRO DE MOVIMIENTO */}
       {isAssistant && showRegistroMovimiento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-lg p-6">
+            {/* Botón X para cerrar manualmente */}
             <button
-              onClick={handleCloseRegistroMovimiento}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              onClick={() => {
+                setTipoCajaModal("");
+                handleCloseRegistroMovimiento();
+              }}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-10"
             >
               <X className="h-6 w-6" />
             </button>
+            
             <RegistraMovimientoView 
-              onClose={handleCloseRegistroMovimiento}
+              tipoCajaInicial={tipoCajaModal}
+              onTipoCajaChange={(tipo) => {
+                setTipoCajaModal(tipo);
+              }}
               onTransaccionExitosa={async () => {
-                // ✅ Esta función se ejecuta después de cada transacción exitosa
-                // Recargar saldo y movimientos
                 await recargarDatosCompletos();
               }}
             />
