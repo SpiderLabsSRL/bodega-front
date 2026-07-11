@@ -538,12 +538,23 @@ export function CotizacionView() {
       return;
     }
 
-    if (clienteManual && !selectedCliente) {
-      toast({ title: "Cotización generada", description: "La cotización ha sido generada exitosamente (cliente no registrado)" });
-      setCotizacionGenerada(true);
+    // Si es Contra Entrega, solo generar PDF sin guardar
+    if (datosCliente.tipoPago === "contra-entrega") {
+      try {
+        setLoading(true);
+        await handleDownloadPDF();
+        setCotizacionGenerada(true);
+        toast({ title: "Cotización generada", description: "PDF descargado exitosamente" });
+      } catch (error) {
+        console.error("Error generando PDF:", error);
+        toast({ title: "Error", description: "No se pudo generar el PDF", variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
+    // Para otros tipos de pago, guardar en BD y luego generar PDF
     try {
       setLoading(true);
       let tipoPagoBackend: "Pago por Adelantado" | "Mitad de Pago" | "Contra Entrega";
@@ -580,6 +591,9 @@ export function CotizacionView() {
 
       await createCotizacion(cotizacionRequest);
 
+      // Generar PDF después de guardar
+      await handleDownloadPDF();
+
       let mensajeAlerta = "";
       if (datosCliente.tipoPago === "pago-adelantado") {
         mensajeAlerta = "Recuerde registrar el PAGO COMPLETO y los PRODUCTOS ENTREGADOS en la sección de Pagos Pendientes";
@@ -587,7 +601,7 @@ export function CotizacionView() {
         mensajeAlerta = "Recuerde registrar el PAGO PARCIAL y los PRODUCTOS ENTREGADOS en la sección de Pagos Pendientes";
       }
 
-      toast({ title: "Cotización guardada", description: "La cotización ha sido guardada" });
+      toast({ title: "Cotización guardada", description: "La cotización ha sido guardada y el PDF generado" });
 
       if (datosCliente.tipoPago === "pago-adelantado" || datosCliente.tipoPago === "mitad-adelanto") {
         setAlert({ show: true, title: "⚠️ IMPORTANTE", message: mensajeAlerta });
@@ -649,7 +663,6 @@ export function CotizacionView() {
         stock_minimo: 0,
         estado: 0,
         idubicacion: 0,
-        nombre_ubicacion: '',
         imagen: '',
         descripcion: "",
         cantidad: detalle.cantidad,
@@ -1038,7 +1051,7 @@ export function CotizacionView() {
                       <div key={product.idproducto} className="border rounded-lg p-4">
                         <div className="flex items-start gap-3">
                           {product.imagen ? <img src={getProductImageUrl(product.imagen)} alt={product.nombre} className="w-16 h-16 rounded-md object-cover" onError={(e) => { (e.target as HTMLImageElement).src = "https://via.placeholder.com/64x64/f3f4f6/000000?text=Sin+imagen"; }} /> : <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center"><span className="text-xs text-muted-foreground">Sin imagen</span></div>}
-                          <div className="flex-1 min-w-0"><h4 className="font-semibold text-sm">{product.nombre}</h4><p className="text-xs text-muted-foreground line-clamp-2">{product.descripcion}</p><div className="flex items-center gap-2 mt-1 flex-wrap"><Badge variant="outline" className="text-xs">{product.nombre_ubicacion}</Badge></div><p className="text-xs font-medium">Bs {formatBs(product.precio_venta)} | Stock: {product.stock}</p></div>
+                          <div className="flex-1 min-w-0"><h4 className="font-semibold text-sm">{product.nombre}</h4><p className="text-xs text-muted-foreground line-clamp-2">{product.descripcion}</p><p className="text-xs font-medium mt-1">Bs {formatBs(product.precio_venta)} | Stock: {product.stock}</p></div>
                           <Button size="sm" onClick={() => agregarProducto(product)} disabled={product.stock === 0}>{product.stock === 0 ? "Sin Stock" : "Agregar"}</Button>
                         </div>
                       </div>

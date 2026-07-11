@@ -176,6 +176,28 @@ function mapBackendDetalleCotizacion(detalle: BackendDetalleCotizacion): Detalle
 
 export const createCotizacion = async (cotizacion: CotizacionRequest): Promise<Cotizacion> => {
   try {
+    // Si es Contra Entrega, no llamar al backend
+    if (cotizacion.tipo_pago === "Contra Entrega") {
+      console.log("📄 Contra Entrega - Solo generación de PDF, no se guarda en BD");
+      // Retornar un objeto simulado
+      return {
+        idcotizacion: 0,
+        vigencia: cotizacion.vigencia,
+        cliente_nombre: cotizacion.cliente_nombre,
+        cliente_telefono: cotizacion.cliente_telefono,
+        cliente_direccion: cotizacion.cliente_direccion,
+        tipo_pago: cotizacion.tipo_pago,
+        sub_total: cotizacion.sub_total,
+        descuento: cotizacion.descuento,
+        total: cotizacion.total,
+        abono: cotizacion.abono,
+        saldo: cotizacion.saldo,
+        estado: 0,
+        idusuario: 0,
+        fecha_creacion: new Date().toLocaleDateString('es-ES')
+      };
+    }
+
     const idbodega = getUserBodega();
     const userId = getUserId();
     
