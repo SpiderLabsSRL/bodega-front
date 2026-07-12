@@ -48,8 +48,8 @@ const formatDateForDisplay = (dateInput: string | Date) => {
 const formatTimeForDisplay = (dateInput: string | Date) => {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
+    const hours = date.getUTCHours();
+    const minutes = date.getUTCMinutes();
     const formattedHours = hours < 10 ? `0${hours}` : hours.toString();
     const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes.toString();
     return `${formattedHours}:${formattedMinutes}`;
