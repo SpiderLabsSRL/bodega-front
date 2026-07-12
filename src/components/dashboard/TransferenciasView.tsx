@@ -15,6 +15,7 @@ import {
   rechazarTransferencia,
   Transferencia 
 } from "@/api/TransferenciaApi";
+import { formatDateForDisplay, formatTimeForDisplay } from "./CajaView";
 
 // Función para obtener el usuario del localStorage
 const getCurrentUser = (): { idusuario: number; rol: string; nombres: string; apellidos: string } | null => {
@@ -114,14 +115,7 @@ export function TransferenciasView() {
   // Función para formatear fecha
   const formatDate = (dateStr: string) => {
     try {
-      const date = new Date(dateStr);
-      return date.toLocaleString('es-BO', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      return formatDateForDisplay(dateStr) + " " + formatTimeForDisplay(dateStr);
     } catch {
       return dateStr;
     }

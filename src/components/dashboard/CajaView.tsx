@@ -31,7 +31,7 @@ const getFechaBolivia = () => {
 };
 
 // Función para formatear fecha para mostrar
-const formatDateForDisplay = (dateInput: string | Date) => {
+export const formatDateForDisplay = (dateInput: string | Date) => {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
     const day = date.getDate();
@@ -45,7 +45,7 @@ const formatDateForDisplay = (dateInput: string | Date) => {
 };
 
 // Función para formatear hora para mostrar
-const formatTimeForDisplay = (dateInput: string | Date) => {
+export const formatTimeForDisplay = (dateInput: string | Date) => {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
     const hours = date.getUTCHours();
