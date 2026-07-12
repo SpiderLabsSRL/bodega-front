@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { CheckCircle, XCircle, Loader2, User, Users, DollarSign, Building2 } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, User, Users, DollarSign, Building2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,8 @@ import {
   getTransferencias, 
   aprobarTransferencia, 
   observarTransferencia,
+  rechazarTransferencia,
+  getSaldoCaja,
   Transferencia 
 } from "@/api/TransferenciaApi";
 
@@ -46,6 +48,11 @@ export function TransferenciasView() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [observacionInput, setObservacionInput] = useState<string>("");
+  const [motivoRechazoInput, setMotivoRechazoInput] = useState<string>("");
+  
+  // Estado para el total de transferencias (solo frontend)
+  const [totalTransferencias, setTotalTransferencias] = useState<number>(0);
+  const [mostrarRechazo, setMostrarRechazo] = useState<number | null>(null);
 
   // Cargar transferencias desde la API
   useEffect(() => {
@@ -66,6 +73,13 @@ export function TransferenciasView() {
     try {
       const data = await getTransferencias(userId, userRole);
       setTransferencias(data);
+      
+      // Calcular total de transferencias aprobadas (solo frontend)
+      const totalAprobadas = data
+        .filter(t => t.estado === "aprobada")
+        .reduce((sum, t) => sum + getMontoNumber(t.monto), 0);
+      setTotalTransferencias(totalAprobadas);
+      
     } catch (error: any) {
       toast({
         title: "Error",
@@ -73,6 +87,7 @@ export function TransferenciasView() {
         variant: "destructive",
       });
       setTransferencias([]);
+      setTotalTransferencias(0);
     } finally {
       setLoading(false);
     }
@@ -127,7 +142,11 @@ export function TransferenciasView() {
     setProcessingId(id);
     
     try {
-      await aprobarTransferencia(id, userId);
+      const resultado = await aprobarTransferencia(id, userId);
+      
+      // Actualizar la transferencia localmente
+      const transferenciaAprobada = transferencias.find(t => t.id === id);
+      const monto = transferenciaAprobada ? getMontoNumber(transferenciaAprobada.monto) : 0;
       
       setTransferencias(prev => 
         prev.map(t => 
@@ -141,9 +160,12 @@ export function TransferenciasView() {
         )
       );
       
+      // Actualizar total de transferencias (frontend)
+      setTotalTransferencias(prev => prev + monto);
+      
       toast({
         title: "Transferencia aprobada",
-        description: "La transferencia ha sido aprobada correctamente",
+        description: `Se descontaron Bs ${monto.toFixed(2)} de la caja origen`,
       });
     } catch (error: any) {
       toast({
@@ -161,7 +183,11 @@ export function TransferenciasView() {
     setProcessingId(id);
     
     try {
-      await observarTransferencia(id, userId, observacionInput || "Revisar documentación adjunta");
+      const resultado = await observarTransferencia(id, userId, observacionInput || "Revisar documentación adjunta");
+      
+      // Actualizar la transferencia localmente
+      const transferenciaObservada = transferencias.find(t => t.id === id);
+      const monto = transferenciaObservada ? getMontoNumber(transferenciaObservada.monto) : 0;
       
       setTransferencias(prev => 
         prev.map(t => 
@@ -178,7 +204,7 @@ export function TransferenciasView() {
       
       toast({
         title: "Transferencia observada",
-        description: "La transferencia ha sido marcada como observada",
+        description: `Se revertió Bs ${monto.toFixed(2)} a la caja origen`,
         variant: "destructive",
       });
     } catch (error: any) {
@@ -193,11 +219,51 @@ export function TransferenciasView() {
     }
   };
 
+  // Función para rechazar transferencia (solo admin)
+  const handleRechazar = async (id: number) => {
+    setProcessingId(id);
+    
+    try {
+      const resultado = await rechazarTransferencia(id, userId, motivoRechazoInput || "Transferencia rechazada");
+      
+      // Actualizar la transferencia localmente
+      const transferenciaRechazada = transferencias.find(t => t.id === id);
+      const monto = transferenciaRechazada ? getMontoNumber(transferenciaRechazada.monto) : 0;
+      
+      setTransferencias(prev => 
+        prev.map(t => 
+          t.id === id 
+            ? { 
+                ...t, 
+                estado: "observada",
+                fecha_aprobacion: new Date().toISOString(),
+                observacion: motivoRechazoInput || "Transferencia rechazada"
+              } 
+            : t
+        )
+      );
+      
+      toast({
+        title: "Transferencia rechazada",
+        description: `Se revertió Bs ${monto.toFixed(2)} a la caja origen`,
+        variant: "destructive",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo rechazar la transferencia",
+        variant: "destructive",
+      });
+    } finally {
+      setMotivoRechazoInput("");
+      setMostrarRechazo(null);
+      setProcessingId(null);
+    }
+  };
+
   // Filtrar transferencias según el rol
-  // Para Asistente: mostrar solo sus transferencias (todas, incluyendo pendientes, aprobadas y observadas)
-  // Para Admin: mostrar todas las transferencias pendientes
   const transferenciasFiltradas = isAssistant 
-    ? transferencias // El backend ya filtra por usuario
+    ? transferencias
     : transferencias;
 
   if (loading) {
@@ -215,20 +281,54 @@ export function TransferenciasView() {
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">
           {isAdmin ? "Transferencias Pendientes" : "Mis Transferencias"}
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isAdmin ? (
-            <Badge variant="outline" className="flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              {transferencias.filter(t => t.estado === "pendiente").length} pendientes
-            </Badge>
+            <>
+              <Badge variant="outline" className="flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                {transferencias.filter(t => t.estado === "pendiente").length} pendientes
+              </Badge>
+              <Badge variant="outline" className="flex items-center gap-1 bg-green-50 border-green-300">
+                <DollarSign className="h-3 w-3 text-green-600" />
+                <span className="text-green-600 font-semibold">Total Transferencias: Bs {totalTransferencias.toFixed(2)}</span>
+              </Badge>
+            </>
           ) : (
-            <Badge variant="outline" className="flex items-center gap-1">
-              <User className="h-3 w-3" />
-              {transferenciasFiltradas.length} registros
-            </Badge>
+            <>
+              <Badge variant="outline" className="flex items-center gap-1">
+                <User className="h-3 w-3" />
+                {transferenciasFiltradas.length} registros
+              </Badge>
+              <Badge variant="outline" className="flex items-center gap-1 bg-green-50 border-green-300">
+                <DollarSign className="h-3 w-3 text-green-600" />
+                <span className="text-green-600 font-semibold">Total Transferencias: Bs {totalTransferencias.toFixed(2)}</span>
+              </Badge>
+            </>
           )}
+          <Button variant="outline" size="sm" onClick={cargarTransferencias} className="gap-1">
+            <RefreshCw className="h-3 w-3" />
+            Actualizar
+          </Button>
         </div>
       </div>
+
+      {/* Tarjeta de resumen de transferencias */}
+      <Card className="border-green-200 bg-green-50/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-green-700 flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            Total de Transferencias Aprobadas
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-green-700">
+            Bs {totalTransferencias.toFixed(2)}
+          </div>
+          <div className="text-xs text-green-600 mt-1">
+            {isAdmin ? 'Monto total de todas las transferencias aprobadas' : 'Monto total de tus transferencias aprobadas'}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -325,7 +425,7 @@ export function TransferenciasView() {
                           <TableCell className="md:table-cell block md:border-0 border-0 p-0">
                             <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">ACCIONES</div>
                             <div className="flex flex-wrap gap-2">
-                              {/* Botón Aprobar con confirmación */}
+                              {/* Botón Aprobar */}
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button 
@@ -347,6 +447,8 @@ export function TransferenciasView() {
                                     <AlertDialogDescription>
                                       ¿Estás seguro de que deseas aprobar la transferencia de <strong>Bs {montoNumerico.toFixed(2)}</strong> 
                                       realizada por <strong>{transferencia.usuario_origen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
+                                      <br /><br />
+                                      <span className="text-red-600 font-medium">⚠️ El monto se descontará de la caja origen.</span>
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
@@ -361,13 +463,13 @@ export function TransferenciasView() {
                                 </AlertDialogContent>
                               </AlertDialog>
 
-                              {/* Botón Observar con confirmación y campo de observación */}
+                              {/* Botón Observar */}
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button 
                                     size="sm" 
                                     variant="destructive" 
-                                    className="flex items-center gap-1"
+                                    className="flex items-center gap-1 bg-yellow-600 hover:bg-yellow-700 text-white"
                                     disabled={processingId === transferencia.id}
                                   >
                                     {processingId === transferencia.id ? (
@@ -384,6 +486,8 @@ export function TransferenciasView() {
                                     <AlertDialogDescription>
                                       ¿Estás seguro de que deseas marcar como observada la transferencia de <strong>Bs {montoNumerico.toFixed(2)}</strong> 
                                       realizada por <strong>{transferencia.usuario_origen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
+                                      <br /><br />
+                                      <span className="text-green-600 font-medium">✅ El monto se devolverá a la caja origen.</span>
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <div className="py-4">
@@ -408,9 +512,66 @@ export function TransferenciasView() {
                                       onClick={() => {
                                         handleObservar(transferencia.id);
                                       }}
-                                      className="bg-red-600 hover:bg-red-700"
+                                      className="bg-yellow-600 hover:bg-yellow-700"
                                     >
                                       Observar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+
+                              {/* Botón Rechazar */}
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="destructive" 
+                                    className="flex items-center gap-1 bg-red-600 hover:bg-red-700"
+                                    disabled={processingId === transferencia.id}
+                                  >
+                                    {processingId === transferencia.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <XCircle className="h-3 w-3" />
+                                    )}
+                                    Rechazar
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Rechazar transferencia?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      ¿Estás seguro de que deseas rechazar la transferencia de <strong>Bs {montoNumerico.toFixed(2)}</strong> 
+                                      realizada por <strong>{transferencia.usuario_origen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
+                                      <br /><br />
+                                      <span className="text-green-600 font-medium">✅ El monto se devolverá a la caja origen.</span>
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <div className="py-4">
+                                    <Label htmlFor="motivoRechazo" className="text-sm font-medium">
+                                      Motivo del rechazo
+                                    </Label>
+                                    <Input
+                                      id="motivoRechazo"
+                                      placeholder="Ej: Documentación incompleta..."
+                                      value={motivoRechazoInput}
+                                      onChange={(e) => setMotivoRechazoInput(e.target.value)}
+                                      className="mt-2"
+                                    />
+                                  </div>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel 
+                                      onClick={() => setMotivoRechazoInput("")}
+                                    >
+                                      Cancelar
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => {
+                                        handleRechazar(transferencia.id);
+                                      }}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Rechazar
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
                                 </AlertDialogContent>

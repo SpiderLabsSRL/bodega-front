@@ -14,6 +14,7 @@ import {
   getSaldoActual,
   createTransaccionCaja
 } from "@/api/CajaApi";
+import { crearTransferencia, getSaldoCaja } from "@/api/TransferenciaApi";
 
 type TipoCaja = "Efectivo" | "QR" | "";
 
@@ -21,12 +22,14 @@ interface RegistraMovimientoViewProps {
   tipoCajaInicial?: TipoCaja;
   onTipoCajaChange?: (tipo: TipoCaja) => void;
   onTransaccionExitosa?: () => void;
+  onSaldoActualizado?: (nuevoSaldo: number) => void; // Nueva prop
 }
 
 export function RegistraMovimientoView({ 
   tipoCajaInicial = "", 
   onTipoCajaChange,
-  onTransaccionExitosa 
+  onTransaccionExitosa,
+  onSaldoActualizado 
 }: RegistraMovimientoViewProps) {
   const [tipoCaja, setTipoCaja] = useState<TipoCaja>(tipoCajaInicial);
   const [tipoMovimiento, setTipoMovimiento] = useState<string>("");
@@ -173,6 +176,7 @@ export function RegistraMovimientoView({
         return;
       }
 
+      // Para transferencia, verificar que se seleccionó un usuario destino
       if (tipoMovimiento === "Transferencia" && !usuarioTransferencia) {
         toast({
           title: "Error",
@@ -183,10 +187,67 @@ export function RegistraMovimientoView({
         return;
       }
 
+      const montoNumero = parseFloat(monto);
+
+      // Si es Transferencia, usar la API de transferencias
+      if (tipoMovimiento === "Transferencia") {
+        // Obtener la caja actual
+        const saldoData = await getSaldoActual({ idbodega, tipoCaja });
+        const idcaja = saldoData.idcaja;
+        
+        if (!idcaja) {
+          toast({
+            title: "Error",
+            description: "No se encontró la caja para realizar la transferencia",
+            variant: "destructive",
+          });
+          setProcessing(false);
+          return;
+        }
+
+        // Crear la transferencia (esto descuenta de la caja)
+        const resultado = await crearTransferencia({
+          idcaja_origen: idcaja,
+          monto: montoNumero,
+          tipo: tipoCaja,
+          descripcion: descripcion,
+          idusuario_solicitante: userId
+        });
+
+        // Actualizar el saldo local con el nuevo saldo devuelto por el backend
+        if (resultado.saldo_actual !== undefined) {
+          setSaldoActual(resultado.saldo_actual);
+          // Notificar al componente padre
+          if (onSaldoActualizado) {
+            onSaldoActualizado(resultado.saldo_actual);
+          }
+        }
+
+        const usuario = usuariosAdmin.find(u => u.usuario === usuarioTransferencia);
+        
+        toast({
+          title: "📝 Transferencia registrada",
+          description: `Transferencia de Bs ${montoNumero.toFixed(2)} a ${usuario?.nombre || usuarioTransferencia}. Se descontó de la caja.`,
+        });
+
+        // Limpiar formulario
+        setMonto("");
+        setDescripcion("");
+        setUsuarioTransferencia("");
+        
+        if (onTransaccionExitosa) {
+          onTransaccionExitosa();
+        }
+        
+        setProcessing(false);
+        return;
+      }
+
+      // Para otros movimientos (Ingreso, Egreso, Apertura, Cierre)
       const data: any = {
         tipoCaja,
         tipoMovimiento,
-        monto: parseFloat(monto),
+        monto: montoNumero,
         descripcion,
         idbodega,
         idusuario: userId,
@@ -198,48 +259,38 @@ export function RegistraMovimientoView({
 
       const resultado = await createTransaccionCaja(data);
 
+      // Recargar saldo actualizado
       await cargarSaldoActual();
 
       if (tipoMovimiento === "Apertura") {
         setCajaAbierta(true);
         toast({
           title: "✅ Caja abierta",
-          description: `Caja de ${tipoCaja} abierta con saldo de ${monto} Bs correctamente`,
+          description: `Caja de ${tipoCaja} abierta con saldo de Bs ${montoNumero.toFixed(2)}`,
         });
       } else if (tipoMovimiento === "Cierre") {
         setCajaAbierta(false);
         toast({
           title: "✅ Caja cerrada",
-          description: `Caja de ${tipoCaja} cerrada con saldo final de ${saldoActual.toFixed(2)} Bs correctamente`,
-        });
-      } else if (tipoMovimiento === "Transferencia") {
-        const usuario = usuariosAdmin.find(u => u.usuario === usuarioTransferencia);
-        const mensaje = resultado.estado === 'pendiente' 
-          ? `Transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} registrada. Pendiente de aprobación.`
-          : `Transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} aprobada automáticamente.`;
-        
-        toast({
-          title: resultado.estado === 'pendiente' ? "📝 Transferencia registrada" : "✅ Transferencia aprobada",
-          description: mensaje,
+          description: `Caja de ${tipoCaja} cerrada correctamente`,
         });
       } else if (tipoMovimiento === "Ingreso") {
         toast({
           title: "✅ Ingreso registrado",
-          description: `Ingreso de ${monto} Bs registrado correctamente en caja de ${tipoCaja}`,
+          description: `Ingreso de Bs ${montoNumero.toFixed(2)} en caja de ${tipoCaja}`,
         });
       } else if (tipoMovimiento === "Egreso") {
         toast({
           title: "✅ Egreso registrado",
-          description: `Egreso de ${monto} Bs registrado correctamente en caja de ${tipoCaja}`,
+          description: `Egreso de Bs ${montoNumero.toFixed(2)} en caja de ${tipoCaja}`,
         });
       }
 
-      // Limpiar SOLO los campos del formulario
+      // Limpiar formulario
       setMonto("");
       setDescripcion("");
       setUsuarioTransferencia("");
       
-      // Notificar al padre
       if (onTransaccionExitosa) {
         onTransaccionExitosa();
       }
@@ -270,9 +321,9 @@ export function RegistraMovimientoView({
   const getDescripcionPlaceholder = () => {
     switch (tipoMovimiento) {
       case "Apertura":
-        return `Apertura de caja de ${tipoCaja} con saldo de ${monto || '0'} Bs`;
+        return `Apertura de caja de ${tipoCaja} con saldo de Bs ${monto || '0'}`;
       case "Cierre":
-        return `Cierre de caja de ${tipoCaja} con saldo de ${saldoActual.toFixed(2)} Bs`;
+        return `Cierre de caja de ${tipoCaja} con saldo de Bs ${saldoActual.toFixed(2)}`;
       case "Transferencia":
         return "Descripción de la transferencia...";
       case "Ingreso":
@@ -293,14 +344,14 @@ export function RegistraMovimientoView({
 
   const getAlertDescription = () => {
     if (tipoMovimiento === "Apertura") {
-      return `¿Estás seguro de que deseas abrir la caja de ${tipoCaja} con el saldo actual de ${monto} Bs?`;
+      return `¿Estás seguro de que deseas abrir la caja de ${tipoCaja} con el saldo actual de Bs ${monto}?`;
     } else if (tipoMovimiento === "Cierre") {
-      return `¿Estás seguro de que deseas cerrar la caja de ${tipoCaja} con el saldo actual de ${saldoActual.toFixed(2)} Bs?`;
+      return `¿Estás seguro de que deseas cerrar la caja de ${tipoCaja} con el saldo actual de Bs ${saldoActual.toFixed(2)}?`;
     } else if (tipoMovimiento === "Transferencia") {
       const usuario = usuariosAdmin.find(u => u.usuario === usuarioTransferencia);
-      return `¿Estás seguro de que deseas realizar una transferencia de ${monto} Bs a ${usuario?.nombre || usuarioTransferencia} en caja de ${tipoCaja}?`;
+      return `¿Estás seguro de que deseas realizar una transferencia de Bs ${monto} a ${usuario?.nombre || usuarioTransferencia} en caja de ${tipoCaja}?\n\n⚠️ El monto se descontará inmediatamente de la caja.`;
     } else {
-      return `¿Estás seguro de que deseas registrar este ${tipoMovimiento.toLowerCase()} de ${monto} Bs en caja de ${tipoCaja}?${
+      return `¿Estás seguro de que deseas registrar este ${tipoMovimiento.toLowerCase()} de Bs ${monto} en caja de ${tipoCaja}?${
         descripcion ? `\nDescripción: ${descripcion}` : ''
       }`;
     }
@@ -432,7 +483,7 @@ export function RegistraMovimientoView({
           {loadingSaldo ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <span className="text-sm font-bold">Bs {saldoActual.toFixed(2)}</span>
+            <span className="text-sm font-bold text-primary">Bs {saldoActual.toFixed(2)}</span>
           )}
         </div>
       </div>
@@ -487,11 +538,6 @@ export function RegistraMovimientoView({
                   : "El saldo final se calcula automáticamente"}
               </p>
             )}
-            {tipoMovimiento && !isMontoDisabled() && (
-              <p className="text-xs text-muted-foreground">
-                Ingresa el monto para el {tipoMovimiento.toLowerCase()}
-              </p>
-            )}
           </div>
 
           {showDescripcion() && (
@@ -505,11 +551,6 @@ export function RegistraMovimientoView({
                 rows={3}
                 disabled={processing || !tipoMovimiento}
               />
-              {!tipoMovimiento && (
-                <p className="text-xs text-muted-foreground">
-                  Selecciona un tipo de movimiento primero
-                </p>
-              )}
             </div>
           )}
 
@@ -535,6 +576,21 @@ export function RegistraMovimientoView({
             </div>
           )}
 
+          {tipoMovimiento === "Transferencia" && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-yellow-800">
+                <Wallet className="h-4 w-4" />
+                <span className="font-semibold">Información de Transferencia</span>
+              </div>
+              <p className="text-sm text-yellow-700 mt-1">
+                ⚠️ El monto de <strong>Bs {monto || '0'}</strong> se descontará <strong>inmediatamente</strong> de la caja de {tipoCaja}.
+              </p>
+              <p className="text-sm text-yellow-700">
+                Saldo después de la transferencia: <strong>Bs {(saldoActual - parseFloat(monto || '0')).toFixed(2)}</strong>
+              </p>
+            </div>
+          )}
+
           {tipoMovimiento === "Apertura" && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-center gap-2 text-green-800">
@@ -544,11 +600,6 @@ export function RegistraMovimientoView({
               <p className="text-sm text-green-700 mt-1">
                 La caja de {tipoCaja} se abrirá con el saldo actual de <strong>Bs {monto || '0.00'}</strong>
               </p>
-              {parseFloat(monto) > 0 && (
-                <p className="text-xs text-green-600 mt-1">
-                  Este saldo incluye todos los movimientos previos registrados
-                </p>
-              )}
             </div>
           )}
 

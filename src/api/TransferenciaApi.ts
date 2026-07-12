@@ -9,7 +9,7 @@ export interface Transferencia {
   monto: number | string;
   descripcion: string;
   tipo: string;
-  estado: "pendiente" | "aprobada" | "observada";
+  estado: "pendiente" | "aprobada" | "observada" | "rechazada";
   fecha_aprobacion: string | null;
   observacion: string | null;
   idusuario_solicitante: number;
@@ -18,6 +18,8 @@ export interface Transferencia {
   usuario_aprobador: string | null;
   caja_origen: string;
   tipo_origen: string;
+  idmovimiento_egreso?: number | null;
+  idmovimiento_reversion?: number | null;
 }
 
 export interface CrearTransferenciaRequest {
@@ -26,6 +28,17 @@ export interface CrearTransferenciaRequest {
   tipo: string;
   descripcion: string;
   idusuario_solicitante: number;
+}
+
+// Respuesta al crear transferencia
+export interface CrearTransferenciaResponse {
+  idtransferencia: number;
+  estado: string;
+  mensaje: string;
+  saldo_anterior: number;
+  saldo_actual: number;
+  monto_descontado: number;
+  idmovimiento_egreso: number;
 }
 
 const api = axios.create({
@@ -54,7 +67,7 @@ export const getTransferencias = async (userId: number, userRole: string): Promi
   }
 };
 
-export const crearTransferencia = async (data: CrearTransferenciaRequest): Promise<any> => {
+export const crearTransferencia = async (data: CrearTransferenciaRequest): Promise<CrearTransferenciaResponse> => {
   try {
     const response = await api.post("/transferencias", data);
     return response.data;
@@ -157,5 +170,19 @@ export const countTransferenciasPendientes = async (): Promise<number> => {
   } catch (error) {
     console.error("Error counting transferencias pendientes:", error);
     return 0;
+  }
+};
+
+// Función para obtener el saldo actual de una caja
+export const getSaldoCaja = async (idcaja: number): Promise<{ total: number; estado_caja: string }> => {
+  try {
+    const response = await api.get(`/caja/${idcaja}`);
+    return {
+      total: parseFloat(response.data.total) || 0,
+      estado_caja: response.data.estado_caja || 'cerrada'
+    };
+  } catch (error) {
+    console.error("Error getting caja saldo:", error);
+    return { total: 0, estado_caja: 'cerrada' };
   }
 };

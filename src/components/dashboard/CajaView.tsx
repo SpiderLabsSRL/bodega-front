@@ -6,7 +6,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CalendarIcon, CalendarRange as CalendarRangeIcon, Loader2, Check, X, Plus, DollarSign, Building2 } from "lucide-react";
+import { CalendarIcon, CalendarRange as CalendarRangeIcon, Loader2, Check, X, Plus, DollarSign, Building2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { 
@@ -78,7 +78,6 @@ export function CajaView() {
   const [datosCargados, setDatosCargados] = useState(false);
   const [saldoActual, setSaldoActual] = useState<number>(0);
   const [estadoCaja, setEstadoCaja] = useState<string>("cerrada");
-  // ✅ CAMBIO: Inicializar con "Efectivo" por defecto
   const [tipoCajaSeleccionado, setTipoCajaSeleccionado] = useState<"Efectivo" | "QR" | "">("Efectivo");
   
   // Estado para bodegas
@@ -111,9 +110,7 @@ export function CajaView() {
       try {
         const bodegasData = await getBodegas();
         setBodegas(bodegasData);
-        // Seleccionar la primera bodega por defecto
         if (bodegasData.length > 0 && selectedBodega === null) {
-          // Buscar la bodega del usuario actual si existe
           const userBodegaId = currentUser?.idbodega;
           if (userBodegaId && bodegasData.some(b => b.idbodega === userBodegaId)) {
             setSelectedBodega(userBodegaId);
@@ -153,12 +150,12 @@ export function CajaView() {
             tipoCaja: tipoCajaSeleccionado
           };
           const saldoData = await getSaldoActual(params);
-          setSaldoActual(parseFloat(saldoData.monto_final));
-          // Solo mostrar estado si es Efectivo
+          const saldo = parseFloat(saldoData.monto_final);
+          setSaldoActual(saldo);
           if (tipoCajaSeleccionado === "Efectivo") {
             setEstadoCaja(saldoData.estado);
           } else {
-            setEstadoCaja(""); // QR no tiene estado
+            setEstadoCaja("");
           }
         } catch (saldoError) {
           console.error("Error cargando saldo:", saldoError);
@@ -281,6 +278,29 @@ export function CajaView() {
     }
   };
 
+  // Función para actualizar el saldo después de una transacción
+  const actualizarSaldo = async () => {
+    if (tipoCajaSeleccionado && selectedBodega) {
+      try {
+        const params = { 
+          idbodega: selectedBodega, 
+          tipoCaja: tipoCajaSeleccionado
+        };
+        const saldoData = await getSaldoActual(params);
+        const saldo = parseFloat(saldoData.monto_final);
+        setSaldoActual(saldo);
+        if (tipoCajaSeleccionado === "Efectivo") {
+          setEstadoCaja(saldoData.estado);
+        }
+        return saldo;
+      } catch (error) {
+        console.error("Error actualizando saldo:", error);
+        return null;
+      }
+    }
+    return null;
+  };
+
   // Función para recargar todos los datos después de una transacción
   const recargarDatosCompletos = async () => {
     await cargarDatosIniciales();
@@ -288,14 +308,13 @@ export function CajaView() {
   };
 
   const handleRegistrarMovimiento = () => {
-    setTipoCajaModal(""); // Resetear al abrir
+    setTipoCajaModal("");
     setShowRegistroMovimiento(true);
   };
 
   const handleCloseRegistroMovimiento = () => {
     setShowRegistroMovimiento(false);
     setTipoCajaModal("");
-    // Recargar datos al cerrar el modal manualmente
     recargarDatosCompletos();
   };
 
@@ -358,7 +377,6 @@ export function CajaView() {
 
   const saldoFiltrado = totalIngresos - totalEgresos;
 
-  // Obtener nombre de la bodega seleccionada
   const bodegaSeleccionada = bodegas.find(b => b.idbodega === selectedBodega);
 
   if (initialLoading) {
@@ -374,15 +392,26 @@ export function CajaView() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">Gestión de Caja</h1>
-        {isAssistant && (
+        <div className="flex gap-2">
+          {isAssistant && (
+            <Button 
+              onClick={handleRegistrarMovimiento}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Registrar Movimiento
+            </Button>
+          )}
           <Button 
-            onClick={handleRegistrarMovimiento}
-            className="flex items-center gap-2 w-full sm:w-auto"
+            variant="outline" 
+            size="default" 
+            onClick={recargarDatosCompletos}
+            className="flex items-center gap-2"
           >
-            <Plus className="h-4 w-4" />
-            Registrar Movimiento
+            <RefreshCw className="h-4 w-4" />
+            Actualizar
           </Button>
-        )}
+        </div>
       </div>
 
       {error && (
@@ -416,12 +445,11 @@ export function CajaView() {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="border-blue-200 bg-blue-50/50">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Saldo Actual</CardTitle>
+            <CardTitle className="text-sm font-medium text-blue-700">Saldo Actual</CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Solo mostrar estado si es Efectivo */}
             {tipoCajaSeleccionado === "Efectivo" && (
               <div className="text-xs text-muted-foreground mb-1">
                 Estado: <span className={`font-medium ${estadoCaja === 'abierta' ? 'text-green-600' : 'text-red-600'}`}>
@@ -429,8 +457,11 @@ export function CajaView() {
                 </span>
               </div>
             )}
-            <div className={`text-2xl font-bold ${saldoActual >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className={`text-2xl font-bold ${saldoActual >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
               Bs {saldoActual.toFixed(2)}
+            </div>
+            <div className="text-xs text-blue-600 mt-1">
+              {tipoCajaSeleccionado ? `Saldo de ${tipoCajaSeleccionado}` : 'Selecciona una caja'}
             </div>
           </CardContent>
         </Card>
@@ -471,7 +502,6 @@ export function CajaView() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-            {/* Filtro de Bodega - SOLO PARA ADMIN */}
             {isAdmin && (
               <div>
                 <label className="text-sm font-medium">Bodega</label>
@@ -781,7 +811,6 @@ export function CajaView() {
       {isAssistant && showRegistroMovimiento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-lg p-6">
-            {/* Botón X para cerrar manualmente */}
             <button
               onClick={() => {
                 setTipoCajaModal("");
@@ -799,6 +828,9 @@ export function CajaView() {
               }}
               onTransaccionExitosa={async () => {
                 await recargarDatosCompletos();
+              }}
+              onSaldoActualizado={(nuevoSaldo) => {
+                setSaldoActual(nuevoSaldo);
               }}
             />
           </div>
