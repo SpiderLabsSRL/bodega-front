@@ -73,7 +73,6 @@ export interface EntregaRequest {
   idUsuario: number;
 }
 
-// Crear una instancia de axios con la configuración base
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -82,7 +81,6 @@ const api = axios.create({
   },
 });
 
-// Interceptor para agregar el token a TODAS las solicitudes
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
@@ -96,7 +94,6 @@ api.interceptors.request.use(
   }
 );
 
-// Interceptor para manejar errores de autenticación
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -112,6 +109,34 @@ api.interceptors.response.use(
   }
 );
 
+// SOLO EFECTIVO se verifica - QR siempre abierta
+export const getEstadoCaja = async (idbodega: number, tipo: string): Promise<string> => {
+  try {
+    console.log("📊 getEstadoCaja - idbodega:", idbodega, "tipo:", tipo);
+    
+    if (!idbodega || isNaN(idbodega)) {
+      console.error("❌ idbodega inválido:", idbodega);
+      return 'abierta';
+    }
+    
+    // QR siempre abierta
+    if (tipo !== 'Efectivo') {
+      console.log("ℹ️ QR no tiene estado, retornando 'abierta'");
+      return 'abierta';
+    }
+    
+    const response = await api.get<{ estado: string; monto_final: string }>(
+      `/cash/status?idbodega=${idbodega}&tipoCaja=${encodeURIComponent(tipo)}`
+    );
+    
+    console.log("📊 Respuesta estado caja:", response.data);
+    return response.data.estado || 'cerrada';
+  } catch (error) {
+    console.error("❌ Error getting caja estado:", error);
+    return 'cerrada';
+  }
+};
+
 export const getPagosPendientes = async (): Promise<PagoPendiente[]> => {
   try {
     const token = localStorage.getItem("token");
@@ -124,18 +149,15 @@ export const getPagosPendientes = async (): Promise<PagoPendiente[]> => {
     const idusuario = getUserId();
     const rol = getUserRole();
     const idbodega = getUserBodega();
-    const user = getCurrentUser();
     
     let url = "/pagos/pendientes";
     const params = new URLSearchParams();
     
-    // Si NO es Admin, filtrar por su bodega (solo ve su bodega)
+    // Si NO es Admin, filtrar por su bodega
     if (rol !== 'Admin' && idbodega) {
       params.append('bodega', idbodega.toString());
     }
-    // Si es Admin, NO enviar parámetro bodega para ver TODAS las cotizaciones
-    // Solo enviar bodega si se quiere filtrar (esto se manejaría desde un filtro en el frontend)
-    // Por ahora, el Admin ve todas sin filtro
+    // Si es Admin, NO enviar parámetro para ver TODAS
     
     if (params.toString()) {
       url += `?${params.toString()}`;
@@ -192,6 +214,7 @@ export const procesarPago = async (cotizacionId: string, pagoRequest: PagoReques
     const idcotizacion = parseInt(cotizacionId.replace('COT-', ''));
     await api.post(`/pagos/procesar-pago/${idcotizacion}`, pagoRequest);
   } catch (error: any) {
+    console.error("❌ Error en procesarPago:", error);
     throw new Error(error.response?.data?.message || "No se pudo procesar el pago");
   }
 };
@@ -201,6 +224,12 @@ export const actualizarEntregas = async (cotizacionId: string, entregaRequest: E
     const idcotizacion = parseInt(cotizacionId.replace('COT-', ''));
     await api.put(`/pagos/actualizar-entregas/${idcotizacion}`, entregaRequest);
   } catch (error: any) {
+    console.error("❌ Error en actualizarEntregas:", error);
+    
+    if (error.response?.data?.error?.includes("caja está cerrada")) {
+      throw new Error("La caja está cerrada. No se pueden procesar pagos.");
+    }
+    
     throw new Error(error.response?.data?.message || "No se pudieron actualizar las entregas");
   }
 };
@@ -210,6 +239,7 @@ export const marcarComoEntregado = async (cotizacionId: string): Promise<void> =
     const idcotizacion = parseInt(cotizacionId.replace('COT-', ''));
     await api.patch(`/pagos/marcar-entregado/${idcotizacion}`);
   } catch (error: any) {
+    console.error("❌ Error en marcarComoEntregado:", error);
     throw new Error(error.response?.data?.message || "No se pudo marcar como entregado");
   }
 };
@@ -219,6 +249,7 @@ export const eliminarPago = async (cotizacionId: string): Promise<void> => {
     const idcotizacion = parseInt(cotizacionId.replace('COT-', ''));
     await api.delete(`/pagos/eliminar/${idcotizacion}`);
   } catch (error: any) {
+    console.error("❌ Error en eliminarPago:", error);
     throw new Error(error.response?.data?.message || "No se pudo eliminar el pago");
   }
 };
