@@ -8,9 +8,18 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { getPagosPendientes, procesarPago, actualizarEntregas, marcarComoEntregado, eliminarPago, PagoPendiente } from "@/api/PagosPendientesApi";
-import { getUserId, getUserRole, getCurrentUser } from "@/api/AuthApi";
+import { 
+  getPagosPendientes, 
+  procesarPago, 
+  actualizarEntregas, 
+  marcarComoEntregado, 
+  eliminarPago, 
+  getEstadoCaja,
+  PagoPendiente 
+} from "@/api/PagosPendientesApi";
+import { getUserId, getUserRole, getCurrentUser, getUserBodega } from "@/api/AuthApi";
 
 // Obtener usuario actual desde AuthApi
 const USUARIO_ACTUAL = {
@@ -23,6 +32,11 @@ const formatBs = (value: number) => {
   const v = Math.abs(value) < 0.005 ? 0 : value;
   return v.toFixed(2);
 };
+
+interface CajaEstado {
+  efectivo: string;
+  qr: string;
+}
 
 export function PagosPendientesView() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,19 +56,53 @@ export function PagosPendientesView() {
   const [entregasTemporales, setEntregasTemporales] = useState<{[key: string]: number}>({});
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   
-  // Nuevos estados para el filtro de usuario
+  // Estados para el filtro de usuario (solo para Admin)
   const [filtroUsuario, setFiltroUsuario] = useState<string>("todos");
   const [usuariosUnicos, setUsuariosUnicos] = useState<string[]>([]);
+  
+  // Estado de cajas
+  const [cajaEstado, setCajaEstado] = useState<CajaEstado>({ efectivo: 'cerrada', qr: 'cerrada' });
+  const [cargandoCaja, setCargandoCaja] = useState(false);
   
   const { toast } = useToast();
 
   const isAdmin = USUARIO_ACTUAL.rol === 'Admin';
+  const isAssistant = USUARIO_ACTUAL.rol === 'Asistente';
+  const userBodegaId = getUserBodega();
+
+  // Obtener estado de las cajas (solo para Asistente, el Admin no necesita ver esto)
+  const fetchEstadoCajas = async () => {
+    if (!isAssistant || !userBodegaId) return;
+    
+    setCargandoCaja(true);
+    try {
+      const [estadoEfectivo, estadoQR] = await Promise.all([
+        getEstadoCaja(userBodegaId, 'Efectivo'),
+        getEstadoCaja(userBodegaId, 'QR')
+      ]);
+      
+      setCajaEstado({
+        efectivo: estadoEfectivo,
+        qr: estadoQR
+      });
+    } catch (error) {
+      console.error("Error fetching caja estados:", error);
+    } finally {
+      setCargandoCaja(false);
+    }
+  };
 
   useEffect(() => {
     cargarPagosPendientes();
+    if (isAssistant) {
+      fetchEstadoCajas();
+      // Refrescar estado de cajas cada 30 segundos solo para Asistentes
+      const interval = setInterval(fetchEstadoCajas, 30000);
+      return () => clearInterval(interval);
+    }
   }, []);
 
-  // Efecto para obtener usuarios únicos cuando cambian los pagos
+  // Efecto para obtener usuarios únicos cuando cambian los pagos (solo para Admin)
   useEffect(() => {
     if (isAdmin && pagosPendientes.length > 0) {
       const usuarios = [...new Set(pagosPendientes
@@ -110,7 +158,22 @@ export function PagosPendientesView() {
     }
   };
 
+  // Filtrar pagos - para Asistente solo ve los suyos
   const filteredPagos = pagosPendientes.filter(pago => {
+    // Para Asistente: solo ver sus propias cotizaciones
+    if (isAssistant) {
+      // Verificar si el usuario actual es el que creó la cotización
+      const usuarioActual = getCurrentUser();
+      const esSuCotizacion = pago.usuarioNombre === usuarioActual?.nombres + ' ' + usuarioActual?.apellidos;
+      
+      // También podría ser por ID de usuario
+      const esSuId = pago.usuarioLogin === usuarioActual?.usuario;
+      
+      if (!esSuCotizacion && !esSuId) {
+        return false;
+      }
+    }
+    
     const matchesSearch = pago.cliente.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pago.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pago.telefono.includes(searchQuery) ||
@@ -145,6 +208,19 @@ export function PagosPendientesView() {
   const handleFinalizarPago = async () => {
     if (!selectedPago) return;
     
+    // Verificar si la caja está abierta (solo para Asistentes)
+    if (isAssistant) {
+      const cajaAbierta = metodoPago === 'efectivo' ? cajaEstado.efectivo === 'abierta' : cajaEstado.qr === 'abierta';
+      if (!cajaAbierta) {
+        toast({
+          title: "Caja Cerrada",
+          description: `La caja de ${metodoPago === 'efectivo' ? 'Efectivo' : 'QR'} está cerrada. No se pueden procesar pagos.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     setProcessingAction(`finalizar-pago-${selectedPago.id}`);
     
     try {
@@ -161,6 +237,11 @@ export function PagosPendientesView() {
       setShowConfirmDialog(false);
       setSelectedPago(null);
       
+      // Actualizar estado de cajas (solo para Asistentes)
+      if (isAssistant) {
+        await fetchEstadoCajas();
+      }
+      
       toast({
         title: "Pago finalizado",
         description: `Pago de Bs ${formatBs(selectedPago.saldo)} completado exitosamente`,
@@ -169,7 +250,7 @@ export function PagosPendientesView() {
       console.error("Error procesando pago:", error);
       toast({
         title: "Error",
-        description: "No se pudo procesar el pago",
+        description: error instanceof Error ? error.message : "No se pudo procesar el pago",
         variant: "destructive",
       });
     } finally {
@@ -230,6 +311,11 @@ export function PagosPendientesView() {
       setMontoPago(0);
       setEntregasTemporales({});
 
+      // Actualizar estado de cajas si hubo pago (solo para Asistentes)
+      if (montoPago > 0 && isAssistant) {
+        await fetchEstadoCajas();
+      }
+
       toast({
         title: "Cambios guardados",
         description: montoPago > 0 
@@ -243,6 +329,12 @@ export function PagosPendientesView() {
         toast({
           title: "Stock insuficiente",
           description: error.message,
+          variant: "destructive",
+        });
+      } else if (error.message?.includes("caja está cerrada")) {
+        toast({
+          title: "Caja Cerrada",
+          description: "No se puede procesar el pago porque la caja está cerrada. Por favor, abra la caja primero.",
           variant: "destructive",
         });
       } else {
@@ -326,6 +418,12 @@ export function PagosPendientesView() {
     setEntregasTemporales({});
   };
 
+  // Verificar si la caja está abierta para el método de pago seleccionado (solo Asistentes)
+  const cajaAbiertaParaPago = (metodo: "efectivo" | "qr") => {
+    if (!isAssistant) return true; // Admin no necesita verificar caja
+    return metodo === 'efectivo' ? cajaEstado.efectivo === 'abierta' : cajaEstado.qr === 'abierta';
+  };
+
   if (loading) {
     return (
       <div className="space-y-4 sm:space-y-6 p-2 sm:p-4">
@@ -341,16 +439,37 @@ export function PagosPendientesView() {
 
   return (
     <div className="space-y-4 sm:space-y-6 p-2 sm:p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <CreditCard className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
           <h1 className="text-xl sm:text-2xl font-bold text-primary">Pagos Pendientes</h1>
         </div>
-        {isAdmin && (
-          <div className="text-sm text-muted-foreground bg-primary/10 px-3 py-1 rounded-full">
-            Vista de Administrador
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Mostrar estado de cajas SOLO para Asistentes */}
+          {isAssistant && !cargandoCaja && (
+            <>
+              <Badge 
+                variant={cajaEstado.efectivo === 'abierta' ? "default" : "destructive"}
+                className="flex items-center gap-1 text-xs"
+              >
+                <span className={`h-2 w-2 rounded-full ${cajaEstado.efectivo === 'abierta' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+                Caja Efectivo
+              </Badge>
+              <Badge 
+                variant={cajaEstado.qr === 'abierta' ? "default" : "destructive"}
+                className="flex items-center gap-1 text-xs"
+              >
+                <span className={`h-2 w-2 rounded-full ${cajaEstado.qr === 'abierta' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+                Caja QR
+              </Badge>
+            </>
+          )}
+          {isAdmin && (
+            <div className="text-sm text-muted-foreground bg-primary/10 px-3 py-1 rounded-full">
+              Vista de Administrador
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Buscador y Filtros */}
@@ -406,226 +525,69 @@ export function PagosPendientesView() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base sm:text-lg">Cotizaciones con Pagos Pendientes</CardTitle>
+          {isAssistant && (
+            <p className="text-sm text-muted-foreground">Mostrando tus cotizaciones pendientes</p>
+          )}
         </CardHeader>
         <CardContent>
-          {/* Vista móvil */}
-          <div className="block md:hidden space-y-4">
-            {filteredPagos.map((pago) => (
-              <Card key={pago.id} className="p-4">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-sm">{pago.cliente}</p>
-                      <p className="text-xs text-muted-foreground">{pago.telefono}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(pago.fecha).toLocaleDateString('es-BO')}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => verDetalle(pago)}
-                      className="p-2"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Tipo:</span>
-                    <span>{pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}</span>
-                  </div>
-                  
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total:</span>
-                    <span className="font-medium">Bs {formatBs(pago.monto)}</span>
-                  </div>
-
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Abonado:</span>
-                    <span className="font-medium text-green-600">Bs {formatBs(pago.monto - pago.saldo)}</span>
-                  </div>
-                  
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Pendiente:</span>
-                    <span className="font-bold text-orange-600">Bs {formatBs(pago.saldo)}</span>
-                  </div>
-                  
-                  {isAdmin && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Usuario Registro:</span>
-                      <span className="font-medium">{pago.usuarioNombre || "Desconocido"}</span>
-                    </div>
-                  )}
-                  
-                  {isAdmin && pago.bodegaNombre && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Sucursal:</span>
-                      <span className="font-medium">{pago.bodegaNombre}</span>
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => verEntregas(pago)}
-                      disabled={isProcessing(`entregas-${pago.id}`)}
-                    >
-                      {isProcessing(`entregas-${pago.id}`) ? (
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                      ) : (
-                        <Package className="h-3 w-3 mr-1" />
-                      )}
-                      Entregas
-                    </Button>
-                    
-                    {pago.entregado ? (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        disabled
-                      >
-                        <Check className="h-3 w-3 mr-1" />
-                        Entregado
-                      </Button>
-                    ) : puedeFinalizarEntrega(pago) ? (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            disabled={isProcessing(`marcar-entregado-${pago.id}`)}
-                          >
-                            {isProcessing(`marcar-entregado-${pago.id}`) ? (
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                            ) : (
-                              <Check className="h-3 w-3 mr-1" />
-                            )}
-                            Finalizar Entrega
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>¿Confirmar entrega completa?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              ¿Está seguro de marcar la cotización {pago.id} como completamente entregada?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction 
-                              onClick={() => handleMarcarEntregado(pago)}
-                              disabled={isProcessing(`marcar-entregado-${pago.id}`)}
-                            >
-                              {isProcessing(`marcar-entregado-${pago.id}`) ? (
-                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
-                              ) : null}
-                              Confirmar
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    ) : (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={isProcessing(`eliminar-${pago.id}`)}
-                          >
-                            {isProcessing(`eliminar-${pago.id}`) ? (
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                            ) : (
-                              <Trash2 className="h-3 w-3 mr-1" />
-                            )}
-                            Eliminar
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>¿Eliminar cotización?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              ¿Está seguro de eliminar la cotización {pago.id} del cliente {pago.cliente}? Esta acción no se puede deshacer.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction 
-                              onClick={() => handleEliminarPago(pago)}
-                              disabled={isProcessing(`eliminar-pago-${pago.id}`)}
-                            >
-                              {isProcessing(`eliminar-pago-${pago.id}`) ? (
-                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
-                              ) : null}
-                              Eliminar
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          {/* Vista desktop */}
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Teléfono</TableHead>
-                  {isAdmin && <TableHead>Usuario Registro</TableHead>}
-                  {isAdmin && <TableHead>Sucursal</TableHead>}
-                  <TableHead>Tipo de Pago</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Abonado</TableHead>
-                  <TableHead className="text-right">Pendiente</TableHead>
-                  <TableHead className="text-center">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          {/* Vista móvil - solo mostrar si hay pagos */}
+          {filteredPagos.length > 0 ? (
+            <>
+              <div className="block md:hidden space-y-4">
                 {filteredPagos.map((pago) => (
-                  <TableRow key={pago.id}>
-                    <TableCell>{new Date(pago.fecha).toLocaleDateString('es-BO')}</TableCell>
-                    <TableCell className="font-medium">{pago.cliente}</TableCell>
-                    <TableCell>{pago.telefono}</TableCell>
-                    {isAdmin && (
-                      <TableCell>
-                        <span className="text-sm" title={pago.usuarioLogin}>
-                          {pago.usuarioNombre || "Desconocido"}
-                        </span>
-                      </TableCell>
-                    )}
-                    {isAdmin && (
-                      <TableCell>
-                        <span className="text-sm">{pago.bodegaNombre || "N/A"}</span>
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      {pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      Bs {formatBs(pago.monto)}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-green-600">
-                      Bs {formatBs(pago.monto - pago.saldo)}
-                    </TableCell>
-                    <TableCell className="text-right font-bold text-orange-600">
-                      Bs {formatBs(pago.saldo)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex justify-center gap-2">
+                  <Card key={pago.id} className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-sm">{pago.cliente}</p>
+                          <p className="text-xs text-muted-foreground">{pago.telefono}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(pago.fecha).toLocaleDateString('es-BO')}</p>
+                        </div>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => verDetalle(pago)}
                           className="p-2"
                         >
-                          <Eye className="h-3 w-3" />
+                          <Eye className="h-4 w-4" />
                         </Button>
-                        
+                      </div>
+                      
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Tipo:</span>
+                        <span>{pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}</span>
+                      </div>
+                      
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Total:</span>
+                        <span className="font-medium">Bs {formatBs(pago.monto)}</span>
+                      </div>
+
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Abonado:</span>
+                        <span className="font-medium text-green-600">Bs {formatBs(pago.monto - pago.saldo)}</span>
+                      </div>
+                      
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Pendiente:</span>
+                        <span className="font-bold text-orange-600">Bs {formatBs(pago.saldo)}</span>
+                      </div>
+                      
+                      {isAdmin && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Usuario Registro:</span>
+                          <span className="font-medium">{pago.usuarioNombre || "Desconocido"}</span>
+                        </div>
+                      )}
+                      
+                      {isAdmin && pago.bodegaNombre && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Sucursal:</span>
+                          <span className="font-medium">{pago.bodegaNombre}</span>
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-2 gap-2 pt-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -725,14 +687,176 @@ export function PagosPendientesView() {
                           </AlertDialog>
                         )}
                       </div>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                  </Card>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
-          
-          {filteredPagos.length === 0 && (
+              </div>
+
+              {/* Vista desktop */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Teléfono</TableHead>
+                      {isAdmin && <TableHead>Usuario Registro</TableHead>}
+                      {isAdmin && <TableHead>Sucursal</TableHead>}
+                      <TableHead>Tipo de Pago</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right">Abonado</TableHead>
+                      <TableHead className="text-right">Pendiente</TableHead>
+                      <TableHead className="text-center">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPagos.map((pago) => (
+                      <TableRow key={pago.id}>
+                        <TableCell>{new Date(pago.fecha).toLocaleDateString('es-BO')}</TableCell>
+                        <TableCell className="font-medium">{pago.cliente}</TableCell>
+                        <TableCell>{pago.telefono}</TableCell>
+                        {isAdmin && (
+                          <TableCell>
+                            <span className="text-sm" title={pago.usuarioLogin}>
+                              {pago.usuarioNombre || "Desconocido"}
+                            </span>
+                          </TableCell>
+                        )}
+                        {isAdmin && (
+                          <TableCell>
+                            <span className="text-sm">{pago.bodegaNombre || "N/A"}</span>
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          {pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          Bs {formatBs(pago.monto)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-green-600">
+                          Bs {formatBs(pago.monto - pago.saldo)}
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-orange-600">
+                          Bs {formatBs(pago.saldo)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => verDetalle(pago)}
+                              className="p-2"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => verEntregas(pago)}
+                              disabled={isProcessing(`entregas-${pago.id}`)}
+                            >
+                              {isProcessing(`entregas-${pago.id}`) ? (
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                              ) : (
+                                <Package className="h-3 w-3 mr-1" />
+                              )}
+                              Entregas
+                            </Button>
+                            
+                            {pago.entregado ? (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                disabled
+                              >
+                                <Check className="h-3 w-3 mr-1" />
+                                Entregado
+                              </Button>
+                            ) : puedeFinalizarEntrega(pago) ? (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    disabled={isProcessing(`marcar-entregado-${pago.id}`)}
+                                  >
+                                    {isProcessing(`marcar-entregado-${pago.id}`) ? (
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                                    ) : (
+                                      <Check className="h-3 w-3 mr-1" />
+                                    )}
+                                    Finalizar Entrega
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Confirmar entrega completa?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      ¿Está seguro de marcar la cotización {pago.id} como completamente entregada?
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => handleMarcarEntregado(pago)}
+                                      disabled={isProcessing(`marcar-entregado-${pago.id}`)}
+                                    >
+                                      {isProcessing(`marcar-entregado-${pago.id}`) ? (
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
+                                      ) : null}
+                                      Confirmar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            ) : (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    disabled={isProcessing(`eliminar-${pago.id}`)}
+                                  >
+                                    {isProcessing(`eliminar-${pago.id}`) ? (
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                                    ) : (
+                                      <Trash2 className="h-3 w-3 mr-1" />
+                                    )}
+                                    Eliminar
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Eliminar cotización?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      ¿Está seguro de eliminar la cotización {pago.id} del cliente {pago.cliente}? Esta acción no se puede deshacer.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => handleEliminarPago(pago)}
+                                      disabled={isProcessing(`eliminar-pago-${pago.id}`)}
+                                    >
+                                      {isProcessing(`eliminar-pago-${pago.id}`) ? (
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
+                                      ) : null}
+                                      Eliminar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          ) : (
             <div className="text-center py-8 text-muted-foreground">
               No se encontraron pagos pendientes
             </div>
@@ -1001,28 +1125,25 @@ export function PagosPendientesView() {
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="efectivo" id="efectivo-entrega" />
                         <Label htmlFor="efectivo-entrega" className="text-xs sm:text-sm">Efectivo</Label>
+                        {isAssistant && cajaEstado.efectivo === 'abierta' && (
+                          <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="qr" id="qr-entrega" />
                         <Label htmlFor="qr-entrega" className="text-xs sm:text-sm">QR</Label>
+                        {isAssistant && cajaEstado.qr === 'abierta' && (
+                          <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
+                        )}
                       </div>
                     </RadioGroup>
+                    {isAssistant && metodoPagoEntrega === "qr" && cajaEstado.qr !== 'abierta' && (
+                      <p className="text-xs text-destructive">La caja QR está cerrada. No se podrá procesar el pago.</p>
+                    )}
+                    {isAssistant && metodoPagoEntrega === "efectivo" && cajaEstado.efectivo !== 'abierta' && (
+                      <p className="text-xs text-destructive">La caja de Efectivo está cerrada. No se podrá procesar el pago.</p>
+                    )}
                   </div>
-
-                  {metodoPagoEntrega === "qr" && (
-                    <div className="text-center mt-4">
-                      <div className="w-64 h-64 bg-white rounded-lg mx-auto flex items-center justify-center border-2 border-primary/20">
-                        <img 
-                          src="/qr.jpg" 
-                          alt="Código QR para pago" 
-                          className="w-full h-full object-contain rounded-lg"
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Escanea el código QR para pagar
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
               
@@ -1037,7 +1158,10 @@ export function PagosPendientesView() {
                 <AlertDialog open={showConfirmEntrega} onOpenChange={setShowConfirmEntrega}>
                   <AlertDialogTrigger asChild>
                     <Button
-                      disabled={isProcessing(`guardar-entregas-${pagoParaEntrega.id}`)}
+                      disabled={
+                        isProcessing(`guardar-entregas-${pagoParaEntrega.id}`) ||
+                        (isAssistant && montoPago > 0 && !cajaAbiertaParaPago(metodoPagoEntrega))
+                      }
                       className="order-1 sm:order-2"
                     >
                       {isProcessing(`guardar-entregas-${pagoParaEntrega.id}`) ? (
@@ -1045,6 +1169,8 @@ export function PagosPendientesView() {
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
                           Guardando...
                         </>
+                      ) : (isAssistant && montoPago > 0 && !cajaAbiertaParaPago(metodoPagoEntrega)) ? (
+                        "Caja Cerrada"
                       ) : (
                         "Guardar Cambios"
                       )}
@@ -1055,7 +1181,7 @@ export function PagosPendientesView() {
                       <AlertDialogTitle>Confirmar cambios</AlertDialogTitle>
                       <AlertDialogDescription className="text-sm">
                         {montoPago > 0 ? (
-                          <>¿Confirmar entrega y pago de Bs {formatBs(montoPago)} mediante {metodoPagoEntrega}?</>
+                          <>¿Confirmar entrega y pago de Bs {formatBs(montoPago)} mediante {metodoPagoEntrega === 'efectivo' ? 'Efectivo' : 'QR'}?</>
                         ) : (
                           <>¿Confirmar cambios en las entregas sin registrar pago?</>
                         )}
