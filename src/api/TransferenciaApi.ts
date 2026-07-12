@@ -9,7 +9,7 @@ export interface Transferencia {
   monto: number | string;
   descripcion: string;
   tipo: string;
-  estado: "pendiente" | "aprobada" | "observada" | "rechazada";
+  estado: "pendiente" | "aprobada" | "observada";
   fecha_aprobacion: string | null;
   observacion: string | null;
   idusuario_solicitante: number;

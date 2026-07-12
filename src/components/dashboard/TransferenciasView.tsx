@@ -5,16 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { CheckCircle, XCircle, Loader2, User, Users, DollarSign, Building2, RefreshCw } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, User, Users, DollarSign, Building2, RefreshCw, Clock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   getTransferencias, 
   aprobarTransferencia, 
-  observarTransferencia,
   rechazarTransferencia,
-  getSaldoCaja,
   Transferencia 
 } from "@/api/TransferenciaApi";
 
@@ -47,12 +45,12 @@ export function TransferenciasView() {
   const [transferencias, setTransferencias] = useState<Transferencia[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
-  const [observacionInput, setObservacionInput] = useState<string>("");
   const [motivoRechazoInput, setMotivoRechazoInput] = useState<string>("");
   
-  // Estado para el total de transferencias (solo frontend)
-  const [totalTransferencias, setTotalTransferencias] = useState<number>(0);
-  const [mostrarRechazo, setMostrarRechazo] = useState<number | null>(null);
+  // Estados para los totales (solo frontend)
+  const [totalTransferenciasEfectivo, setTotalTransferenciasEfectivo] = useState<number>(0);
+  const [totalTransferenciasQR, setTotalTransferenciasQR] = useState<number>(0);
+  const [totalTransferenciasPendientes, setTotalTransferenciasPendientes] = useState<number>(0);
 
   // Cargar transferencias desde la API
   useEffect(() => {
@@ -74,11 +72,8 @@ export function TransferenciasView() {
       const data = await getTransferencias(userId, userRole);
       setTransferencias(data);
       
-      // Calcular total de transferencias aprobadas (solo frontend)
-      const totalAprobadas = data
-        .filter(t => t.estado === "aprobada")
-        .reduce((sum, t) => sum + getMontoNumber(t.monto), 0);
-      setTotalTransferencias(totalAprobadas);
+      // Calcular totales (solo frontend)
+      calcularTotales(data);
       
     } catch (error: any) {
       toast({
@@ -87,10 +82,33 @@ export function TransferenciasView() {
         variant: "destructive",
       });
       setTransferencias([]);
-      setTotalTransferencias(0);
+      setTotalTransferenciasEfectivo(0);
+      setTotalTransferenciasQR(0);
+      setTotalTransferenciasPendientes(0);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Función para calcular todos los totales
+  const calcularTotales = (data: Transferencia[]) => {
+    // Total de transferencias aprobadas en EFECTIVO
+    const totalEfectivo = data
+      .filter(t => t.estado === "aprobada" && t.tipo === "Efectivo")
+      .reduce((sum, t) => sum + getMontoNumber(t.monto), 0);
+    setTotalTransferenciasEfectivo(totalEfectivo);
+
+    // Total de transferencias aprobadas en QR
+    const totalQR = data
+      .filter(t => t.estado === "aprobada" && t.tipo === "QR")
+      .reduce((sum, t) => sum + getMontoNumber(t.monto), 0);
+    setTotalTransferenciasQR(totalQR);
+
+    // Total de transferencias pendientes
+    const totalPendientes = data
+      .filter(t => t.estado === "pendiente")
+      .reduce((sum, t) => sum + getMontoNumber(t.monto), 0);
+    setTotalTransferenciasPendientes(totalPendientes);
   };
 
   // Función para formatear fecha
@@ -122,7 +140,7 @@ export function TransferenciasView() {
       case "aprobada":
         return <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">Aprobada</Badge>;
       case "observada":
-        return <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">Observada</Badge>;
+        return <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">Rechazada</Badge>;
       default:
         return <Badge variant="outline">Desconocido</Badge>;
     }
@@ -142,11 +160,11 @@ export function TransferenciasView() {
     setProcessingId(id);
     
     try {
-      const resultado = await aprobarTransferencia(id, userId);
+      await aprobarTransferencia(id, userId);
       
-      // Actualizar la transferencia localmente
       const transferenciaAprobada = transferencias.find(t => t.id === id);
       const monto = transferenciaAprobada ? getMontoNumber(transferenciaAprobada.monto) : 0;
+      const tipo = transferenciaAprobada?.tipo || "";
       
       setTransferencias(prev => 
         prev.map(t => 
@@ -160,11 +178,11 @@ export function TransferenciasView() {
         )
       );
       
-      // Actualizar total de transferencias (frontend)
-      setTotalTransferencias(prev => prev + monto);
+      // Recargar datos para actualizar los totales
+      await cargarTransferencias();
       
       toast({
-        title: "Transferencia aprobada",
+        title: "✅ Transferencia aprobada",
         description: `Se descontaron Bs ${monto.toFixed(2)} de la caja origen`,
       });
     } catch (error: any) {
@@ -178,47 +196,6 @@ export function TransferenciasView() {
     }
   };
 
-  // Función para observar transferencia (solo admin)
-  const handleObservar = async (id: number) => {
-    setProcessingId(id);
-    
-    try {
-      const resultado = await observarTransferencia(id, userId, observacionInput || "Revisar documentación adjunta");
-      
-      // Actualizar la transferencia localmente
-      const transferenciaObservada = transferencias.find(t => t.id === id);
-      const monto = transferenciaObservada ? getMontoNumber(transferenciaObservada.monto) : 0;
-      
-      setTransferencias(prev => 
-        prev.map(t => 
-          t.id === id 
-            ? { 
-                ...t, 
-                estado: "observada",
-                fecha_aprobacion: new Date().toISOString(),
-                observacion: observacionInput || "Revisar documentación adjunta"
-              } 
-            : t
-        )
-      );
-      
-      toast({
-        title: "Transferencia observada",
-        description: `Se revertió Bs ${monto.toFixed(2)} a la caja origen`,
-        variant: "destructive",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo observar la transferencia",
-        variant: "destructive",
-      });
-    } finally {
-      setObservacionInput("");
-      setProcessingId(null);
-    }
-  };
-
   // Función para rechazar transferencia (solo admin)
   const handleRechazar = async (id: number) => {
     setProcessingId(id);
@@ -226,7 +203,6 @@ export function TransferenciasView() {
     try {
       const resultado = await rechazarTransferencia(id, userId, motivoRechazoInput || "Transferencia rechazada");
       
-      // Actualizar la transferencia localmente
       const transferenciaRechazada = transferencias.find(t => t.id === id);
       const monto = transferenciaRechazada ? getMontoNumber(transferenciaRechazada.monto) : 0;
       
@@ -243,10 +219,12 @@ export function TransferenciasView() {
         )
       );
       
+      // Recargar datos para actualizar los totales
+      await cargarTransferencias();
+      
       toast({
-        title: "Transferencia rechazada",
-        description: `Se revertió Bs ${monto.toFixed(2)} a la caja origen`,
-        variant: "destructive",
+        title: "❌ Transferencia rechazada",
+        description: `Se devolvieron Bs ${monto.toFixed(2)} a la caja origen (Ingreso registrado)`,
       });
     } catch (error: any) {
       toast({
@@ -256,7 +234,6 @@ export function TransferenciasView() {
       });
     } finally {
       setMotivoRechazoInput("");
-      setMostrarRechazo(null);
       setProcessingId(null);
     }
   };
@@ -265,6 +242,9 @@ export function TransferenciasView() {
   const transferenciasFiltradas = isAssistant 
     ? transferencias
     : transferencias;
+
+  // Contar pendientes para mostrar
+  const pendientesCount = transferencias.filter(t => t.estado === "pendiente").length;
 
   if (loading) {
     return (
@@ -286,11 +266,7 @@ export function TransferenciasView() {
             <>
               <Badge variant="outline" className="flex items-center gap-1">
                 <Users className="h-3 w-3" />
-                {transferencias.filter(t => t.estado === "pendiente").length} pendientes
-              </Badge>
-              <Badge variant="outline" className="flex items-center gap-1 bg-green-50 border-green-300">
-                <DollarSign className="h-3 w-3 text-green-600" />
-                <span className="text-green-600 font-semibold">Total Transferencias: Bs {totalTransferencias.toFixed(2)}</span>
+                {pendientesCount} pendientes
               </Badge>
             </>
           ) : (
@@ -298,10 +274,6 @@ export function TransferenciasView() {
               <Badge variant="outline" className="flex items-center gap-1">
                 <User className="h-3 w-3" />
                 {transferenciasFiltradas.length} registros
-              </Badge>
-              <Badge variant="outline" className="flex items-center gap-1 bg-green-50 border-green-300">
-                <DollarSign className="h-3 w-3 text-green-600" />
-                <span className="text-green-600 font-semibold">Total Transferencias: Bs {totalTransferencias.toFixed(2)}</span>
               </Badge>
             </>
           )}
@@ -312,23 +284,62 @@ export function TransferenciasView() {
         </div>
       </div>
 
-      {/* Tarjeta de resumen de transferencias */}
-      <Card className="border-green-200 bg-green-50/50">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-green-700 flex items-center gap-2">
-            <DollarSign className="h-4 w-4" />
-            Total de Transferencias Aprobadas
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold text-green-700">
-            Bs {totalTransferencias.toFixed(2)}
-          </div>
-          <div className="text-xs text-green-600 mt-1">
-            {isAdmin ? 'Monto total de todas las transferencias aprobadas' : 'Monto total de tus transferencias aprobadas'}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Cards de Totales */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Card: Total Transferencias Efectivo */}
+        <Card className="border-green-200 bg-green-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-green-700 flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Total Transferencias Efectivo
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-700">
+              Bs {totalTransferenciasEfectivo.toFixed(2)}
+            </div>
+            <div className="text-xs text-green-600 mt-1">
+              {isAdmin ? 'Transferencias aprobadas en efectivo' : 'Tus transferencias aprobadas en efectivo'}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card: Total Transferencias QR */}
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-blue-700 flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Total Transferencias QR
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-700">
+              Bs {totalTransferenciasQR.toFixed(2)}
+            </div>
+            <div className="text-xs text-blue-600 mt-1">
+              {isAdmin ? 'Transferencias aprobadas en QR' : 'Tus transferencias aprobadas en QR'}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card: Total Transferencias Pendientes */}
+        <Card className="border-yellow-200 bg-yellow-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-yellow-700 flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Total Transferencias Pendientes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-700">
+              Bs {totalTransferenciasPendientes.toFixed(2)}
+            </div>
+            <div className="text-xs text-yellow-600 mt-1">
+              {isAdmin ? 'Total de transferencias pendientes de aprobación' : 'Tus transferencias pendientes de aprobación'}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
@@ -394,12 +405,12 @@ export function TransferenciasView() {
                           <div className="text-sm">{transferencia.descripcion}</div>
                           {transferencia.observacion && (
                             <div className="text-xs text-red-600 mt-1">
-                              <span className="font-medium">Observación:</span> {transferencia.observacion}
+                              <span className="font-medium">Motivo de rechazo:</span> {transferencia.observacion}
                             </div>
                           )}
                           {transferencia.fecha_aprobacion && (
                             <div className="text-xs text-muted-foreground mt-1">
-                              <span className="font-medium">Fecha de aprobación:</span> {formatDate(transferencia.fecha_aprobacion)}
+                              <span className="font-medium">Fecha de resolución:</span> {formatDate(transferencia.fecha_aprobacion)}
                             </div>
                           )}
                         </TableCell>
@@ -448,7 +459,7 @@ export function TransferenciasView() {
                                       ¿Estás seguro de que deseas aprobar la transferencia de <strong>Bs {montoNumerico.toFixed(2)}</strong> 
                                       realizada por <strong>{transferencia.usuario_origen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
                                       <br /><br />
-                                      <span className="text-red-600 font-medium">⚠️ El monto se descontará de la caja origen.</span>
+                                      <span className="text-red-600 font-medium">⚠️ El monto ya fue descontado de la caja origen.</span>
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
@@ -458,63 +469,6 @@ export function TransferenciasView() {
                                       className="bg-green-600 hover:bg-green-700"
                                     >
                                       Aprobar
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-
-                              {/* Botón Observar */}
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button 
-                                    size="sm" 
-                                    variant="destructive" 
-                                    className="flex items-center gap-1 bg-yellow-600 hover:bg-yellow-700 text-white"
-                                    disabled={processingId === transferencia.id}
-                                  >
-                                    {processingId === transferencia.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <XCircle className="h-3 w-3" />
-                                    )}
-                                    Observar
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Observar transferencia?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      ¿Estás seguro de que deseas marcar como observada la transferencia de <strong>Bs {montoNumerico.toFixed(2)}</strong> 
-                                      realizada por <strong>{transferencia.usuario_origen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
-                                      <br /><br />
-                                      <span className="text-green-600 font-medium">✅ El monto se devolverá a la caja origen.</span>
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <div className="py-4">
-                                    <Label htmlFor="observacion" className="text-sm font-medium">
-                                      Motivo de la observación
-                                    </Label>
-                                    <Input
-                                      id="observacion"
-                                      placeholder="Ej: Falta comprobante de pago..."
-                                      value={observacionInput}
-                                      onChange={(e) => setObservacionInput(e.target.value)}
-                                      className="mt-2"
-                                    />
-                                  </div>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel 
-                                      onClick={() => setObservacionInput("")}
-                                    >
-                                      Cancelar
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction 
-                                      onClick={() => {
-                                        handleObservar(transferencia.id);
-                                      }}
-                                      className="bg-yellow-600 hover:bg-yellow-700"
-                                    >
-                                      Observar
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
@@ -544,7 +498,7 @@ export function TransferenciasView() {
                                       ¿Estás seguro de que deseas rechazar la transferencia de <strong>Bs {montoNumerico.toFixed(2)}</strong> 
                                       realizada por <strong>{transferencia.usuario_origen}</strong> de tipo <strong>{transferencia.tipo}</strong>?
                                       <br /><br />
-                                      <span className="text-green-600 font-medium">✅ El monto se devolverá a la caja origen.</span>
+                                      <span className="text-green-600 font-medium">✅ El monto se devolverá a la caja origen (Se registrará un ingreso).</span>
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <div className="py-4">
