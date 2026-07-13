@@ -135,11 +135,11 @@ const SearchSelect = ({
   };
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 w-full">
       <Label className="text-xs">
         {label} {required && <span className="text-red-500">*</span>}
       </Label>
-      <div className="relative">
+      <div className="relative w-full">
         <Input
           value={searchTerm}
           onChange={(e) => {
@@ -149,7 +149,7 @@ const SearchSelect = ({
           onFocus={() => setIsOpen(true)}
           onBlur={() => setTimeout(() => setIsOpen(false), 200)}
           placeholder={placeholder}
-          className="h-8 text-xs"
+          className="h-8 text-xs w-full pr-16"
         />
         {isOpen && filteredOptions.length > 0 && (
           <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-28 overflow-y-auto">
@@ -166,7 +166,7 @@ const SearchSelect = ({
                   {option}
                 </button>
                 {showActions && (
-                  <div className="flex gap-1 flex-shrink-0">
+                  <div className="flex gap-1 flex-shrink-0 ml-2">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -197,7 +197,7 @@ const SearchSelect = ({
         )}
       </div>
       {selectedValues.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 mt-1">
           {selectedValues.map((value) => (
             <Badge
               key={value}
@@ -238,6 +238,7 @@ const ProductoSimilarSelect = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const filteredOptions = productosDisponibles.filter(
     (producto) =>
@@ -262,9 +263,9 @@ const ProductoSimilarSelect = ({
   };
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 w-full">
       <Label className="text-xs">Productos Similares</Label>
-      <div className="relative">
+      <div className="relative w-full">
         <Input
           value={searchTerm}
           onChange={(e) => {
@@ -274,9 +275,9 @@ const ProductoSimilarSelect = ({
           onFocus={() => setIsOpen(true)}
           onBlur={() => setTimeout(() => setIsOpen(false), 200)}
           placeholder="Buscar productos similares..."
-          className="h-8 text-xs pl-7"
+          className="h-8 text-xs pl-7 w-full"
         />
-        <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         {isOpen && filteredOptions.length > 0 && (
           <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-28 overflow-y-auto">
             {filteredOptions.map((producto) => (
@@ -293,7 +294,7 @@ const ProductoSimilarSelect = ({
         )}
       </div>
       {selectedValues.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 mt-1">
           {selectedValues.map((id) => (
             <Badge
               key={id}
@@ -1129,6 +1130,7 @@ export function FormularioProductos({
   const UbicacionMultiSelect = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [isOpen, setIsOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     const ubicacionesDisponibles = ubicacionesCompletas.filter(
       (u) => !(formData.ubicaciones || []).includes(u.idubicacion)
@@ -1165,8 +1167,11 @@ export function FormularioProductos({
       await handleDeleteUbicacion(nombre);
     };
 
+    // Determinar si hay ubicaciones disponibles
+    const tieneUbicaciones = ubicacionesCompletas.length > 0;
+
     return (
-      <div className="space-y-1">
+      <div className="space-y-1 w-full">
         <div className="flex items-center justify-between">
           <Label className="text-xs font-medium">
             Ubicaciones <span className="text-red-500">*</span>
@@ -1185,7 +1190,7 @@ export function FormularioProductos({
             </Button>
           </div>
         </div>
-        <div className="relative">
+        <div className="relative w-full">
           <Input
             value={searchTerm}
             onChange={(e) => {
@@ -1195,7 +1200,7 @@ export function FormularioProductos({
             onFocus={() => setIsOpen(true)}
             onBlur={() => setTimeout(() => setIsOpen(false), 200)}
             placeholder="Buscar ubicaciones..."
-            className="h-8 text-xs"
+            className="h-8 text-xs w-full pr-16"
           />
           {isOpen && filteredOptions.length > 0 && (
             <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-28 overflow-y-auto">
@@ -1211,7 +1216,7 @@ export function FormularioProductos({
                   >
                     {ubicacion.nombre}
                   </button>
-                  <div className="flex gap-1 flex-shrink-0">
+                  <div className="flex gap-1 flex-shrink-0 ml-2">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1241,7 +1246,7 @@ export function FormularioProductos({
           )}
         </div>
         {(formData.ubicaciones || []).length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1 mt-1">
             {(formData.ubicaciones || []).map((id) => {
               const ubicacion = ubicacionesCompletas.find(u => u.idubicacion === id);
               if (!ubicacion) return null;
@@ -1252,7 +1257,6 @@ export function FormularioProductos({
                   className="text-xs px-1.5 py-0 h-5 flex items-center gap-1"
                 >
                   <span>{ubicacion.nombre}</span>
-                  {/* Solo el botón de eliminar en el badge, sin editar ni eliminar adicionales */}
                   <button
                     type="button"
                     onClick={() => removeUbicacion(id)}
@@ -1265,14 +1269,19 @@ export function FormularioProductos({
             })}
           </div>
         )}
-        {ubicacionesCompletas.length === 0 && (
-          <p className="text-[10px] text-amber-500">
-            No hay ubicaciones registradas para esta bodega
-          </p>
-        )}
-        <p className="text-[10px] text-muted-foreground">
-          Selecciona una o más ubicaciones para este producto
-        </p>
+        {/* Mensaje oculto con altura fija para evitar cambios de tamaño */}
+        <div className="h-4">
+          {!tieneUbicaciones && (
+            <p className="text-[10px] text-amber-500">
+              No hay ubicaciones registradas
+            </p>
+          )}
+          {tieneUbicaciones && (
+            <p className="text-[10px] text-muted-foreground">
+              Selecciona una o más ubicaciones para este producto
+            </p>
+          )}
+        </div>
       </div>
     );
   };
@@ -1289,8 +1298,9 @@ export function FormularioProductos({
         />
       )}
 
-      <form onSubmit={handleSubmit} className="w-full space-y-2">
-        <div className="space-y-1">
+      <form onSubmit={handleSubmit} className="w-full space-y-3">
+        {/* Nombre */}
+        <div className="space-y-1 w-full">
           <Label htmlFor="nombre" className="text-xs font-medium">
             Nombre <span className="text-red-500">*</span>
           </Label>
@@ -1299,12 +1309,13 @@ export function FormularioProductos({
             value={formData.nombre || ""}
             onChange={(e) => handleInputChange("nombre", e.target.value)}
             placeholder="Ej: Laptop HP Pavilion"
-            className="h-8 text-xs"
+            className="h-8 text-xs w-full"
             required
           />
         </div>
 
-        <div className="flex justify-center py-1">
+        {/* Imagen */}
+        <div className="flex justify-center py-2">
           <div className="relative">
             <div
               className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -1344,7 +1355,8 @@ export function FormularioProductos({
           </div>
         </div>
 
-        <div className="space-y-1">
+        {/* Descripción */}
+        <div className="space-y-1 w-full">
           <Label htmlFor="descripcion" className="text-xs font-medium">
             Descripción <span className="text-red-500">*</span>
           </Label>
@@ -1354,17 +1366,18 @@ export function FormularioProductos({
             onChange={(e) => handleInputChange("descripcion", e.target.value)}
             rows={2}
             placeholder="Describe tu producto..."
-            className="text-xs resize-none h-12"
+            className="text-xs resize-none h-12 w-full"
             required
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
+        {/* Ubicaciones y Categorías en grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="w-full">
             <UbicacionMultiSelect />
           </div>
 
-          <div className="space-y-1">
+          <div className="w-full">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium">
                 Categorías <span className="text-red-500">*</span>
@@ -1399,8 +1412,9 @@ export function FormularioProductos({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
+        {/* Precios en grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1 w-full">
             <Label htmlFor="precioVenta" className="text-xs font-medium">
               Precio Venta (Bs) <span className="text-red-500">*</span>
             </Label>
@@ -1414,12 +1428,12 @@ export function FormularioProductos({
                 handleInputChange("precioVenta", value === "" ? "" : Number(value));
               }}
               placeholder="0"
-              className="h-8 text-xs number-input-no-scroll"
+              className="h-8 text-xs number-input-no-scroll w-full"
               onWheel={(e) => e.currentTarget.blur()}
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 w-full">
             <Label htmlFor="precioCompra" className="text-xs font-medium">
               Precio Compra (Bs)
             </Label>
@@ -1433,14 +1447,15 @@ export function FormularioProductos({
                 handleInputChange("precioCompra", value === "" ? "" : Number(value));
               }}
               placeholder="0"
-              className="h-8 text-xs number-input-no-scroll"
+              className="h-8 text-xs number-input-no-scroll w-full"
               onWheel={(e) => e.currentTarget.blur()}
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
+        {/* Stock y Stock Mínimo en grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1 w-full">
             <Label className="text-xs font-medium">
               Stock <span className="text-red-500">*</span>
             </Label>
@@ -1453,12 +1468,12 @@ export function FormularioProductos({
               }}
               placeholder="0"
               min="0"
-              className="h-8 text-xs number-input-no-scroll"
+              className="h-8 text-xs number-input-no-scroll w-full"
               onWheel={(e) => e.currentTarget.blur()}
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 w-full">
             <Label className="text-xs font-medium">Stock Mínimo</Label>
             <Input
               type="number"
@@ -1469,23 +1484,24 @@ export function FormularioProductos({
               }}
               placeholder="0"
               min="0"
-              className="h-8 text-xs number-input-no-scroll"
+              className="h-8 text-xs number-input-no-scroll w-full"
               onWheel={(e) => e.currentTarget.blur()}
             />
           </div>
         </div>
 
-        <div className="space-y-1">
+        {/* Código de Barras */}
+        <div className="space-y-1 w-full">
           <Label htmlFor="codigoBarras" className="text-xs font-medium">
             Código de Barras
           </Label>
-          <div className="relative">
+          <div className="relative w-full">
             <Input
               id="codigoBarras"
               value={formData.codigoBarras || ""}
               onChange={(e) => handleInputChange("codigoBarras", e.target.value)}
               placeholder="Escanea o escribe el código"
-              className="h-8 text-xs"
+              className="h-8 text-xs w-full"
             />
             {isMobile && (
               <Button
@@ -1501,7 +1517,8 @@ export function FormularioProductos({
           </div>
         </div>
 
-        <div className="space-y-1">
+        {/* Productos Similares */}
+        <div className="w-full">
           <ProductoSimilarSelect
             productosDisponibles={todosProductos}
             selectedValues={formData.productosSimilares || []}
@@ -1510,19 +1527,24 @@ export function FormularioProductos({
             }
             currentProductId={formData.id ? parseInt(formData.id) : undefined}
           />
-          {loadingProductos && (
-            <div className="text-xs text-muted-foreground">
-              Cargando productos...
-            </div>
-          )}
+          {/* Mensaje de carga con altura fija */}
+          <div className="h-4">
+            {loadingProductos && (
+              <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Cargando productos...
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex justify-end space-x-2 pt-2">
+        {/* Botones */}
+        <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-2 pt-3 border-t border-border">
           <Button
             type="button"
             variant="outline"
             onClick={onCancel}
-            className="h-8 text-xs"
+            className="h-8 text-xs w-full sm:w-auto"
             disabled={isSubmittingProduct || isAddingElement}
           >
             Cancelar
@@ -1531,7 +1553,7 @@ export function FormularioProductos({
             <AlertDialogTrigger asChild>
               <Button
                 type="button"
-                className="bg-primary hover:bg-primary/90 h-8 text-xs"
+                className="bg-primary hover:bg-primary/90 h-8 text-xs w-full sm:w-auto"
                 disabled={isSubmittingProduct || isAddingElement}
               >
                 {isSubmittingProduct ? (
@@ -1580,7 +1602,7 @@ export function FormularioProductos({
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {addDialogState.mode === "edit" ? "Editar" : "Agregar"}{" "}
@@ -1601,6 +1623,7 @@ export function FormularioProductos({
                 value={editDialogData.name}
                 onChange={(e) => setEditDialogData({ ...editDialogData, name: e.target.value })}
                 autoFocus
+                className="w-full"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && editDialogData.name.trim()) {
                     handleAddNewElement(editDialogData.name);
@@ -1609,13 +1632,14 @@ export function FormularioProductos({
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
               onClick={() => {
                 setAddDialogState({ open: false, type: null, mode: "create", editId: null, editName: "" });
                 setEditDialogData({ name: "", id: 0 });
               }}
+              className="w-full sm:w-auto"
             >
               Cancelar
             </Button>
@@ -1625,7 +1649,7 @@ export function FormularioProductos({
                   handleAddNewElement(editDialogData.name.trim());
                 }
               }}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
               disabled={!editDialogData.name.trim() || isAddingElement}
             >
               {isAddingElement ? (
