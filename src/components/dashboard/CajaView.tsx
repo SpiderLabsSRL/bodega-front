@@ -307,28 +307,7 @@ export function CajaView() {
     }
   };
 
-  // Función para actualizar el saldo después de una transacción
-  const actualizarSaldo = async () => {
-    if (tipoCajaSeleccionado && selectedBodega) {
-      try {
-        const params = { 
-          idbodega: selectedBodega, 
-          tipoCaja: tipoCajaSeleccionado
-        };
-        const saldoData = await getSaldoActual(params);
-        const saldo = parseFloat(saldoData.monto_final);
-        setSaldoActual(saldo);
-        if (tipoCajaSeleccionado === "Efectivo") {
-          setEstadoCaja(saldoData.estado);
-        }
-        return saldo;
-      } catch (error) {
-        console.error("Error actualizando saldo:", error);
-        return null;
-      }
-    }
-    return null;
-  };
+ 
 
   // Función para recargar todos los datos después de una transacción
   const recargarDatosCompletos = async () => {
@@ -445,15 +424,6 @@ export function CajaView() {
               Registrar Movimiento
             </Button>
           )}
-          <Button 
-            variant="outline" 
-            size="default" 
-            onClick={recargarDatosCompletos}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Actualizar
-          </Button>
         </div>
       </div>
 
