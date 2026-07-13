@@ -14,7 +14,7 @@ import {
   getSaldoActual,
   createTransaccionCaja
 } from "@/api/CajaApi";
-import { crearTransferencia, getSaldoCaja } from "@/api/TransferenciaApi";
+import { crearTransferencia } from "@/api/TransferenciaApi";
 
 type TipoCaja = "Efectivo" | "QR" | "";
 
@@ -22,7 +22,7 @@ interface RegistraMovimientoViewProps {
   tipoCajaInicial?: TipoCaja;
   onTipoCajaChange?: (tipo: TipoCaja) => void;
   onTransaccionExitosa?: () => void;
-  onSaldoActualizado?: (nuevoSaldo: number) => void; // Nueva prop
+  onSaldoActualizado?: (nuevoSaldo: number) => void;
 }
 
 export function RegistraMovimientoView({ 
@@ -46,6 +46,9 @@ export function RegistraMovimientoView({
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const userId = currentUser?.idusuario || currentUser?.idUsuario || 1;
   const idbodega = currentUser?.idbodega || 1;
+  const userRole = currentUser?.rol?.toLowerCase() || "admin";
+  const isAdmin = userRole === "admin";
+  const isAssistant = userRole === "asistente";
 
   useEffect(() => {
     cargarUsuariosAdmin();
@@ -96,22 +99,32 @@ export function RegistraMovimientoView({
   };
 
   const getMovimientoOptions = () => {
+    // ADMIN: solo Ingreso, Egreso, Apertura, Cierre (NO Transferencia)
+    // ASISTENTE: Ingreso, Egreso, Transferencia, Apertura, Cierre
     if (tipoCaja === "Efectivo") {
       if (!cajaAbierta) {
         return [{ value: "Apertura", label: "Apertura" }];
       }
-      return [
+      const opciones = [
         { value: "Ingreso", label: "Ingreso" },
         { value: "Egreso", label: "Egreso" },
-        { value: "Transferencia", label: "Transferencia" },
-        { value: "Cierre", label: "Cierre" },
       ];
+      // Solo mostrar Transferencia si es Asistente
+      if (isAssistant) {
+        opciones.push({ value: "Transferencia", label: "Transferencia" });
+      }
+      opciones.push({ value: "Cierre", label: "Cierre" });
+      return opciones;
     } else if (tipoCaja === "QR") {
-      return [
+      const opciones = [
         { value: "Ingreso", label: "Ingreso" },
         { value: "Egreso", label: "Egreso" },
-        { value: "Transferencia", label: "Transferencia" },
       ];
+      // Solo mostrar Transferencia si es Asistente
+      if (isAssistant) {
+        opciones.push({ value: "Transferencia", label: "Transferencia" });
+      }
+      return opciones;
     }
     return [];
   };
@@ -189,8 +202,19 @@ export function RegistraMovimientoView({
 
       const montoNumero = parseFloat(monto);
 
-      // Si es Transferencia, usar la API de transferencias
+      // Si es Transferencia, usar la API de transferencias (solo para asistentes)
       if (tipoMovimiento === "Transferencia") {
+        // Verificar que sea asistente (por seguridad)
+        if (!isAssistant) {
+          toast({
+            title: "Error",
+            description: "Solo los asistentes pueden realizar transferencias",
+            variant: "destructive",
+          });
+          setProcessing(false);
+          return;
+        }
+
         // Obtener la caja actual
         const saldoData = await getSaldoActual({ idbodega, tipoCaja });
         const idcaja = saldoData.idcaja;
@@ -380,7 +404,7 @@ export function RegistraMovimientoView({
   };
 
   const showUsuarioTransferencia = () => {
-    return tipoMovimiento === "Transferencia";
+    return tipoMovimiento === "Transferencia" && isAssistant;
   };
 
   // Mostrar selector de caja si no hay tipo seleccionado
@@ -486,6 +510,16 @@ export function RegistraMovimientoView({
             <span className="text-sm font-bold text-primary">Bs {saldoActual.toFixed(2)}</span>
           )}
         </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Admin</span>
+          </div>
+        )}
+        {isAssistant && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Asistente</span>
+          </div>
+        )}
       </div>
 
       <Card>
@@ -511,6 +545,16 @@ export function RegistraMovimientoView({
                 ))}
               </SelectContent>
             </Select>
+            {isAdmin && (
+              <p className="text-xs text-muted-foreground mt-1">
+                💡 Los administradores solo pueden registrar ingresos, egresos, aperturas y cierres.
+              </p>
+            )}
+            {isAssistant && (
+              <p className="text-xs text-muted-foreground mt-1">
+                💡 Los asistentes pueden registrar ingresos, egresos, transferencias, aperturas y cierres.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -576,7 +620,7 @@ export function RegistraMovimientoView({
             </div>
           )}
 
-          {tipoMovimiento === "Transferencia" && (
+          {tipoMovimiento === "Transferencia" && isAssistant && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <div className="flex items-center gap-2 text-yellow-800">
                 <Wallet className="h-4 w-4" />

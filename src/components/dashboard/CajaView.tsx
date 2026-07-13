@@ -67,6 +67,7 @@ export function CajaView() {
     : currentUser?.usuario || "Usuario";
   const isAdmin = userRole === "admin";
   const isAssistant = userRole === "asistente";
+  const currentUserBodega = currentUser?.idbodega;
   
   const [fechaBoliviaHoy] = useState(() => getFechaBolivia());
   
@@ -111,9 +112,24 @@ export function CajaView() {
         const bodegasData = await getBodegas();
         setBodegas(bodegasData);
         if (bodegasData.length > 0 && selectedBodega === null) {
-          const userBodegaId = currentUser?.idbodega;
-          if (userBodegaId && bodegasData.some(b => b.idbodega === userBodegaId)) {
-            setSelectedBodega(userBodegaId);
+          if (isAssistant && currentUserBodega) {
+            // Para asistente, solo mostrar su bodega asignada
+            const bodegaAsignada = bodegasData.find(b => b.idbodega === currentUserBodega);
+            if (bodegaAsignada) {
+              setSelectedBodega(currentUserBodega);
+              // Filtrar bodegas para que solo vea la suya
+              setBodegas([bodegaAsignada]);
+            } else {
+              setSelectedBodega(bodegasData[0].idbodega);
+            }
+          } else if (isAdmin && currentUserBodega) {
+            // Para admin, mostrar su bodega asignada por defecto
+            const bodegaAsignada = bodegasData.find(b => b.idbodega === currentUserBodega);
+            if (bodegaAsignada) {
+              setSelectedBodega(currentUserBodega);
+            } else {
+              setSelectedBodega(bodegasData[0].idbodega);
+            }
           } else {
             setSelectedBodega(bodegasData[0].idbodega);
           }
@@ -125,7 +141,7 @@ export function CajaView() {
       }
     };
     cargarBodegas();
-  }, []);
+  }, [isAssistant, isAdmin, currentUserBodega]);
 
   useEffect(() => {
     cargarDatosIniciales();
@@ -175,9 +191,10 @@ export function CajaView() {
         }));
         
         if (isAssistant) {
+          // Para asistente, solo mostrar su propio usuario
           const usuarioActual = usuarios.find(u => 
             u.empleado_nombre === currentUserName || 
-            u.idusuario === currentUser?.idUsuario
+            u.idusuario === currentUser?.idusuario
           );
           
           if (usuarioActual) {
@@ -188,11 +205,16 @@ export function CajaView() {
             setEmpleadosOptions(opcionesFiltradas);
             setFiltroEmpleado(usuarioActual.idusuario.toString());
           } else {
-            const opcionesFiltradas = [{ value: currentUser.idUsuario, label: currentUserName }];
+            // Si no encuentra el usuario, usar el ID del usuario actual
+            const opcionesFiltradas = [{ 
+              value: currentUser?.idusuario?.toString() || "1", 
+              label: currentUserName 
+            }];
             setEmpleadosOptions(opcionesFiltradas);
-            setFiltroEmpleado(currentUserName);
+            setFiltroEmpleado(currentUser?.idusuario?.toString() || "1");
           }
         } else {
+          // Para admin, mostrar todos los usuarios
           const opcionesCompletas = [
             { value: "Todos", label: "Todos" }, 
             ...opcionesUsuarios
@@ -203,8 +225,12 @@ export function CajaView() {
       } catch (usuariosError) {
         console.error("Error cargando usuarios:", usuariosError);
         if (isAssistant) {
-          setEmpleadosOptions([{ value: currentUserName, label: currentUserName }]);
-          setFiltroEmpleado(currentUserName);
+          const opcionesFiltradas = [{ 
+            value: currentUser?.idusuario?.toString() || "1", 
+            label: currentUserName 
+          }];
+          setEmpleadosOptions(opcionesFiltradas);
+          setFiltroEmpleado(currentUser?.idusuario?.toString() || "1");
         } else {
           setEmpleadosOptions([{ value: "Todos", label: "Todos" }]);
           setFiltroEmpleado("Todos");
@@ -245,9 +271,12 @@ export function CajaView() {
       };
 
       if (isAssistant) {
-        if (currentUser?.idUsuario) {
-          params.idusuario = currentUser.idUsuario;
+        // Para asistente, siempre filtrar por su propio usuario
+        const userId = currentUser?.idusuario;
+        if (userId) {
+          params.idusuario = userId;
         } else {
+          // Fallback: buscar por nombre
           const usuario = empleadosOptions.find(u => u.label === currentUserName);
           if (usuario && usuario.value !== "Todos") {
             params.idusuario = parseInt(usuario.value);
@@ -278,28 +307,7 @@ export function CajaView() {
     }
   };
 
-  // Función para actualizar el saldo después de una transacción
-  const actualizarSaldo = async () => {
-    if (tipoCajaSeleccionado && selectedBodega) {
-      try {
-        const params = { 
-          idbodega: selectedBodega, 
-          tipoCaja: tipoCajaSeleccionado
-        };
-        const saldoData = await getSaldoActual(params);
-        const saldo = parseFloat(saldoData.monto_final);
-        setSaldoActual(saldo);
-        if (tipoCajaSeleccionado === "Efectivo") {
-          setEstadoCaja(saldoData.estado);
-        }
-        return saldo;
-      } catch (error) {
-        console.error("Error actualizando saldo:", error);
-        return null;
-      }
-    }
-    return null;
-  };
+ 
 
   // Función para recargar todos los datos después de una transacción
   const recargarDatosCompletos = async () => {
@@ -328,7 +336,7 @@ export function CajaView() {
       if (usuarioActual) {
         setFiltroEmpleado(usuarioActual.value);
       } else {
-        setFiltroEmpleado(currentUserName);
+        setFiltroEmpleado(currentUser?.idusuario?.toString() || "1");
       }
     } else {
       setFiltroEmpleado("Todos");
@@ -367,17 +375,31 @@ export function CajaView() {
     setMostrarRango(false);
   };
 
+  // Calcular ingresos y egresos excluyendo apertura y cierre
   const totalIngresos = movimientosCaja
-    .filter(mov => mov.tipo_movimiento === "ingreso" || mov.tipo_movimiento === "apertura")
+    .filter(mov => mov.tipo_movimiento === "ingreso")
     .reduce((sum, mov) => sum + mov.monto, 0);
 
   const totalEgresos = movimientosCaja
-    .filter(mov => mov.tipo_movimiento === "egreso" || mov.tipo_movimiento === "cierre")
+    .filter(mov => mov.tipo_movimiento === "egreso")
     .reduce((sum, mov) => sum + mov.monto, 0);
 
   const saldoFiltrado = totalIngresos - totalEgresos;
 
   const bodegaSeleccionada = bodegas.find(b => b.idbodega === selectedBodega);
+
+  // Determinar si mostrar el botón de registrar movimiento
+  const mostrarBotonRegistrar = () => {
+    // Para asistentes, siempre mostrar
+    if (isAssistant) return true;
+    
+    // Para administradores, mostrar solo si la bodega seleccionada es su bodega asignada
+    if (isAdmin && currentUserBodega) {
+      return selectedBodega === currentUserBodega;
+    }
+    
+    return false;
+  };
 
   if (initialLoading) {
     return (
@@ -393,7 +415,7 @@ export function CajaView() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">Gestión de Caja</h1>
         <div className="flex gap-2">
-          {isAssistant && (
+          {mostrarBotonRegistrar() && (
             <Button 
               onClick={handleRegistrarMovimiento}
               className="flex items-center gap-2"
@@ -402,15 +424,6 @@ export function CajaView() {
               Registrar Movimiento
             </Button>
           )}
-          <Button 
-            variant="outline" 
-            size="default" 
-            onClick={recargarDatosCompletos}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Actualizar
-          </Button>
         </div>
       </div>
 
@@ -428,7 +441,7 @@ export function CajaView() {
           <CardContent>
             <div className="text-2xl font-bold text-red-600">Bs {totalEgresos.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1">
-              {tipoCajaSeleccionado ? 'En los movimientos mostrados' : 'Selecciona una caja'}
+              {tipoCajaSeleccionado ? 'Solo ingresos/egresos del día' : 'Selecciona una caja'}
             </div>
           </CardContent>
         </Card>
@@ -440,7 +453,7 @@ export function CajaView() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">Bs {totalIngresos.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground mt-1">
-              {tipoCajaSeleccionado ? 'En los movimientos mostrados' : 'Selecciona una caja'}
+              {tipoCajaSeleccionado ? 'Solo ingresos/egresos del día' : 'Selecciona una caja'}
             </div>
           </CardContent>
         </Card>
@@ -502,6 +515,17 @@ export function CajaView() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            {/* Para Asistentes: Mostrar nombre de su bodega sin selector */}
+            {isAssistant && (
+              <div>
+                <label className="text-sm font-medium">Bodega</label>
+                <div className="px-3 py-2 border rounded-md bg-gray-50 text-sm">
+                  {bodegaSeleccionada?.nombre || "Sin bodega asignada"}
+                </div>
+              </div>
+            )}
+
+            {/* Para Admin: Mostrar selector de bodegas */}
             {isAdmin && (
               <div>
                 <label className="text-sm font-medium">Bodega</label>
@@ -529,6 +553,7 @@ export function CajaView() {
               </div>
             )}
 
+            {/* Para Admin: Selector de empleados */}
             {isAdmin && (
               <div>
                 <label className="text-sm font-medium">Empleado</label>
@@ -749,11 +774,15 @@ export function CajaView() {
                           <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">TIPO</div>
                           <div className="flex justify-start md:justify-start">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              movimiento.tipo_movimiento === "ingreso" || movimiento.tipo_movimiento === "apertura"
+                              movimiento.tipo_movimiento === "ingreso" 
                                 ? "bg-green-100 text-green-800" 
-                                : movimiento.tipo_movimiento === "cierre"
+                                : movimiento.tipo_movimiento === "egreso"
+                                ? "bg-red-100 text-red-800"
+                                : movimiento.tipo_movimiento === "apertura"
                                 ? "bg-blue-100 text-blue-800"
-                                : "bg-red-100 text-red-800"
+                                : movimiento.tipo_movimiento === "cierre"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-gray-100 text-gray-800"
                             }`}>
                               {movimiento.tipo_movimiento === "ingreso" ? "Ingreso" :
                                movimiento.tipo_movimiento === "egreso" ? "Egreso" :
@@ -789,12 +818,15 @@ export function CajaView() {
                         )}
                         
                         <TableCell className={`md:table-cell block md:border-0 border-0 p-0 font-medium ${
-                          movimiento.tipo_movimiento === "ingreso" || movimiento.tipo_movimiento === "apertura" ? "text-green-600" : 
-                          movimiento.tipo_movimiento === "cierre" ? "text-blue-600" : "text-red-600"
+                          movimiento.tipo_movimiento === "ingreso" ? "text-green-600" : 
+                          movimiento.tipo_movimiento === "egreso" ? "text-red-600" :
+                          movimiento.tipo_movimiento === "apertura" ? "text-blue-600" :
+                          movimiento.tipo_movimiento === "cierre" ? "text-yellow-600" :
+                          "text-gray-600"
                         }`}>
                           <div className="md:hidden text-xs font-medium text-muted-foreground mb-1">MONTO</div>
                           <div className="text-lg font-bold text-right md:text-right">
-                            {movimiento.tipo_movimiento === "egreso" || movimiento.tipo_movimiento === "cierre" ? "-" : ""}Bs {movimiento.monto.toFixed(2)}
+                            {movimiento.tipo_movimiento === "egreso" ? "-" : ""}Bs {movimiento.monto.toFixed(2)}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -808,7 +840,7 @@ export function CajaView() {
       </Card>
 
       {/* MODAL DE REGISTRO DE MOVIMIENTO */}
-      {isAssistant && showRegistroMovimiento && (
+      {showRegistroMovimiento && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-lg p-6">
             <button
