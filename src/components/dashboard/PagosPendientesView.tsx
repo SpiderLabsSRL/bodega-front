@@ -70,20 +70,17 @@ export function PagosPendientesView() {
   const isAssistant = USUARIO_ACTUAL.rol === 'Asistente';
   const userBodegaId = getUserBodega();
 
-  // Obtener estado de las cajas (solo para Asistente, el Admin no necesita ver esto)
+  // Obtener estado de las cajas (solo para Asistentes)
   const fetchEstadoCajas = async () => {
     if (!isAssistant || !userBodegaId) return;
     
     setCargandoCaja(true);
     try {
-      const [estadoEfectivo, estadoQR] = await Promise.all([
-        getEstadoCaja(userBodegaId, 'Efectivo'),
-        getEstadoCaja(userBodegaId, 'QR')
-      ]);
+      const estadoEfectivo = await getEstadoCaja(userBodegaId, 'Efectivo');
       
       setCajaEstado({
         efectivo: estadoEfectivo,
-        qr: estadoQR
+        qr: 'abierta' // QR siempre abierta
       });
     } catch (error) {
       console.error("Error fetching caja estados:", error);
@@ -96,7 +93,6 @@ export function PagosPendientesView() {
     cargarPagosPendientes();
     if (isAssistant) {
       fetchEstadoCajas();
-      // Refrescar estado de cajas cada 30 segundos solo para Asistentes
       const interval = setInterval(fetchEstadoCajas, 30000);
       return () => clearInterval(interval);
     }
@@ -158,22 +154,8 @@ export function PagosPendientesView() {
     }
   };
 
-  // Filtrar pagos - para Asistente solo ve los suyos
+  // Filtrar pagos
   const filteredPagos = pagosPendientes.filter(pago => {
-    // Para Asistente: solo ver sus propias cotizaciones
-    if (isAssistant) {
-      // Verificar si el usuario actual es el que creó la cotización
-      const usuarioActual = getCurrentUser();
-      const esSuCotizacion = pago.usuarioNombre === usuarioActual?.nombres + ' ' + usuarioActual?.apellidos;
-      
-      // También podría ser por ID de usuario
-      const esSuId = pago.usuarioLogin === usuarioActual?.usuario;
-      
-      if (!esSuCotizacion && !esSuId) {
-        return false;
-      }
-    }
-    
     const matchesSearch = pago.cliente.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pago.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pago.telefono.includes(searchQuery) ||
@@ -185,12 +167,31 @@ export function PagosPendientesView() {
     return matchesSearch && matchesUsuario;
   });
 
+  // Verificar si el usuario puede operar en esta cotización
+  const puedeOperarEnCotizacion = (pago: PagoPendiente): boolean => {
+    // Si es Admin, solo puede operar en cotizaciones de SU bodega
+    if (isAdmin) {
+      return pago.idbodega === userBodegaId;
+    }
+    // Si es Asistente, solo puede operar en sus propias cotizaciones (ya filtradas por bodega)
+    return true;
+  };
+
   const verDetalle = (pago: PagoPendiente) => {
     setPagoParaDetalle(pago);
     setShowDetalleDialog(true);
   };
 
   const verEntregas = (pago: PagoPendiente) => {
+    // Verificar si puede operar
+    if (!puedeOperarEnCotizacion(pago)) {
+      toast({
+        title: "Sin permisos",
+        description: "No puedes gestionar entregas de esta cotización porque pertenece a otra bodega.",
+        variant: "destructive",
+      });
+      return;
+    }
     setPagoParaEntrega(pago);
     setMontoPago(0);
     setMetodoPagoEntrega("efectivo");
@@ -207,6 +208,16 @@ export function PagosPendientesView() {
 
   const handleFinalizarPago = async () => {
     if (!selectedPago) return;
+    
+    // Verificar si puede operar
+    if (!puedeOperarEnCotizacion(selectedPago)) {
+      toast({
+        title: "Sin permisos",
+        description: "No puedes procesar pagos de esta cotización porque pertenece a otra bodega.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Verificar si la caja está abierta (solo para Asistentes)
     if (isAssistant) {
@@ -237,7 +248,6 @@ export function PagosPendientesView() {
       setShowConfirmDialog(false);
       setSelectedPago(null);
       
-      // Actualizar estado de cajas (solo para Asistentes)
       if (isAssistant) {
         await fetchEstadoCajas();
       }
@@ -311,7 +321,6 @@ export function PagosPendientesView() {
       setMontoPago(0);
       setEntregasTemporales({});
 
-      // Actualizar estado de cajas si hubo pago (solo para Asistentes)
       if (montoPago > 0 && isAssistant) {
         await fetchEstadoCajas();
       }
@@ -350,6 +359,16 @@ export function PagosPendientesView() {
   };
 
   const handleMarcarEntregado = async (pago: PagoPendiente) => {
+    // Verificar si puede operar
+    if (!puedeOperarEnCotizacion(pago)) {
+      toast({
+        title: "Sin permisos",
+        description: "No puedes marcar como entregada esta cotización porque pertenece a otra bodega.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setProcessingAction(`marcar-entregado-${pago.id}`);
     
     try {
@@ -376,6 +395,16 @@ export function PagosPendientesView() {
   };
 
   const handleEliminarPago = async (pago: PagoPendiente) => {
+    // Verificar si puede operar
+    if (!puedeOperarEnCotizacion(pago)) {
+      toast({
+        title: "Sin permisos",
+        description: "No puedes eliminar esta cotización porque pertenece a otra bodega.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setProcessingAction(`eliminar-pago-${pago.id}`);
     
     try {
@@ -420,7 +449,7 @@ export function PagosPendientesView() {
 
   // Verificar si la caja está abierta para el método de pago seleccionado (solo Asistentes)
   const cajaAbiertaParaPago = (metodo: "efectivo" | "qr") => {
-    if (!isAssistant) return true; // Admin no necesita verificar caja
+    if (!isAssistant) return true;
     return metodo === 'efectivo' ? cajaEstado.efectivo === 'abierta' : cajaEstado.qr === 'abierta';
   };
 
@@ -445,24 +474,14 @@ export function PagosPendientesView() {
           <h1 className="text-xl sm:text-2xl font-bold text-primary">Pagos Pendientes</h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Mostrar estado de cajas SOLO para Asistentes */}
           {isAssistant && !cargandoCaja && (
-            <>
-              <Badge 
-                variant={cajaEstado.efectivo === 'abierta' ? "default" : "destructive"}
-                className="flex items-center gap-1 text-xs"
-              >
-                <span className={`h-2 w-2 rounded-full ${cajaEstado.efectivo === 'abierta' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
-                Caja Efectivo
-              </Badge>
-              <Badge 
-                variant={cajaEstado.qr === 'abierta' ? "default" : "destructive"}
-                className="flex items-center gap-1 text-xs"
-              >
-                <span className={`h-2 w-2 rounded-full ${cajaEstado.qr === 'abierta' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
-                Caja QR
-              </Badge>
-            </>
+            <Badge 
+              variant={cajaEstado.efectivo === 'abierta' ? "default" : "destructive"}
+              className="flex items-center gap-1 text-xs"
+            >
+              <span className={`h-2 w-2 rounded-full ${cajaEstado.efectivo === 'abierta' ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+              Caja Efectivo
+            </Badge>
           )}
           {isAdmin && (
             <div className="text-sm text-muted-foreground bg-primary/10 px-3 py-1 rounded-full">
@@ -526,170 +545,182 @@ export function PagosPendientesView() {
         <CardHeader>
           <CardTitle className="text-base sm:text-lg">Cotizaciones con Pagos Pendientes</CardTitle>
           {isAssistant && (
-            <p className="text-sm text-muted-foreground">Mostrando tus cotizaciones pendientes</p>
+            <p className="text-sm text-muted-foreground">Mostrando cotizaciones de tu bodega</p>
+          )}
+          {isAdmin && (
+            <p className="text-sm text-muted-foreground">
+              Mostrando todas las cotizaciones. Solo puedes operar en las de tu bodega: <strong>{userBodegaId ? `Bodega ${userBodegaId}` : 'Sin bodega asignada'}</strong>
+            </p>
           )}
         </CardHeader>
         <CardContent>
-          {/* Vista móvil - solo mostrar si hay pagos */}
           {filteredPagos.length > 0 ? (
             <>
+              {/* Vista móvil */}
               <div className="block md:hidden space-y-4">
-                {filteredPagos.map((pago) => (
-                  <Card key={pago.id} className="p-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-sm">{pago.cliente}</p>
-                          <p className="text-xs text-muted-foreground">{pago.telefono}</p>
-                          <p className="text-xs text-muted-foreground">{new Date(pago.fecha).toLocaleDateString('es-BO')}</p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => verDetalle(pago)}
-                          className="p-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Tipo:</span>
-                        <span>{pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}</span>
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Total:</span>
-                        <span className="font-medium">Bs {formatBs(pago.monto)}</span>
-                      </div>
-
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Abonado:</span>
-                        <span className="font-medium text-green-600">Bs {formatBs(pago.monto - pago.saldo)}</span>
-                      </div>
-                      
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Pendiente:</span>
-                        <span className="font-bold text-orange-600">Bs {formatBs(pago.saldo)}</span>
-                      </div>
-                      
-                      {isAdmin && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Usuario Registro:</span>
-                          <span className="font-medium">{pago.usuarioNombre || "Desconocido"}</span>
-                        </div>
-                      )}
-                      
-                      {isAdmin && pago.bodegaNombre && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Sucursal:</span>
-                          <span className="font-medium">{pago.bodegaNombre}</span>
-                        </div>
-                      )}
-                      
-                      <div className="grid grid-cols-2 gap-2 pt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => verEntregas(pago)}
-                          disabled={isProcessing(`entregas-${pago.id}`)}
-                        >
-                          {isProcessing(`entregas-${pago.id}`) ? (
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                          ) : (
-                            <Package className="h-3 w-3 mr-1" />
-                          )}
-                          Entregas
-                        </Button>
-                        
-                        {pago.entregado ? (
+                {filteredPagos.map((pago) => {
+                  const puedeOperar = puedeOperarEnCotizacion(pago);
+                  return (
+                    <Card key={pago.id} className="p-4">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-sm">{pago.cliente}</p>
+                            <p className="text-xs text-muted-foreground">{pago.telefono}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(pago.fecha).toLocaleDateString('es-BO')}</p>
+                          </div>
                           <Button
-                            variant="default"
+                            variant="ghost"
                             size="sm"
-                            disabled
+                            onClick={() => verDetalle(pago)}
+                            className="p-2"
                           >
-                            <Check className="h-3 w-3 mr-1" />
-                            Entregado
+                            <Eye className="h-4 w-4" />
                           </Button>
-                        ) : puedeFinalizarEntrega(pago) ? (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="default"
-                                size="sm"
-                                disabled={isProcessing(`marcar-entregado-${pago.id}`)}
-                              >
-                                {isProcessing(`marcar-entregado-${pago.id}`) ? (
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                                ) : (
-                                  <Check className="h-3 w-3 mr-1" />
-                                )}
-                                Finalizar Entrega
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>¿Confirmar entrega completa?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  ¿Está seguro de marcar la cotización {pago.id} como completamente entregada?
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  onClick={() => handleMarcarEntregado(pago)}
-                                  disabled={isProcessing(`marcar-entregado-${pago.id}`)}
+                        </div>
+                        
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Tipo:</span>
+                          <span>{pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}</span>
+                        </div>
+                        
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Total:</span>
+                          <span className="font-medium">Bs {formatBs(pago.monto)}</span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Abonado:</span>
+                          <span className="font-medium text-green-600">Bs {formatBs(pago.monto - pago.saldo)}</span>
+                        </div>
+                        
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Pendiente:</span>
+                          <span className="font-bold text-orange-600">Bs {formatBs(pago.saldo)}</span>
+                        </div>
+                        
+                        {isAdmin && (
+                          <>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Usuario Registro:</span>
+                              <span className="font-medium">{pago.usuarioNombre || "Desconocido"}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Sucursal:</span>
+                              <span className="font-medium">{pago.bodegaNombre || "N/A"}</span>
+                            </div>
+                            {!puedeOperar && (
+                              <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded text-center">
+                                ⚠️ Solo lectura - Cotización de otra bodega
+                              </div>
+                            )}
+                          </>
+                        )}
+                        
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => verEntregas(pago)}
+                            disabled={isProcessing(`entregas-${pago.id}`) || !puedeOperar}
+                          >
+                            {isProcessing(`entregas-${pago.id}`) ? (
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                            ) : (
+                              <Package className="h-3 w-3 mr-1" />
+                            )}
+                            Entregas
+                          </Button>
+                          
+                          {pago.entregado ? (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              disabled
+                            >
+                              <Check className="h-3 w-3 mr-1" />
+                              Entregado
+                            </Button>
+                          ) : puedeFinalizarEntrega(pago) ? (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  disabled={isProcessing(`marcar-entregado-${pago.id}`) || !puedeOperar}
                                 >
                                   {isProcessing(`marcar-entregado-${pago.id}`) ? (
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
-                                  ) : null}
-                                  Confirmar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        ) : (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                disabled={isProcessing(`eliminar-${pago.id}`)}
-                              >
-                                {isProcessing(`eliminar-${pago.id}`) ? (
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                                ) : (
-                                  <Trash2 className="h-3 w-3 mr-1" />
-                                )}
-                                Eliminar
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>¿Eliminar cotización?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  ¿Está seguro de eliminar la cotización {pago.id} del cliente {pago.cliente}? Esta acción no se puede deshacer.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  onClick={() => handleEliminarPago(pago)}
-                                  disabled={isProcessing(`eliminar-pago-${pago.id}`)}
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                                  ) : (
+                                    <Check className="h-3 w-3 mr-1" />
+                                  )}
+                                  Finalizar Entrega
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Confirmar entrega completa?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    ¿Está seguro de marcar la cotización {pago.id} como completamente entregada?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handleMarcarEntregado(pago)}
+                                    disabled={isProcessing(`marcar-entregado-${pago.id}`)}
+                                  >
+                                    {isProcessing(`marcar-entregado-${pago.id}`) ? (
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
+                                    ) : null}
+                                    Confirmar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          ) : (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  disabled={isProcessing(`eliminar-${pago.id}`) || !puedeOperar}
                                 >
-                                  {isProcessing(`eliminar-pago-${pago.id}`) ? (
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
-                                  ) : null}
+                                  {isProcessing(`eliminar-${pago.id}`) ? (
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                                  ) : (
+                                    <Trash2 className="h-3 w-3 mr-1" />
+                                  )}
                                   Eliminar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Eliminar cotización?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    ¿Está seguro de eliminar la cotización {pago.id} del cliente {pago.cliente}? Esta acción no se puede deshacer.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handleEliminarPago(pago)}
+                                    disabled={isProcessing(`eliminar-pago-${pago.id}`)}
+                                  >
+                                    {isProcessing(`eliminar-pago-${pago.id}`) ? (
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
+                                    ) : null}
+                                    Eliminar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
 
               {/* Vista desktop */}
@@ -710,148 +741,157 @@ export function PagosPendientesView() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPagos.map((pago) => (
-                      <TableRow key={pago.id}>
-                        <TableCell>{new Date(pago.fecha).toLocaleDateString('es-BO')}</TableCell>
-                        <TableCell className="font-medium">{pago.cliente}</TableCell>
-                        <TableCell>{pago.telefono}</TableCell>
-                        {isAdmin && (
-                          <TableCell>
-                            <span className="text-sm" title={pago.usuarioLogin}>
-                              {pago.usuarioNombre || "Desconocido"}
-                            </span>
-                          </TableCell>
-                        )}
-                        {isAdmin && (
-                          <TableCell>
-                            <span className="text-sm">{pago.bodegaNombre || "N/A"}</span>
-                          </TableCell>
-                        )}
-                        <TableCell>
-                          {pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          Bs {formatBs(pago.monto)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-green-600">
-                          Bs {formatBs(pago.monto - pago.saldo)}
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-orange-600">
-                          Bs {formatBs(pago.saldo)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex justify-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => verDetalle(pago)}
-                              className="p-2"
-                            >
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                            
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => verEntregas(pago)}
-                              disabled={isProcessing(`entregas-${pago.id}`)}
-                            >
-                              {isProcessing(`entregas-${pago.id}`) ? (
-                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                              ) : (
-                                <Package className="h-3 w-3 mr-1" />
+                    {filteredPagos.map((pago) => {
+                      const puedeOperar = puedeOperarEnCotizacion(pago);
+                      return (
+                        <TableRow key={pago.id} className={!puedeOperar ? "opacity-75 bg-muted/30" : ""}>
+                          <TableCell>{new Date(pago.fecha).toLocaleDateString('es-BO')}</TableCell>
+                          <TableCell className="font-medium">{pago.cliente}</TableCell>
+                          <TableCell>{pago.telefono}</TableCell>
+                          {isAdmin && (
+                            <TableCell>
+                              <span className="text-sm" title={pago.usuarioLogin}>
+                                {pago.usuarioNombre || "Desconocido"}
+                              </span>
+                            </TableCell>
+                          )}
+                          {isAdmin && (
+                            <TableCell>
+                              <span className="text-sm">{pago.bodegaNombre || "N/A"}</span>
+                              {!puedeOperar && (
+                                <span className="ml-2 text-xs text-destructive">(otra bodega)</span>
                               )}
-                              Entregas
-                            </Button>
-                            
-                            {pago.entregado ? (
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            {pago.tipoPago === "pago-adelantado" ? "Pago por Adelantado" : "Mitad de Adelanto"}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            Bs {formatBs(pago.monto)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-green-600">
+                            Bs {formatBs(pago.monto - pago.saldo)}
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-orange-600">
+                            Bs {formatBs(pago.saldo)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex justify-center gap-2">
                               <Button
-                                variant="default"
+                                variant="ghost"
                                 size="sm"
-                                disabled
+                                onClick={() => verDetalle(pago)}
+                                className="p-2"
                               >
-                                <Check className="h-3 w-3 mr-1" />
-                                Entregado
+                                <Eye className="h-3 w-3" />
                               </Button>
-                            ) : puedeFinalizarEntrega(pago) ? (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="default"
-                                    size="sm"
-                                    disabled={isProcessing(`marcar-entregado-${pago.id}`)}
-                                  >
-                                    {isProcessing(`marcar-entregado-${pago.id}`) ? (
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                                    ) : (
-                                      <Check className="h-3 w-3 mr-1" />
-                                    )}
-                                    Finalizar Entrega
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Confirmar entrega completa?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      ¿Está seguro de marcar la cotización {pago.id} como completamente entregada?
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction 
-                                      onClick={() => handleMarcarEntregado(pago)}
-                                      disabled={isProcessing(`marcar-entregado-${pago.id}`)}
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => verEntregas(pago)}
+                                disabled={isProcessing(`entregas-${pago.id}`) || !puedeOperar}
+                                title={!puedeOperar ? "Cotización de otra bodega" : ""}
+                              >
+                                {isProcessing(`entregas-${pago.id}`) ? (
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                                ) : (
+                                  <Package className="h-3 w-3 mr-1" />
+                                )}
+                                Entregas
+                              </Button>
+                              
+                              {pago.entregado ? (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  disabled
+                                >
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Entregado
+                                </Button>
+                              ) : puedeFinalizarEntrega(pago) ? (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="default"
+                                      size="sm"
+                                      disabled={isProcessing(`marcar-entregado-${pago.id}`) || !puedeOperar}
+                                      title={!puedeOperar ? "Cotización de otra bodega" : ""}
                                     >
                                       {isProcessing(`marcar-entregado-${pago.id}`) ? (
-                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
-                                      ) : null}
-                                      Confirmar
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            ) : (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    disabled={isProcessing(`eliminar-${pago.id}`)}
-                                  >
-                                    {isProcessing(`eliminar-${pago.id}`) ? (
-                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
-                                    ) : (
-                                      <Trash2 className="h-3 w-3 mr-1" />
-                                    )}
-                                    Eliminar
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Eliminar cotización?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      ¿Está seguro de eliminar la cotización {pago.id} del cliente {pago.cliente}? Esta acción no se puede deshacer.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction 
-                                      onClick={() => handleEliminarPago(pago)}
-                                      disabled={isProcessing(`eliminar-pago-${pago.id}`)}
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                                      ) : (
+                                        <Check className="h-3 w-3 mr-1" />
+                                      )}
+                                      Finalizar Entrega
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Confirmar entrega completa?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        ¿Está seguro de marcar la cotización {pago.id} como completamente entregada?
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction 
+                                        onClick={() => handleMarcarEntregado(pago)}
+                                        disabled={isProcessing(`marcar-entregado-${pago.id}`)}
+                                      >
+                                        {isProcessing(`marcar-entregado-${pago.id}`) ? (
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
+                                        ) : null}
+                                        Confirmar
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              ) : (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      disabled={isProcessing(`eliminar-${pago.id}`) || !puedeOperar}
+                                      title={!puedeOperar ? "Cotización de otra bodega" : ""}
                                     >
-                                      {isProcessing(`eliminar-pago-${pago.id}`) ? (
-                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
-                                      ) : null}
+                                      {isProcessing(`eliminar-${pago.id}`) ? (
+                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                                      ) : (
+                                        <Trash2 className="h-3 w-3 mr-1" />
+                                      )}
                                       Eliminar
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Eliminar cotización?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        ¿Está seguro de eliminar la cotización {pago.id} del cliente {pago.cliente}? Esta acción no se puede deshacer.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction 
+                                        onClick={() => handleEliminarPago(pago)}
+                                        disabled={isProcessing(`eliminar-pago-${pago.id}`)}
+                                      >
+                                        {isProcessing(`eliminar-pago-${pago.id}`) ? (
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-2"></div>
+                                        ) : null}
+                                        Eliminar
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -1132,14 +1172,8 @@ export function PagosPendientesView() {
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="qr" id="qr-entrega" />
                         <Label htmlFor="qr-entrega" className="text-xs sm:text-sm">QR</Label>
-                        {isAssistant && cajaEstado.qr === 'abierta' && (
-                          <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
-                        )}
                       </div>
                     </RadioGroup>
-                    {isAssistant && metodoPagoEntrega === "qr" && cajaEstado.qr !== 'abierta' && (
-                      <p className="text-xs text-destructive">La caja QR está cerrada. No se podrá procesar el pago.</p>
-                    )}
                     {isAssistant && metodoPagoEntrega === "efectivo" && cajaEstado.efectivo !== 'abierta' && (
                       <p className="text-xs text-destructive">La caja de Efectivo está cerrada. No se podrá procesar el pago.</p>
                     )}
