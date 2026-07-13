@@ -43,29 +43,29 @@ const getFechaBolivia = () => {
   return fechaBolivia;
 };
 
-// Función para formatear fecha para mostrar (sin conversiones UTC)
+// Función para formatear fecha para mostrar - SIN MODIFICAR LA FECHA
 const formatDateForDisplay = (dateInput: string | Date) => {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    // Usar directamente la fecha sin conversiones UTC
     const day = date.getDate();
     const month = date.getMonth() + 1;
     const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
   } catch (error) {
     console.error("Error formatting date:", error);
     return typeof dateInput === 'string' ? dateInput.substring(0, 10) : "Fecha inválida";
   }
 };
 
-// Función para formatear hora para mostrar (sin conversiones UTC)
+// Función para formatear hora para mostrar - SIN MODIFICAR LA HORA
 const formatTimeForDisplay = (dateInput: string | Date) => {
   try {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    // Usar directamente la hora sin conversiones UTC
     const hours = date.getHours();
     const minutes = date.getMinutes();
-    const formattedHours = hours < 10 ? `0${hours}` : hours.toString();
-    const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes.toString();
-    return `${formattedHours}:${formattedMinutes}`;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   } catch (error) {
     console.error("Error formatting time:", error);
     return "";
@@ -284,7 +284,7 @@ export function VentasView() {
       
       nombreArchivo += ".pdf";
       
-      // Crear el documento PDF - usando un objeto con las propiedades correctas
+      // Crear el documento PDF
       const pdfDocument = (
         <VentasTablaPDF
           ventas={ventasFiltradas}
@@ -301,10 +301,7 @@ export function VentasView() {
         />
       );
       
-      // Generar el PDF como blob
       const pdfBlob = await pdf(pdfDocument).toBlob();
-      
-      // Descargar el archivo
       downloadPDF(pdfBlob, nombreArchivo);
       
     } catch (error) {
@@ -335,7 +332,6 @@ export function VentasView() {
     setFiltroMetodo("Todos");
   };
 
-  // Manejar cambio en filtro de fecha específica
   const handleFechaBusquedaChange = async (date: Date | undefined) => {
     if (date) {
       setFechaBusqueda(date);
@@ -345,12 +341,10 @@ export function VentasView() {
     }
   };
 
-  // Manejar cambio temporal en filtro de rango de fechas
   const handleRangoTempChange = (range: { from: Date | undefined; to: Date | undefined }) => {
     setFechaRangoTemp(range);
   };
 
-  // Aplicar rango seleccionado
   const aplicarRangoFechas = async () => {
     if (fechaRangoTemp.from && fechaRangoTemp.to) {
       setFechaRangoAplicado({
@@ -362,7 +356,6 @@ export function VentasView() {
     }
   };
 
-  // Cancelar selección de rango
   const cancelarRangoFechas = () => {
     setFechaRangoTemp({
       from: fechaRangoAplicado.from,
@@ -379,7 +372,6 @@ export function VentasView() {
 
   const imprimirDetalle = () => {
     if (ventaSeleccionada) {
-      // Usar el nombre del cliente de la venta seleccionada
       const nombreCliente = ventaSeleccionada.cliente || "No especificado";
       
       generateVentaPDF({
@@ -390,7 +382,6 @@ export function VentasView() {
     }
   };
 
-  // Obtener el nombre de la bodega del usuario actual
   const getBodegaNombre = () => {
     if (userBodegaId) {
       const bodega = bodegasOptions.find(b => b.value === userBodegaId);
@@ -467,14 +458,13 @@ export function VentasView() {
         </Card>
       </div>
 
-      {/* Filtros - Admin ve todos los filtros, Asistente solo ve filtros de fecha y método */}
+      {/* Filtros */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle>Filtros</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-            {/* Filtro de Empleado - Solo visible para Admin */}
             {!isAssistant && (
               <div>
                 <label className="text-sm font-medium">Empleado</label>
@@ -493,7 +483,6 @@ export function VentasView() {
               </div>
             )}
 
-            {/* Filtro de Método - Visible para TODOS */}
             <div>
               <label className="text-sm font-medium">Método de Pago</label>
               <Select value={filtroMetodo} onValueChange={setFiltroMetodo}>
@@ -508,7 +497,6 @@ export function VentasView() {
               </Select>
             </div>
 
-            {/* Filtro de Sucursal - Solo visible para Admin */}
             {!isAssistant && (
               <div>
                 <label className="text-sm font-medium">Sucursal</label>
@@ -531,7 +519,6 @@ export function VentasView() {
               </div>
             )}
 
-            {/* Filtros de fecha - Visibles para TODOS */}
             <div>
               <label className="text-sm font-medium">Fecha Específica</label>
               <Popover open={mostrarCalendario} onOpenChange={setMostrarCalendario}>
@@ -607,7 +594,6 @@ export function VentasView() {
             </div>
           </div>
           
-          {/* Indicador de filtros activos */}
           <div className="mt-4 pt-4 border-t">
             <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
               <span>Filtros activos:</span>
@@ -636,17 +622,11 @@ export function VentasView() {
                   Sucursal: {bodegasOptions.find(b => b.value === filtroBodega)?.label}
                 </span>
               )}
-              {!fechaBusqueda && !fechaRangoAplicado.from && !fechaRangoAplicado.to && filtroMetodo === "Todos" && (
-                <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded">
-                  {isAssistant ? 'Tus ventas' : 'Todas las ventas'}
-                </span>
-              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Información para asistentes - Se mantiene pero ahora con los filtros de fecha */}
       {isAssistant && (
         <div className="text-xs text-muted-foreground -mt-4">
           <p>Mostrando tus ventas con los filtros aplicados</p>
@@ -707,7 +687,7 @@ export function VentasView() {
                   ) : (
                     ventasFiltradas.map((venta) => (
                       <TableRow key={venta.id} className="md:table-row block border-b p-4 md:p-0">
-                        {/* Fecha y Hora */}
+                        {/* Fecha y Hora - SIN MODIFICAR */}
                         <TableCell className="md:table-cell block md:border-0 border-0 p-0 mb-3 md:mb-0">
                           <div className="font-medium">
                             {formatDateForDisplay(venta.fecha)}
@@ -834,7 +814,6 @@ export function VentasView() {
             <DialogTitle>Detalle de Venta</DialogTitle>
           </DialogHeader>
 
-          {/* Contenido a imprimir */}
           <div id="detalle-venta-imprimir" className="space-y-6">
             {mostrarDetallesImpresion && (
               <div className="logo text-center mb-6">
@@ -846,7 +825,6 @@ export function VentasView() {
               </div>
             )}
 
-            {/* Información del cliente y venta */}
             <div className="info-cliente space-y-2">
               {mostrarDetallesImpresion && ventaSeleccionada && (
                 <p><strong>Cliente:</strong> {ventaSeleccionada.cliente || "No especificado"}</p>
@@ -860,7 +838,6 @@ export function VentasView() {
               <p><strong>Vendedor:</strong> {ventaSeleccionada?.usuario}</p>
             </div>
 
-            {/* Descripción completa de la venta */}
             <div className="descripcion-venta bg-muted/50 p-4 rounded-lg">
               <h3 className="font-semibold mb-2">Descripción de la Venta:</h3>
               <p className="text-sm">{ventaSeleccionada?.descripcion}</p>
@@ -872,10 +849,8 @@ export function VentasView() {
               )}
             </div>
 
-            {/* Tabla de productos y totales - Solo si hay productos */}
             {ventaSeleccionada?.detalle && ventaSeleccionada.detalle.length > 0 && (
               <div className="flex flex-col lg:flex-row gap-6">
-                {/* Tabla de productos */}
                 <div className="flex-1">
                   <h3 className="font-semibold mb-2">Productos:</h3>
                   <Table>
@@ -900,7 +875,6 @@ export function VentasView() {
                   </Table>
                 </div>
 
-                {/* Mini tabla de totales */}
                 <div className="totales w-full lg:w-48">
                   <Table>
                     <TableBody>
@@ -923,7 +897,6 @@ export function VentasView() {
             )}
           </div>
 
-          {/* Botón de imprimir */}
           {mostrarDetallesImpresion && (
             <div className="flex justify-end mt-6">
               <Button onClick={imprimirDetalle} className="flex items-center gap-2">
