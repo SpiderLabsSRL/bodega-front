@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Edit, Trash2, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getUsuarios, createUsuario, updateUsuario, deleteUsuario, toggleUsuarioStatus, Usuario, UsuarioRequest } from "@/api/UsersApi";
@@ -38,7 +39,7 @@ export function GestionUsuariosView() {
     rol: "" as "admin" | "asistente" | "",
     idbodega: "" as string | ""
   });
-  const [mostrandoFormulario, setMostrandoFormulario] = useState(false);
+  const [dialogAbierto, setDialogAbierto] = useState(false);
   const [enviandoFormulario, setEnviandoFormulario] = useState(false);
   const [erroresFormulario, setErroresFormulario] = useState<{
     telefono?: string;
@@ -111,9 +112,35 @@ export function GestionUsuariosView() {
       idbodega: ""
     });
     setEditandoUsuario(null);
-    setMostrandoFormulario(false);
     setEnviandoFormulario(false);
     setErroresFormulario({});
+  };
+
+  const abrirDialogCrear = () => {
+    resetForm();
+    setDialogAbierto(true);
+  };
+
+  const abrirDialogEditar = (usuario: Usuario) => {
+    setEditandoUsuario(usuario);
+    setFormData({
+      nombres: usuario.nombres,
+      apellidos: usuario.apellidos,
+      telefono: usuario.telefono ?? '',
+      usuario: usuario.usuario,
+      contraseña: "",
+      rol: usuario.rol,
+      idbodega: usuario.idbodega ? String(usuario.idbodega) : ""
+    });
+    setErroresFormulario({});
+    setDialogAbierto(true);
+  };
+
+  const cerrarDialog = () => {
+    if (!enviandoFormulario) {
+      resetForm();
+      setDialogAbierto(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -187,6 +214,7 @@ export function GestionUsuariosView() {
       }
       
       resetForm();
+      setDialogAbierto(false);
       await cargarUsuarios();
     } catch (error) {
       console.error("Error guardando usuario:", error);
@@ -236,21 +264,6 @@ export function GestionUsuariosView() {
     } finally {
       setEnviandoFormulario(false);
     }
-  };
-
-  const handleEditar = (usuario: Usuario) => {
-    setEditandoUsuario(usuario);
-    setFormData({
-      nombres: usuario.nombres,
-      apellidos: usuario.apellidos,
-      telefono: usuario.telefono ?? '',
-      usuario: usuario.usuario,
-      contraseña: "",
-      rol: usuario.rol,
-      idbodega: usuario.idbodega ? String(usuario.idbodega) : ""
-    });
-    setErroresFormulario({});
-    setMostrandoFormulario(true);
   };
 
   const handleEliminar = async (id: number) => {
@@ -329,167 +342,179 @@ export function GestionUsuariosView() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">Gestión de Usuarios</h1>
-        <Button onClick={() => setMostrandoFormulario(true)} className="w-full sm:w-auto">
+        <Button onClick={abrirDialogCrear} className="w-full sm:w-auto">
           <UserPlus className="mr-2 h-4 w-4" />
           Nuevo Usuario
         </Button>
       </div>
 
-      {mostrandoFormulario && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{editandoUsuario ? "Editar Usuario" : "Crear Nuevo Usuario"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="nombres">
-                    Nombre(s) <RequiredAsterisk />
-                  </Label>
-                  <Input
-                    id="nombres"
-                    value={formData.nombres}
-                    onChange={(e) => setFormData({ ...formData, nombres: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="apellidos">
-                    Apellido(s) <RequiredAsterisk />
-                  </Label>
-                  <Input
-                    id="apellidos"
-                    value={formData.apellidos}
-                    onChange={(e) => setFormData({ ...formData, apellidos: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="telefono">
-                    Teléfono (8 dígitos) <RequiredAsterisk />
-                  </Label>
-                  <Input
-                    id="telefono"
-                    value={formData.telefono}
-                    onChange={handleTelefonoChange}
-                    maxLength={8}
-                    pattern="[0-9]{8}"
-                    className={erroresFormulario.telefono ? "border-red-500" : ""}
-                    required
-                  />
-                  {erroresFormulario.telefono && (
-                    <p className="text-sm text-red-500 mt-1">{erroresFormulario.telefono}</p>
-                  )}
-                  {formData.telefono.length !== 8 && formData.telefono.length > 0 && !erroresFormulario.telefono && (
-                    <p className="text-sm text-yellow-600 mt-1">El teléfono debe tener 8 dígitos</p>
-                  )}
-                </div>
-                <div>
-                  <Label htmlFor="usuario">
-                    Usuario <RequiredAsterisk />
-                  </Label>
-                  <Input
-                    id="usuario"
-                    value={formData.usuario}
-                    onChange={handleUsuarioChange}
-                    className={erroresFormulario.usuario ? "border-red-500" : ""}
-                    required
-                  />
-                  {erroresFormulario.usuario && (
-                    <p className="text-sm text-red-500 mt-1">{erroresFormulario.usuario}</p>
-                  )}
-                </div>
-                <div>
-                  <Label htmlFor="contraseña">
-                    Contraseña {editandoUsuario ? "(opcional)" : <RequiredAsterisk />}
-                  </Label>
-                  <Input
-                    id="contraseña"
-                    type="password"
-                    value={formData.contraseña}
-                    onChange={(e) => setFormData({ ...formData, contraseña: e.target.value })}
-                    required={!editandoUsuario}
-                    placeholder={editandoUsuario ? "Dejar en blanco para mantener actual" : ""}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="rol">
-                    Rol <RequiredAsterisk />
-                  </Label>
-                  <Select 
-                    value={formData.rol} 
-                    onValueChange={(value) => setFormData({ ...formData, rol: value as "admin" | "asistente" })}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar rol" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="asistente">Asistente</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="idbodega">
-                    Bodega <RequiredAsterisk />
-                  </Label>
-                  <Select 
-                    value={formData.idbodega} 
-                    onValueChange={(value) => setFormData({ ...formData, idbodega: value })}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar bodega" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bodegas.length === 0 ? (
-                        <SelectItem value="" disabled>No hay bodegas disponibles</SelectItem>
-                      ) : (
-                        bodegas.map((bodega) => (
-                          <SelectItem key={bodega.id} value={String(bodega.id)}>
-                            {bodega.nombre}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {bodegas.length === 0 && (
-                    <p className="text-sm text-yellow-600 mt-1">
-                      No hay bodegas activas. Crea una bodega primero.
-                    </p>
-                  )}
-                </div>
+      {/* Dialog flotante para crear/editar usuario */}
+      <Dialog open={dialogAbierto} onOpenChange={cerrarDialog}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editandoUsuario ? "Editar Usuario" : "Crear Nuevo Usuario"}</DialogTitle>
+            <DialogDescription>
+              {editandoUsuario 
+                ? "Actualiza los datos del usuario seleccionado" 
+                : "Completa los datos para crear un nuevo usuario"}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="nombres">
+                  Nombre(s) <RequiredAsterisk />
+                </Label>
+                <Input
+                  id="nombres"
+                  value={formData.nombres}
+                  onChange={(e) => setFormData({ ...formData, nombres: e.target.value })}
+                  required
+                  disabled={enviandoFormulario}
+                />
               </div>
-              
-              {/* Mensaje de error general */}
-              {erroresFormulario.general && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-                  {erroresFormulario.general}
-                </div>
-              )}
-              
-              <div className="flex gap-2">
-                <Button 
-                  type="submit" 
-                  disabled={enviandoFormulario || bodegas.length === 0}
-                >
-                  {enviandoFormulario ? "Procesando..." : (editandoUsuario ? "Actualizar" : "Crear")} Usuario
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={resetForm}
+              <div>
+                <Label htmlFor="apellidos">
+                  Apellido(s) <RequiredAsterisk />
+                </Label>
+                <Input
+                  id="apellidos"
+                  value={formData.apellidos}
+                  onChange={(e) => setFormData({ ...formData, apellidos: e.target.value })}
+                  required
+                  disabled={enviandoFormulario}
+                />
+              </div>
+              <div>
+                <Label htmlFor="telefono">
+                  Teléfono (8 dígitos) <RequiredAsterisk />
+                </Label>
+                <Input
+                  id="telefono"
+                  value={formData.telefono}
+                  onChange={handleTelefonoChange}
+                  maxLength={8}
+                  pattern="[0-9]{8}"
+                  className={erroresFormulario.telefono ? "border-red-500" : ""}
+                  required
+                  disabled={enviandoFormulario}
+                />
+                {erroresFormulario.telefono && (
+                  <p className="text-sm text-red-500 mt-1">{erroresFormulario.telefono}</p>
+                )}
+                {formData.telefono.length !== 8 && formData.telefono.length > 0 && !erroresFormulario.telefono && (
+                  <p className="text-sm text-yellow-600 mt-1">El teléfono debe tener 8 dígitos</p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="usuario">
+                  Usuario <RequiredAsterisk />
+                </Label>
+                <Input
+                  id="usuario"
+                  value={formData.usuario}
+                  onChange={handleUsuarioChange}
+                  className={erroresFormulario.usuario ? "border-red-500" : ""}
+                  required
+                  disabled={enviandoFormulario}
+                />
+                {erroresFormulario.usuario && (
+                  <p className="text-sm text-red-500 mt-1">{erroresFormulario.usuario}</p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="contraseña">
+                  Contraseña {editandoUsuario ? "(opcional)" : <RequiredAsterisk />}
+                </Label>
+                <Input
+                  id="contraseña"
+                  type="password"
+                  value={formData.contraseña}
+                  onChange={(e) => setFormData({ ...formData, contraseña: e.target.value })}
+                  required={!editandoUsuario}
+                  placeholder={editandoUsuario ? "Dejar en blanco para mantener actual" : ""}
+                  disabled={enviandoFormulario}
+                />
+              </div>
+              <div>
+                <Label htmlFor="rol">
+                  Rol <RequiredAsterisk />
+                </Label>
+                <Select 
+                  value={formData.rol} 
+                  onValueChange={(value) => setFormData({ ...formData, rol: value as "admin" | "asistente" })}
+                  required
                   disabled={enviandoFormulario}
                 >
-                  Cancelar
-                </Button>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar rol" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="asistente">Asistente</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+              <div>
+                <Label htmlFor="idbodega">
+                  Bodega <RequiredAsterisk />
+                </Label>
+                <Select 
+                  value={formData.idbodega} 
+                  onValueChange={(value) => setFormData({ ...formData, idbodega: value })}
+                  required
+                  disabled={enviandoFormulario}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar bodega" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bodegas.length === 0 ? (
+                      <SelectItem value="" disabled>No hay bodegas disponibles</SelectItem>
+                    ) : (
+                      bodegas.map((bodega) => (
+                        <SelectItem key={bodega.id} value={String(bodega.id)}>
+                          {bodega.nombre}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {bodegas.length === 0 && (
+                  <p className="text-sm text-yellow-600 mt-1">
+                    No hay bodegas activas. Crea una bodega primero.
+                  </p>
+                )}
+              </div>
+            </div>
+            
+            {/* Mensaje de error general */}
+            {erroresFormulario.general && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+                {erroresFormulario.general}
+              </div>
+            )}
+            
+            <DialogFooter>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={cerrarDialog}
+                disabled={enviandoFormulario}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={enviandoFormulario || bodegas.length === 0}
+              >
+                {enviandoFormulario ? "Procesando..." : (editandoUsuario ? "Actualizar" : "Crear")} Usuario
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       
       <Card>
         <CardHeader>
@@ -565,7 +590,7 @@ export function GestionUsuariosView() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleEditar(usuario)}
+                            onClick={() => abrirDialogEditar(usuario)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
