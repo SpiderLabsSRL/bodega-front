@@ -424,7 +424,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
             Ver Sucursales
           </Button>
         </DialogTrigger>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
@@ -456,7 +456,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
                 sucursales.map((sucursal) => (
                   <div
                     key={sucursal.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors gap-2"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -480,7 +480,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
                       )}
                     </div>
                     {!isAssistant && sucursal.tipo !== "Principal" && (
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -561,7 +561,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
       </Dialog>
 
       <Dialog open={isCreating} onOpenChange={setIsCreating}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Crear Nueva Sucursal</DialogTitle>
           </DialogHeader>
@@ -575,6 +575,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
                 value={formData.nombre}
                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                 autoFocus
+                className="w-full"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && formData.nombre.trim()) {
                     handleCreate();
@@ -588,6 +589,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
                 placeholder="Dirección de la sucursal"
                 value={formData.direccion}
                 onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                className="w-full"
               />
             </div>
             <div className="space-y-2">
@@ -596,16 +598,17 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
                 placeholder="Teléfono de contacto"
                 value={formData.telefono}
                 onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                className="w-full"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreating(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setIsCreating(false)} className="w-full sm:w-auto">
               Cancelar
             </Button>
             <Button
               onClick={handleCreate}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
               disabled={!formData.nombre.trim() || isLoading}
             >
               {isLoading ? (
@@ -622,7 +625,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
       </Dialog>
 
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Sucursal</DialogTitle>
           </DialogHeader>
@@ -636,6 +639,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
                 value={formData.nombre}
                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                 autoFocus
+                className="w-full"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && formData.nombre.trim()) {
                     handleEdit();
@@ -649,6 +653,7 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
                 placeholder="Dirección de la sucursal"
                 value={formData.direccion}
                 onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                className="w-full"
               />
             </div>
             <div className="space-y-2">
@@ -657,16 +662,17 @@ function SucursalesManagement({ sucursales, onSucursalesChange, isAssistant }: S
                 placeholder="Teléfono de contacto"
                 value={formData.telefono}
                 onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                className="w-full"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditing(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setIsEditing(false)} className="w-full sm:w-auto">
               Cancelar
             </Button>
             <Button
               onClick={handleEdit}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
               disabled={!formData.nombre.trim() || isLoading}
             >
               {isLoading ? (
@@ -749,7 +755,6 @@ function UbicacionManagementDialog({
     }
   }, [open, sucursalId, loadUbicaciones]);
 
-  // Resetear estados cuando se cierra el diálogo principal
   useEffect(() => {
     if (!open) {
       setIsCreating(false);
@@ -891,7 +896,7 @@ function UbicacionManagementDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5" />
@@ -900,7 +905,6 @@ function UbicacionManagementDialog({
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Botón para crear nueva ubicación */}
             <Button
               onClick={() => {
                 setFormData({ nombre: "" });
@@ -920,7 +924,6 @@ function UbicacionManagementDialog({
               </p>
             )}
 
-            {/* Lista de ubicaciones */}
             <div className="space-y-2">
               {isLoading ? (
                 <div className="flex justify-center py-4">
@@ -934,7 +937,7 @@ function UbicacionManagementDialog({
                 ubicaciones.map((ubicacion) => (
                   <div
                     key={ubicacion.idubicacion}
-                    className="flex items-center justify-between p-2 border rounded-lg hover:bg-accent/50 transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-2 border rounded-lg hover:bg-accent/50 transition-colors gap-2"
                   >
                     <div className="flex items-center gap-2">
                       <MapPin className="h-3.5 w-3.5 text-primary flex-shrink-0" />
@@ -1010,7 +1013,6 @@ function UbicacionManagementDialog({
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para crear ubicación */}
       <Dialog open={showCreateDialog} onOpenChange={(open) => {
         if (!open) {
           setIsCreating(false);
@@ -1018,7 +1020,7 @@ function UbicacionManagementDialog({
         }
         setShowCreateDialog(open);
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Crear Nueva Ubicación</DialogTitle>
           </DialogHeader>
@@ -1032,6 +1034,7 @@ function UbicacionManagementDialog({
                 value={formData.nombre}
                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                 autoFocus
+                className="w-full"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && formData.nombre.trim()) {
                     handleCreate();
@@ -1046,7 +1049,7 @@ function UbicacionManagementDialog({
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -1054,12 +1057,13 @@ function UbicacionManagementDialog({
                 setIsCreating(false);
                 setFormData({ nombre: "" });
               }}
+              className="w-full sm:w-auto"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleCreate}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
               disabled={!formData.nombre.trim() || isCreating || !sucursalId}
             >
               {isCreating ? (
@@ -1075,7 +1079,6 @@ function UbicacionManagementDialog({
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para editar ubicación */}
       <Dialog open={showEditDialog} onOpenChange={(open) => {
         if (!open) {
           setIsEditing(false);
@@ -1084,7 +1087,7 @@ function UbicacionManagementDialog({
         }
         setShowEditDialog(open);
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Ubicación</DialogTitle>
           </DialogHeader>
@@ -1098,6 +1101,7 @@ function UbicacionManagementDialog({
                 value={formData.nombre}
                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                 autoFocus
+                className="w-full"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && formData.nombre.trim()) {
                     handleEdit();
@@ -1106,7 +1110,7 @@ function UbicacionManagementDialog({
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -1115,12 +1119,13 @@ function UbicacionManagementDialog({
                 setFormData({ nombre: "" });
                 setEditingUbicacion(null);
               }}
+              className="w-full sm:w-auto"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleEdit}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
               disabled={!formData.nombre.trim() || isEditing}
             >
               {isEditing ? (
@@ -1154,24 +1159,19 @@ function RenderUbicaciones({
     return <span className="text-xs text-muted-foreground">Sin ubicación</span>;
   }
 
-  // Filtrar ubicaciones por bodega
   const ubicacionesFiltradas = ubicaciones.filter(u => {
-    // Si la ubicación tiene idbodega, filtrar por la bodega seleccionada
     if (u.idbodega !== undefined && u.idbodega !== null) {
       return u.idbodega === bodegaId;
     }
-    // Si no tiene idbodega, mostrar todas (para compatibilidad)
     return true;
   });
 
-  // Extraer los nombres de las ubicaciones filtradas
   const nombres = ubicacionesFiltradas.map(u => u.nombre || u).filter(Boolean);
   
   if (nombres.length === 0) {
     return <span className="text-xs text-muted-foreground">Sin ubicación</span>;
   }
 
-  // Mostrar hasta 2 ubicaciones
   const mostrar = nombres.slice(0, 2);
   const restantes = nombres.length - 2;
 
@@ -1873,13 +1873,16 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                   <span className="sm:hidden">Agregar</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0">
-                <DialogHeader className="px-6 pt-6">
-                  <DialogTitle>
+              <DialogContent 
+                className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-0 sm:p-0"
+                style={{ width: '100%' }}
+              >
+                <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                  <DialogTitle className="text-base sm:text-lg">
                     {editingProduct ? "Editar Producto" : "Agregar Nuevo Producto"}
                   </DialogTitle>
                 </DialogHeader>
-                <div className="px-6 pb-6">
+                <div className="px-4 sm:px-6 pb-4 sm:pb-6">
                   <FormularioProductos
                     product={editingProduct}
                     ubicaciones={ubicaciones}
@@ -1979,7 +1982,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
               placeholder="Buscar productos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 w-full"
             />
             {searching && (
               <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
@@ -1992,7 +1995,6 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
             {filteredProducts.map((product) => {
               const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
               const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
-              // Obtener ubicaciones del producto y filtrar por bodega seleccionada
               const ubicacionesProducto = product.ubicaciones || [];
               const ubicacionesFiltradas = ubicacionesProducto.filter((u: any) => {
                 if (u.idbodega !== undefined && u.idbodega !== null) {
@@ -2146,147 +2148,144 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
 
           {/* Vista desktop - Tabla */}
           <div className="hidden lg:block">
-            <div className="w-full border rounded-lg">
-              <div className="overflow-x-auto">
-                <Table className="min-w-full">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[70px]">Img</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead className="min-w-[150px]">Categorías</TableHead>
-                      <TableHead className="min-w-[100px]">Ubicación</TableHead>
-                      <TableHead>Bodega</TableHead>
-                      <TableHead className="text-center">Stock</TableHead>
-                      <TableHead className="text-center">Stock Mínimo</TableHead>
-                      <TableHead className="text-right">Precio</TableHead>
-                      <TableHead className="text-center">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProducts.map((product) => {
-                      const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
-                      const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
-                      // Obtener ubicaciones del producto
-                      const ubicacionesProducto = product.ubicaciones || [];
-                      
-                      return (
-                        <TableRow key={product.id}>
-                          <TableCell>
-                            <div className="w-10 h-10">
-                              <ImageCarousel
-                                images={imageUrl ? [imageUrl] : []}
-                                productName={product.nombre}
-                                className="w-10 h-10"
-                              />
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="font-medium text-sm">{product.nombre}</div>
-                            <div className="text-xs text-muted-foreground">{product.codigo}</div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {categorias.slice(0, 2).map((cat, index) => (
-                                <Badge key={index} variant="secondary" className="text-xs">
-                                  {cat.length > 12 ? cat.substring(0, 10) + "..." : cat}
-                                </Badge>
-                              ))}
-                              {categorias.length > 2 && (
-                                <Badge variant="secondary" className="text-xs">
-                                  +{categorias.length - 2}
-                                </Badge>
-                              )}
-                              {categorias.length === 0 && (
-                                <span className="text-xs text-muted-foreground">Sin categoría</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <RenderUbicaciones 
-                              ubicaciones={ubicacionesProducto} 
-                              bodegaId={selectedBodega}
+            <div className="w-full border rounded-lg overflow-x-auto">
+              <Table className="min-w-full">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[70px]">Img</TableHead>
+                    <TableHead>Producto</TableHead>
+                    <TableHead className="min-w-[150px]">Categorías</TableHead>
+                    <TableHead className="min-w-[100px]">Ubicación</TableHead>
+                    <TableHead>Bodega</TableHead>
+                    <TableHead className="text-center">Stock</TableHead>
+                    <TableHead className="text-center">Stock Mínimo</TableHead>
+                    <TableHead className="text-right">Precio</TableHead>
+                    <TableHead className="text-center">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProducts.map((product) => {
+                    const imageUrl = product.imagen ? getImageUrl(product.imagen) : "";
+                    const categorias = product.categoria ? product.categoria.split(',').map(c => c.trim()).filter(c => c) : [];
+                    const ubicacionesProducto = product.ubicaciones || [];
+                    
+                    return (
+                      <TableRow key={product.id}>
+                        <TableCell>
+                          <div className="w-10 h-10">
+                            <ImageCarousel
+                              images={imageUrl ? [imageUrl] : []}
+                              productName={product.nombre}
+                              className="w-10 h-10"
                             />
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {product.bodega_nombre || "—"}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span className={`font-semibold ${product.stock <= product.stockMinimo ? 'text-red-500' : 'text-primary'}`}>
-                              {product.stock}
-                            </span>
-                            {product.stock <= product.stockMinimo && (
-                              <Badge variant="destructive" className="text-xs ml-2">
-                                Bajo stock
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium text-sm">{product.nombre}</div>
+                          <div className="text-xs text-muted-foreground">{product.codigo}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {categorias.slice(0, 2).map((cat, index) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {cat.length > 12 ? cat.substring(0, 10) + "..." : cat}
+                              </Badge>
+                            ))}
+                            {categorias.length > 2 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{categorias.length - 2}
                               </Badge>
                             )}
-                          </TableCell>
-                          <TableCell className="text-center text-sm">
-                            {product.stockMinimo}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            Bs {product.precio.toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex justify-center space-x-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleTransferir(product)}
-                                className="h-8 text-xs"
-                                title="Transferir"
-                              >
-                                <ArrowRight className="h-3 w-3" />
-                              </Button>
-                              {!isAssistant && (
-                                <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleEdit(product)}
-                                    className="h-8 w-8 p-0"
-                                    title="Editar"
-                                  >
-                                    <Edit className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-8 w-8 p-0"
-                                        title="Eliminar"
+                            {categorias.length === 0 && (
+                              <span className="text-xs text-muted-foreground">Sin categoría</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <RenderUbicaciones 
+                            ubicaciones={ubicacionesProducto} 
+                            bodegaId={selectedBodega}
+                          />
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {product.bodega_nombre || "—"}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={`font-semibold ${product.stock <= product.stockMinimo ? 'text-red-500' : 'text-primary'}`}>
+                            {product.stock}
+                          </span>
+                          {product.stock <= product.stockMinimo && (
+                            <Badge variant="destructive" className="text-xs ml-2">
+                              Bajo stock
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center text-sm">
+                          {product.stockMinimo}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          Bs {product.precio.toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-center space-x-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTransferir(product)}
+                              className="h-8 text-xs"
+                              title="Transferir"
+                            >
+                              <ArrowRight className="h-3 w-3" />
+                            </Button>
+                            {!isAssistant && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleEdit(product)}
+                                  className="h-8 w-8 p-0"
+                                  title="Editar"
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 w-8 p-0"
+                                      title="Eliminar"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Esta acción no se puede deshacer. Esto eliminará
+                                        permanentemente el producto "{product.nombre}".
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => handleDelete(product.id, product.nombre)}
                                       >
-                                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          Esta acción no se puede deshacer. Esto eliminará
-                                          permanentemente el producto "{product.nombre}".
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={() => handleDelete(product.id, product.nombre)}
-                                        >
-                                          Eliminar
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+                                        Eliminar
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
           </div>
 
@@ -2313,7 +2312,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       DIALOG DE TRANSFERENCIA
       ============================================ */}
       <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Transferir a Sucursal</DialogTitle>
           </DialogHeader>
@@ -2330,7 +2329,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <label className="text-sm font-medium">Sucursal destino</label>
                 <Button
                   variant="outline"
@@ -2339,7 +2338,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                     setIsTransferDialogOpen(false);
                     setIsNewSucursalDialogOpen(true);
                   }}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs w-full sm:w-auto"
                 >
                   <Building2 className="h-3 w-3 mr-1" />
                   Nueva Sucursal
@@ -2368,21 +2367,19 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
 
             {selectedSucursal && (
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <label className="text-sm font-medium">Ubicación en la sucursal</label>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setIsUbicacionManagementOpen(true);
-                      }}
-                      className="h-7 text-xs"
-                    >
-                      <MapPin className="h-3 w-3 mr-1" />
-                      Gestionar
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsUbicacionManagementOpen(true);
+                    }}
+                    className="h-7 text-xs w-full sm:w-auto"
+                  >
+                    <MapPin className="h-3 w-3 mr-1" />
+                    Gestionar
+                  </Button>
                 </div>
                 <select
                   className="w-full p-2 border rounded-md"
@@ -2416,6 +2413,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                 onChange={(e) => setCantidadTransferir(e.target.value)}
                 min="0"
                 max={selectedProduct?.stock}
+                className="w-full"
               />
             </div>
 
@@ -2428,13 +2426,13 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
               </p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)} className="w-full sm:w-auto">
               Cancelar
             </Button>
             <Button
               onClick={confirmarTransferencia}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
               disabled={!selectedSucursal || !cantidadTransferir || parseInt(cantidadTransferir) <= 0}
             >
               Confirmar Transferencia
@@ -2478,7 +2476,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       DIALOG PARA CREAR NUEVA SUCURSAL (desde transferencia)
       ============================================ */}
       <Dialog open={isNewSucursalDialogOpen} onOpenChange={setIsNewSucursalDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
@@ -2492,6 +2490,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                 placeholder="Ej: Sucursal Norte"
                 value={newSucursalData.nombre}
                 onChange={(e) => setNewSucursalData({ ...newSucursalData, nombre: e.target.value })}
+                className="w-full"
               />
             </div>
             <div className="space-y-2">
@@ -2500,6 +2499,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                 placeholder="Dirección de la sucursal"
                 value={newSucursalData.direccion}
                 onChange={(e) => setNewSucursalData({ ...newSucursalData, direccion: e.target.value })}
+                className="w-full"
               />
             </div>
             <div className="space-y-2">
@@ -2508,14 +2508,15 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                 placeholder="Teléfono de contacto"
                 value={newSucursalData.telefono}
                 onChange={(e) => setNewSucursalData({ ...newSucursalData, telefono: e.target.value })}
+                className="w-full"
               />
             </div>
             <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
               <p>La sucursal se creará con tipo "Sucursal" y estará activa por defecto.</p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNewSucursalDialogOpen(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setIsNewSucursalDialogOpen(false)} className="w-full sm:w-auto">
               Cancelar
             </Button>
             <Button
@@ -2557,7 +2558,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                   setIsCreatingSucursal(false);
                 }
               }}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 w-full sm:w-auto"
               disabled={!newSucursalData.nombre.trim() || isCreatingSucursal}
             >
               {isCreatingSucursal ? (
