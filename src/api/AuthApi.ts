@@ -6,11 +6,11 @@ export interface User {
   idUsuario: number;
   nombres: string;
   apellidos: string;
-  usuario: string;
+  usuario: string; 
   rol: string;
   estado: number;
   idbodega: number | null; // Añadir este campo
-  bodegaNombre?: string; // Opcional: para mostrar el nombre de la bodega
+  bodegaNombre?: string; 
 }
 
 export interface LoginRequest {
