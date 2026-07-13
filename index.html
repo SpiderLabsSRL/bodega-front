@@ -7,28 +7,19 @@
     <meta name="description" content="TRAXZION Cochabamba" />
     <meta name="keywords" content="traxzion, Cochabamba, TRAXZION" />
     <meta name="author" content="TRAXZION Cochabamba" />
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-    <meta name="googlebot" content="index, follow" />
-    <meta name="bingbot" content="index, follow" />
+    <meta name="robots" content="index, follow" />
     <meta name="google" content="notranslate" />
-    <meta name="googlebot" content="notranslate" />
-    <meta http-equiv="Content-Language" content="es-BO" />
     <meta property="og:title" content="TRAXZION COCHABAMBA" />
     <meta property="og:description" content="TRAXZION Cochabamba" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="TRAXZION" />
     <meta property="og:locale" content="es_BO" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="TRAXZION COCHABAMBA" />
-    <meta name="twitter:description" content="TRAXZION Cochabamba" />
-    <link rel="alternate" hreflang="es" href="https://www.traxzion.com" />
-    <link rel="alternate" hreflang="es-BO" href="https://www.traxzion.com" />
-    <link rel="alternate" hreflang="x-default" href="https://www.traxzion.com" />
     <link rel="canonical" href="https://www.traxzion.com" />
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet" />
+
     <style>
       /* ===== RESET Y BASE ===== */
       * {
@@ -37,22 +28,16 @@
         box-sizing: border-box;
       }
 
-      html:not(.hydrated) body {
-        visibility: hidden;
-      }
-
       body {
         margin: 0;
         padding: 0;
         font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
         background-color: #ffffff;
         color: #000000;
-      }
-
-      #root {
         min-height: 100vh;
         display: flex;
-        flex-direction: column;
+        align-items: center;
+        justify-content: center;
       }
 
       .notranslate,
@@ -63,42 +48,23 @@
         translate: none !important;
       }
 
-      /* ===== LOADING ===== */
-      .loading {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
+      /* ===== MAIN CONTAINER ===== */
+      .container {
         text-align: center;
-        padding: 20px;
-        background: #ffffff;
-      }
-
-      .spinner {
-        width: 50px;
-        height: 50px;
-        border: 5px solid rgba(201, 163, 0, 0.15);
-        border-top-color: #C9A300;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin-bottom: 20px;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
+        padding: 40px 20px;
+        max-width: 800px;
+        margin: 0 auto;
       }
 
       /* ===== LOGO ===== */
       .logo {
         font-weight: 900;
-        font-size: 3.5rem;
-        letter-spacing: 3px;
+        font-size: 4.5rem;
+        letter-spacing: 4px;
         text-transform: uppercase;
         color: #000000;
-        margin-bottom: 8px;
+        margin-bottom: 4px;
+        line-height: 1;
       }
 
       .logo span {
@@ -107,182 +73,227 @@
 
       .logo-sub {
         font-weight: 400;
-        font-size: 1.2rem;
+        font-size: 1.4rem;
         color: #C9A300;
-        letter-spacing: 6px;
+        letter-spacing: 8px;
         text-transform: uppercase;
-        margin-top: -4px;
+        margin-top: -2px;
+        margin-bottom: 40px;
       }
 
-      /* ===== TEXTO ===== */
-      .texto {
-        color: #000000;
-      }
-
-      .texto-gold {
-        color: #C9A300;
-      }
-
-      /* ===== SEO CONTENT (oculto) ===== */
-      .seo-content {
-        position: absolute;
-        opacity: 0;
-        height: 0;
-        overflow: hidden;
-      }
-
-      .seo-content h1 {
-        color: #C9A300;
-        font-size: 2.5rem;
-        margin-bottom: 10px;
-      }
-
-      .seo-content p {
-        font-size: 1.1rem;
-        line-height: 1.6;
-        margin-bottom: 15px;
-      }
-
-      .seo-content strong {
-        color: #C9A300;
-      }
-
-      /* ===== ERROR ===== */
-      .error-container {
-        padding: 40px 20px;
-        text-align: center;
-        max-width: 600px;
-        margin: 0 auto;
-        background: #ffffff;
-      }
-
-      .error-container h1 {
-        color: #000000;
-        font-size: 2.5rem;
-        margin-bottom: 20px;
-      }
-
-      .error-container h1 span {
-        color: #C9A300;
-      }
-
-      .error-container p {
-        font-size: 1.2rem;
-        color: #333;
-        margin-bottom: 20px;
-      }
-
-      .error-container .sub {
-        color: #666;
-      }
-
-      .btn-reload {
+      /* ===== DIVIDER ===== */
+      .divider {
+        width: 80px;
+        height: 3px;
         background: #C9A300;
-        color: #000000;
-        border: none;
-        padding: 12px 30px;
-        font-size: 1rem;
+        margin: 0 auto 40px auto;
+        border-radius: 2px;
+      }
+
+      /* ===== TITLE ===== */
+      .title {
+        font-size: 2rem;
         font-weight: 700;
-        border-radius: 8px;
-        cursor: pointer;
-        margin-top: 20px;
+        color: #000000;
+        margin-bottom: 16px;
+      }
+
+      .title span {
+        color: #C9A300;
+      }
+
+      /* ===== DESCRIPTION ===== */
+      .description {
+        font-size: 1.1rem;
+        color: #555555;
+        line-height: 1.8;
+        max-width: 600px;
+        margin: 0 auto 32px auto;
+      }
+
+      /* ===== FEATURES ===== */
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 16px;
+        margin: 32px 0 40px 0;
+      }
+
+      .feature-item {
+        background: #f8f6f0;
+        padding: 20px 16px;
+        border-radius: 12px;
+        border: 1px solid #e8e2d0;
         transition: all 0.3s ease;
       }
 
-      .btn-reload:hover {
+      .feature-item:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 30px -10px rgba(201, 163, 0, 0.25);
+        border-color: #C9A300;
+      }
+
+      .feature-item .icon {
+        font-size: 1.8rem;
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .feature-item .label {
+        font-weight: 600;
+        color: #000000;
+        font-size: 0.95rem;
+      }
+
+      .feature-item .desc {
+        font-size: 0.8rem;
+        color: #777777;
+        margin-top: 4px;
+      }
+
+      /* ===== BUTTON ===== */
+      .btn {
+        display: inline-block;
+        background: #C9A300;
+        color: #000000;
+        border: none;
+        padding: 14px 48px;
+        font-size: 1rem;
+        font-weight: 700;
+        border-radius: 50px;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+
+      .btn:hover {
         background: #B89500;
         transform: scale(1.05);
+        box-shadow: 0 8px 30px rgba(201, 163, 0, 0.35);
+      }
+
+      /* ===== FOOTER ===== */
+      .footer {
+        margin-top: 50px;
+        font-size: 0.85rem;
+        color: #aaaaaa;
+        letter-spacing: 1px;
+      }
+
+      .footer a {
+        color: #C9A300;
+        text-decoration: none;
+      }
+
+      .footer a:hover {
+        text-decoration: underline;
       }
 
       /* ===== RESPONSIVE ===== */
       @media (max-width: 640px) {
         .logo {
-          font-size: 2.4rem;
+          font-size: 2.8rem;
+          letter-spacing: 2px;
         }
         .logo-sub {
-          font-size: 0.9rem;
+          font-size: 1rem;
           letter-spacing: 4px;
+        }
+        .title {
+          font-size: 1.5rem;
+        }
+        .features {
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+        .feature-item {
+          padding: 16px 12px;
+        }
+        .btn {
+          padding: 12px 32px;
+          font-size: 0.9rem;
+        }
+      }
+
+      @media (max-width: 400px) {
+        .features {
+          grid-template-columns: 1fr;
+        }
+        .logo {
+          font-size: 2.2rem;
         }
       }
     </style>
   </head>
 
   <body class="notranslate">
-    <!-- ===== SEO CONTENT ===== -->
-    <div class="seo-content" aria-hidden="true">
-      <h1>TRAXZION COCHABAMBA</h1>
-      <p>Bienvenido a <strong>TRAXZION COCHABAMBA</strong>.</p>
-      <h2>TRAXZION en Cochabamba</h2>
-      <p>En <strong>TRAXZION</strong> encontrarás lo que necesitas.</p>
-      <h3>¿Por qué elegir TRAXZION COCHABAMBA?</h3>
-      <p>1. <strong>Calidad</strong> - Excelencia en todo lo que hacemos</p>
-      <p>2. <strong>Atención personalizada</strong> - Asesoramiento profesional</p>
-      <p>3. <strong>Variedad</strong> - Amplia gama de opciones</p>
-      <p>4. <strong>Envíos a toda Bolivia</strong> - Llevamos nuestra calidad a tu hogar</p>
-      <p>5. <strong>Precios competitivos</strong> - La mejor relación calidad-precio del mercado</p>
-      <h2>Encuéntranos en Cochabamba</h2>
-      <p>TRAXZION está estratégicamente ubicado en Cochabamba para tu conveniencia. Somos la <strong>referencia</strong> para quienes buscan calidad y asesoramiento experto.</p>
-      <p>Visítanos hoy mismo y descubre por qué somos considerados la <strong>mejor opción en Cochabamba</strong>. ¡TRAXZION!</p>
-      <p><strong>Palabras clave relacionadas:</strong> Cochabamba, TRAXZION.</p>
-    </div>
+    <div class="container">
+      <!-- LOGO -->
+      <div class="logo">TRAX<span>ZION</span></div>
+      <div class="logo-sub">Cochabamba</div>
 
-    <!-- ===== ROOT ===== -->
-    <div id="root">
-      <div class="loading">
-        <div class="spinner"></div>
-        <div class="logo">TRAX<span>ZION</span></div>
-        <div class="logo-sub">Cochabamba</div>
-        <h2 class="texto" style="margin-top: 24px; font-weight: 600; font-size: 1.4rem;">Cargando...</h2>
-        <p class="texto" style="color: #666; margin-top: 8px;">Por favor espera mientras cargamos la aplicación.</p>
+      <div class="divider"></div>
+
+      <!-- TITLE -->
+      <h1 class="title">Bienvenido a <span>TRAXZION</span></h1>
+
+      <!-- DESCRIPTION -->
+      <p class="description">
+        Somos una empresa comprometida con la excelencia y la calidad.
+        Ubicados en Cochabamba, Bolivia, ofrecemos soluciones que marcan la diferencia.
+      </p>
+
+      <!-- FEATURES -->
+      <div class="features">
+        <div class="feature-item">
+          <span class="icon">⭐</span>
+          <div class="label">Calidad</div>
+          <div class="desc">Estándares de excelencia</div>
+        </div>
+        <div class="feature-item">
+          <span class="icon">🤝</span>
+          <div class="label">Atención</div>
+          <div class="desc">Asesoramiento personalizado</div>
+        </div>
+        <div class="feature-item">
+          <span class="icon">🚚</span>
+          <div class="label">Envíos</div>
+          <div class="desc">A toda Bolivia</div>
+        </div>
+        <div class="feature-item">
+          <span class="icon">💰</span>
+          <div class="label">Precios</div>
+          <div class="desc">La mejor relación calidad-precio</div>
+        </div>
+      </div>
+
+      <!-- BUTTON -->
+      <a href="#" class="btn">Contáctanos</a>
+
+      <!-- FOOTER -->
+      <div class="footer">
+        &copy; 2026 TRAXZION Cochabamba &bull; <a href="tel:+59177918672">+591 77918672</a>
       </div>
     </div>
 
-    <!-- ===== SCRIPTS ===== -->
     <script>
-      document.documentElement.classList.add("hydrated");
+      // ===== DESHABILITAR TRADUCCIÓN AUTOMÁTICA =====
+      document.documentElement.setAttribute("translate", "no");
+      document.documentElement.setAttribute("lang", "es-BO");
+      document.body.classList.add("notranslate");
 
-      document.addEventListener("DOMContentLoaded", function () {
-        document.body.classList.add("notranslate");
-        document.documentElement.setAttribute("translate", "no");
-        document.documentElement.setAttribute("lang", "es-BO");
-
-        if (window.chrome && chrome.runtime) {
-          document.documentElement.setAttribute("data-lt-installed", "true");
-        }
-      });
-
-      // Deshabilitar traducción automática
       Object.defineProperty(window, "TRANS", {
         value: null,
         writable: false,
         configurable: false,
       });
 
-      // Manejo de errores
-      window.addEventListener("error", function (e) {
-        console.error("Error global capturado:", e.error);
+      // ===== TÍTULO DINÁMICO =====
+      document.title = "TRAXZION COCHABAMBA";
 
-        const root = document.getElementById("root");
-        if (root.innerHTML === "" || root.innerHTML.includes("loading")) {
-          root.innerHTML = `
-            <div class="error-container">
-              <h1>TRAX<span>ZION</span></h1>
-              <p>Error al cargar la aplicación.</p>
-              <p class="sub">Por favor, recarga la página o contáctanos directamente al <strong>+591 77918672</strong></p>
-              <button class="btn-reload" onclick="location.reload()">Recargar página</button>
-            </div>
-          `;
-        }
-      });
-
-      window.addEventListener("load", function () {
-        document.title = "TRAXZION COCHABAMBA";
-
-        const metaDesc = document.querySelector('meta[name="description"]');
-        if (metaDesc) {
-          metaDesc.content = "TRAXZION COCHABAMBA";
-        }
-      });
+      console.log("🚀 TRAXZION COCHABAMBA - Cargado correctamente");
     </script>
   </body>
 </html>
