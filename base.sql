@@ -251,10 +251,7 @@ CREATE TABLE transferencias_caja (
     idusuario_aprobador INTEGER REFERENCES usuarios(idusuario),
     fecha_solicitud TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('America/La_Paz', NOW()),
     fecha_resolucion TIMESTAMP WITH TIME ZONE,
-    observacion TEXT,
-    -- NUEVAS COLUMNAS PARA RASTREAR MOVIMIENTOS
-    idmovimiento_egreso INTEGER REFERENCES movimiento_caja(idmovimiento_caja),
-    idmovimiento_reversion INTEGER REFERENCES movimiento_caja(idmovimiento_caja)
+    observacion TEXT
 );
 
 -- ============================================
@@ -272,8 +269,6 @@ CREATE INDEX idx_transferencias_estado ON transferencias_caja(estado);
 CREATE INDEX idx_transferencias_tipo ON transferencias_caja(tipo);
 CREATE INDEX idx_transferencias_solicitante ON transferencias_caja(idusuario_solicitante);
 CREATE INDEX idx_transferencias_aprobador ON transferencias_caja(idusuario_aprobador);
-CREATE INDEX idx_transferencias_movimiento_egreso ON transferencias_caja(idmovimiento_egreso);
-CREATE INDEX idx_transferencias_movimiento_reversion ON transferencias_caja(idmovimiento_reversion);
 CREATE INDEX idx_ventas_fecha ON ventas(fecha_hora);
 CREATE INDEX idx_ventas_usuario ON ventas(idusuario);
 CREATE INDEX idx_ventas_cliente ON ventas(idcliente);
