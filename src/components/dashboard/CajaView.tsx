@@ -20,7 +20,7 @@ import {
 import { RegistraMovimientoView } from "./RegistraMovimientoView";
 
 // Función para obtener la fecha actual en Bolivia (GMT-4)
-const getFechaBolivia = () => {
+export const getFechaBolivia = () => {
   const now = new Date();
   const boliviaOffset = -4 * 60;
   const localOffset = now.getTimezoneOffset();

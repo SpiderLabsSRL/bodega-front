@@ -41,6 +41,13 @@ export interface CrearTransferenciaResponse {
   idmovimiento_egreso: number;
 }
 
+export interface GetTransferenciasParams {
+  idusuario?: number;
+  fecha?: string;
+  fechaInicio?: string;
+  fechaFin?: string;
+}
+
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -49,12 +56,11 @@ const api = axios.create({
   },
 });
 
-export const getTransferencias = async (userId: number, userRole: string): Promise<Transferencia[]> => {
+export const getTransferencias = async (params: GetTransferenciasParams): Promise<Transferencia[]> => {
   try {
     const response = await api.get<Transferencia[]>("/transferencias", {
       params: {
-        userId,
-        userRole
+        ...params
       }
     });
     return response.data.map(t => ({

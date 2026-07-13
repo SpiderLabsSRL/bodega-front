@@ -3,9 +3,10 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { CheckCircle, XCircle, Loader2, User, Users, DollarSign, Building2, RefreshCw, Clock, AlertCircle } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, User, Users, DollarSign, Building2, RefreshCw, Clock, AlertCircle, CalendarIcon, CalendarRangeIcon, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,12 +14,18 @@ import {
   getTransferencias, 
   aprobarTransferencia, 
   rechazarTransferencia,
-  Transferencia 
+  Transferencia, 
+  GetTransferenciasParams
 } from "@/api/TransferenciaApi";
-import { formatDateForDisplay, formatTimeForDisplay } from "./CajaView";
+import { formatDateForDisplay, formatTimeForDisplay, getFechaBolivia } from "./CajaView";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Calendar } from "../ui/calendar";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { getUsuariosCaja } from "@/api/CajaApi";
 
 // Función para obtener el usuario del localStorage
-const getCurrentUser = (): { idusuario: number; rol: string; nombres: string; apellidos: string } | null => {
+const getCurrentUser = (): { idusuario: number; rol: string; nombres: string; apellidos: string; usuario: string } | null => {
   try {
     const userStr = localStorage.getItem("user");
     if (!userStr) return null;
@@ -27,7 +34,8 @@ const getCurrentUser = (): { idusuario: number; rol: string; nombres: string; ap
       idusuario: user.idUsuario || user.idusuario || 0,
       rol: user.rol || "asistente",
       nombres: user.nombres || "",
-      apellidos: user.apellidos || ""
+      apellidos: user.apellidos || "",
+      usuario: user.usuario
     };
   } catch (error) {
     console.error("Error getting current user:", error);
@@ -39,6 +47,9 @@ export function TransferenciasView() {
   const { toast } = useToast();
   const currentUser = getCurrentUser();
   const userRole = currentUser?.rol?.toLowerCase() || "asistente";
+  const currentUserName = currentUser?.nombres && currentUser?.apellidos 
+    ? `${currentUser.nombres} ${currentUser.apellidos}` 
+    : currentUser?.usuario || "Usuario";
   const userId = currentUser?.idusuario || 0;
   const isAdmin = userRole === "admin";
   const isAssistant = userRole === "asistente";
@@ -47,6 +58,20 @@ export function TransferenciasView() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [motivoRechazoInput, setMotivoRechazoInput] = useState<string>("");
+
+  const [filtroEmpleado, setFiltroEmpleado] = useState("Todos");
+  const [empleadosOptions, setEmpleadosOptions] = useState<{ value: string; label: string }[]>([]);
+  const [mostrarCalendario, setMostrarCalendario] = useState(false);
+  const [fechaBusqueda, setFechaBusqueda] = useState<Date | undefined>();
+  const [mostrarRango, setMostrarRango] = useState(false);
+  const [fechaRangoAplicado, setFechaRangoAplicado] = useState<{ from: Date | undefined; to: Date | undefined }>({
+      from: undefined,
+      to: undefined,
+    });
+  const [fechaRangoTemp, setFechaRangoTemp] = useState<{ from: Date | undefined; to: Date | undefined }>({
+      from: undefined,
+      to: undefined,
+    });
   
   // Estados para los totales (solo frontend)
   const [totalTransferenciasEfectivo, setTotalTransferenciasEfectivo] = useState<number>(0);
@@ -65,12 +90,111 @@ export function TransferenciasView() {
         variant: "destructive",
       });
     }
+  }, [userId, filtroEmpleado, fechaBusqueda, fechaRangoAplicado]);
+
+  useEffect(() => {
+    cargarUsuarios();
   }, [userId]);
+
+  const cargarUsuarios = async () => {
+    try {
+      const usuarios = await getUsuariosCaja();
+      const opcionesUsuarios = usuarios.map(usuario => ({
+        value: usuario.idusuario.toString(),
+        label: usuario.empleado_nombre
+      }));
+      
+      if (isAssistant) {
+        // Para asistente, solo mostrar su propio usuario
+        const usuarioActual = usuarios.find(u => 
+          u.empleado_nombre === currentUserName || 
+          u.idusuario === currentUser?.idusuario
+        );
+        
+        if (usuarioActual) {
+          const opcionesFiltradas = [{ 
+            value: usuarioActual.idusuario.toString(), 
+            label: usuarioActual.empleado_nombre 
+          }];
+          setEmpleadosOptions(opcionesFiltradas);
+          setFiltroEmpleado(usuarioActual.idusuario.toString());
+        } else {
+          // Si no encuentra el usuario, usar el ID del usuario actual
+          const opcionesFiltradas = [{ 
+            value: currentUser?.idusuario?.toString() || "1", 
+            label: currentUserName 
+          }];
+          setEmpleadosOptions(opcionesFiltradas);
+          setFiltroEmpleado(currentUser?.idusuario?.toString() || "1");
+        }
+      } else {
+        // Para admin, mostrar todos los usuarios
+        const opcionesCompletas = [
+          { value: "Todos", label: "Todos" }, 
+          ...opcionesUsuarios
+        ];
+        setEmpleadosOptions(opcionesCompletas);
+        setFiltroEmpleado("Todos");
+      }
+    } catch (usuariosError) {
+      console.error("Error cargando usuarios:", usuariosError);
+      if (isAssistant) {
+        const opcionesFiltradas = [{ 
+          value: currentUser?.idusuario?.toString() || "1", 
+          label: currentUserName 
+        }];
+        setEmpleadosOptions(opcionesFiltradas);
+        setFiltroEmpleado(currentUser?.idusuario?.toString() || "1");
+      } else {
+        setEmpleadosOptions([{ value: "Todos", label: "Todos" }]);
+        setFiltroEmpleado("Todos");
+      }
+    }
+  }
 
   const cargarTransferencias = async () => {
     setLoading(true);
     try {
-      const data = await getTransferencias(userId, userRole);
+      const params: GetTransferenciasParams = {};
+
+      if (isAssistant) {
+        const userId = currentUser?.idusuario;
+        if (userId) {
+          params.idusuario = userId;
+        } else {
+          const usuario = empleadosOptions.find(u => u.label === currentUserName);
+          if (usuario && usuario.value !== "Todos") {
+            params.idusuario = parseInt(usuario.value);
+          }
+        }
+      } else if (isAdmin && filtroEmpleado !== "Todos") {
+        params.idusuario = parseInt(filtroEmpleado);
+      }
+      
+      if (fechaBusqueda) {
+        params.fecha = format(fechaBusqueda, "yyyy-MM-dd");
+      } 
+
+      if (fechaRangoAplicado.from && fechaRangoAplicado.to) {
+        params.fechaInicio = format(fechaRangoAplicado.from, "yyyy-MM-dd");
+        params.fechaFin = format(fechaRangoAplicado.to, "yyyy-MM-dd");
+        delete params.fecha;
+      } else {
+        if (!fechaBusqueda){
+          const hoy = new Date();
+          
+          const diaSemana = hoy.getDay();
+          const diferencia = diaSemana === 0 ? 6 : diaSemana - 1;
+          const lunes = new Date(hoy);
+          lunes.setDate(hoy.getDate() - diferencia);
+          
+          params.fechaInicio = format(lunes, "yyyy-MM-dd");
+          params.fechaFin = format(hoy, "yyyy-MM-dd");
+          delete params.fecha;
+        }
+      }
+
+      const data = await getTransferencias(params);
       setTransferencias(data);
       
       // Calcular totales (solo frontend)
@@ -232,6 +356,54 @@ export function TransferenciasView() {
     }
   };
 
+  const handleFechaBusquedaChange = async (date: Date | undefined) => {
+    if (date) {
+      setFechaBusqueda(date);
+      setFechaRangoAplicado({ from: undefined, to: undefined });
+      setFechaRangoTemp({ from: undefined, to: undefined });
+      setMostrarCalendario(false);
+    }
+  };
+
+  const handleRangoTempChange = (range: { from: Date | undefined; to: Date | undefined }) => {
+    setFechaRangoTemp(range);
+  };
+
+  const cancelarRangoFechas = () => {
+    setFechaRangoTemp({
+      from: fechaRangoAplicado.from,
+      to: fechaRangoAplicado.to
+    });
+    setMostrarRango(false);
+  };
+
+  const aplicarRangoFechas = async () => {
+    if (fechaRangoTemp.from && fechaRangoTemp.to) {
+      setFechaRangoAplicado({
+        from: fechaRangoTemp.from,
+        to: fechaRangoTemp.to
+      });
+      setFechaBusqueda(undefined);
+      setMostrarRango(false);
+    }
+  };
+
+  const limpiarFiltros = () => {
+    setFechaBusqueda(undefined);
+    setFechaRangoTemp({ from: undefined, to: undefined });
+    setFechaRangoAplicado({ from: undefined, to: undefined });
+    if (isAssistant) {
+      const usuarioActual = empleadosOptions.find(u => u.label === currentUserName);
+      if (usuarioActual) {
+        setFiltroEmpleado(usuarioActual.value);
+      } else {
+        setFiltroEmpleado(currentUser?.idusuario?.toString() || "1");
+      }
+    } else {
+      setFiltroEmpleado("Todos");
+    }
+  };
+
   // Filtrar transferencias según el rol
   const transferenciasFiltradas = isAssistant 
     ? transferencias
@@ -334,6 +506,133 @@ export function TransferenciasView() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            {/* Para Admin: Selector de empleados */}
+            {isAdmin && (
+              <div>
+                <label className="text-sm font-medium">Empleado</label>
+                <Select value={filtroEmpleado} onValueChange={setFiltroEmpleado}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar empleado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empleadosOptions.map(empleado => (
+                      <SelectItem key={empleado.value} value={empleado.value}>
+                        {empleado.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div>
+              <label className="text-sm font-medium">Fecha Específica</label>
+              <Popover open={mostrarCalendario} onOpenChange={setMostrarCalendario}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {fechaBusqueda ? format(fechaBusqueda, "dd/MM/yyyy", { locale: es }) : "Seleccionar"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={fechaBusqueda}
+                    onSelect={handleFechaBusquedaChange}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                    disabled={(date) => date > new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Rango de Fechas</label>
+              <Popover open={mostrarRango} onOpenChange={setMostrarRango}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarRangeIcon className="mr-2 h-4 w-4" />
+                    {fechaRangoAplicado.from && fechaRangoAplicado.to ? 
+                      `${format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - ${format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}` : 
+                      "Seleccionar rango"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="flex flex-col">
+                    <Calendar
+                      mode="range"
+                      selected={fechaRangoTemp}
+                      onSelect={handleRangoTempChange}
+                      numberOfMonths={1}
+                      className="p-3 pointer-events-auto"
+                      disabled={(date) => date > new Date()}
+                    />
+                    <div className="flex justify-end gap-2 p-3 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={cancelarRangoFechas}
+                        disabled={!fechaRangoTemp.from && !fechaRangoTemp.to}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Cancelar
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={aplicarRangoFechas}
+                        disabled={!fechaRangoTemp.from || !fechaRangoTemp.to}
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        Aplicar
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="flex items-end">
+              <Button variant="outline" onClick={limpiarFiltros} className="w-full">
+                Limpiar Filtros
+              </Button>
+            </div>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t">
+            <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
+              <span>Filtros activos:</span>
+              {fechaBusqueda && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Fecha: {format(fechaBusqueda, "dd/MM/yyyy", { locale: es })}
+                </span>
+              )}
+              {fechaRangoAplicado.from && fechaRangoAplicado.to && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Rango: {format(fechaRangoAplicado.from, "dd/MM/yyyy", { locale: es })} - {format(fechaRangoAplicado.to, "dd/MM/yyyy", { locale: es })}
+                </span>
+              )}
+              {isAdmin && filtroEmpleado !== "Todos" && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Empleado: {empleadosOptions.find(e => e.value === filtroEmpleado)?.label || filtroEmpleado}
+                </span>
+              )}
+              {isAdmin && filtroEmpleado === "Todos" && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                  Empleado: Todos
+                </span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
