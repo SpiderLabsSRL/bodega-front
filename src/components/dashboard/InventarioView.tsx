@@ -5,9 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Eye, Filter, RefreshCw, X, Warehouse, DollarSign, TrendingUp } from "lucide-react";
+import { Search, Eye, Filter, RefreshCw, X, Warehouse, DollarSign, TrendingUp, Package } from "lucide-react";
 import { DashboardView } from "@/pages/Dashboard";
-import { getInventory, getLowMarginCount, InventoryItem, getCategories, Category, getSucursales, SucursalOption, BodegaStock } from "@/api/InventoryApi";
+import { getInventory, getLowMarginCount, InventoryItem, getCategories, Category, getSucursales, SucursalOption } from "@/api/InventoryApi";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -29,6 +29,25 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
   const [error, setError] = useState<string | null>(null);
   const [totalInvertido, setTotalInvertido] = useState(0);
   const [totalGanancia, setTotalGanancia] = useState(0);
+  
+  // Estado para detectar si es móvil
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    // Función para verificar si es móvil
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    // Verificar al cargar
+    checkMobile();
+    
+    // Escuchar cambios de tamaño
+    window.addEventListener('resize', checkMobile);
+    
+    // Limpiar event listener
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     sessionStorage.removeItem('searchProductId');
@@ -121,17 +140,13 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
   };
 
   const handleViewProduct = (item: InventoryItem) => {
-    // Guardar en sessionStorage el ID y nombre del producto
     sessionStorage.setItem('searchProductId', item.id);
     sessionStorage.setItem('searchProductName', item.nombre);
     
-    // IMPORTANTE: Guardar la bodega seleccionada actualmente
     if (selectedSucursal) {
       sessionStorage.setItem('searchBodegaId', selectedSucursal.toString());
     } else {
-      // Si no hay bodega seleccionada, intentar obtener la bodega del producto
       if (item.bodegasStock && item.bodegasStock.length > 0) {
-        // Si el producto está en varias bodegas, usar la primera
         sessionStorage.setItem('searchBodegaId', item.bodegasStock[0].idbodega.toString());
       } else if (item.idbodega) {
         sessionStorage.setItem('searchBodegaId', item.idbodega.toString());
@@ -149,16 +164,126 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
     }
   };
 
-  // Formatear número como moneda
   const formatCurrency = (value: number) => {
     return `Bs. ${value.toFixed(2)}`;
   };
 
-  // Obtener el color del stock según el mínimo
   const getStockColor = (stock: number, stockMinimo: number) => {
     if (stock <= stockMinimo) return 'text-red-600';
     if (stock <= stockMinimo * 2) return 'text-yellow-600';
     return 'text-green-600';
+  };
+
+  // Renderizado de tarjeta para móvil
+  const renderMobileCard = (item: InventoryItem) => {
+    return (
+      <Card 
+        key={item.id} 
+        className="mb-3 cursor-pointer hover:shadow-md transition-shadow"
+        onClick={() => handleViewProduct(item)}
+      >
+        <CardContent className="p-4">
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-base truncate">{item.nombre}</h3>
+              <p className="text-xs text-muted-foreground font-mono">{item.codigo}</p>
+            </div>
+            <div className="flex gap-1 ml-2 flex-shrink-0 flex-wrap justify-end">
+              {item.cantidad <= item.stockMinimo && (
+                <Badge variant="destructive" className="text-xs">
+                  Stock mínimo
+                </Badge>
+              )}
+              {!selectedSucursal && item.bodegasStock && item.bodegasStock.length > 1 && (
+                <Badge variant="outline" className="text-xs">
+                  {item.bodegasStock.length} bodegas
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {/* Stock por bodega */}
+            <div className="col-span-2 bg-muted/30 rounded-md p-2">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                <Package className="h-3 w-3" />
+                <span>Stock por bodega</span>
+              </div>
+              {selectedSucursal ? (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">
+                    Stock: <span className={`font-semibold ${getStockColor(item.cantidad, item.stockMinimo)}`}>
+                      {item.cantidad}
+                    </span>
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    Mínimo: {item.stockMinimo}
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {item.bodegasStock && item.bodegasStock.length > 0 ? (
+                    item.bodegasStock.map((bs) => (
+                      <div key={bs.idbodega} className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">{bs.bodegaNombre}</span>
+                        <span className={`font-semibold ${getStockColor(bs.stock, bs.stockMinimo)}`}>
+                          {bs.stock}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Sin stock en bodegas</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Precios */}
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-md p-2">
+              <p className="text-xs text-muted-foreground">Precio Compra</p>
+              <p className="font-semibold text-blue-600">{formatCurrency(item.precioCompra)}</p>
+            </div>
+            <div className="bg-green-50 dark:bg-green-950/30 rounded-md p-2">
+              <p className="text-xs text-muted-foreground">Precio Venta</p>
+              <p className="font-semibold">{formatCurrency(item.precioVenta)}</p>
+            </div>
+
+            {/* Totales */}
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-md p-2">
+              <p className="text-xs text-muted-foreground">Total Invertido</p>
+              <p className="font-semibold text-blue-600">{formatCurrency(item.totalInvertido)}</p>
+            </div>
+            <div className={`rounded-md p-2 ${
+              item.totalGanancia >= 0 
+                ? 'bg-green-50 dark:bg-green-950/30' 
+                : 'bg-red-50 dark:bg-red-950/30'
+            }`}>
+              <p className="text-xs text-muted-foreground">Total Ganancia</p>
+              <p className={`font-semibold ${
+                item.totalGanancia >= 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {formatCurrency(item.totalGanancia)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleViewProduct(item);
+              }}
+              className="h-8"
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              Ver detalles
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   if (error) {
@@ -180,19 +305,11 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
     );
   }
 
-  // Obtener los nombres de las bodegas para las cabeceras
-  const getBodegaNames = () => {
-    if (selectedSucursal) return [];
-    const names = new Set<string>();
-    inventoryData.forEach(item => {
-      item.bodegasStock.forEach(bs => {
-        names.add(bs.bodegaNombre);
-      });
-    });
-    return Array.from(names);
-  };
-
-  const bodegaNames = getBodegaNames();
+  const bodegaNames = selectedSucursal 
+    ? [] 
+    : Array.from(new Set(inventoryData.flatMap(item => 
+        item.bodegasStock?.map(bs => bs.bodegaNombre) || []
+      )));
 
   return (
     <div className="space-y-6">
@@ -209,7 +326,6 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
             />
           </div>
           
-          {/* Filtro de Sucursal */}
           <select
             className="h-9 px-3 border rounded-md bg-background text-sm"
             value={selectedSucursal || ""}
@@ -223,7 +339,6 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
             ))}
           </select>
 
-          {/* Filtro de Categorías */}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-9">
@@ -276,7 +391,6 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
               Limpiar
             </Button>
           )}
-          
         </div>
       </div>
 
@@ -323,7 +437,7 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
         </Card>
       </div>
 
-      {/* Tabla de inventario */}
+      {/* Tabla de inventario - Condicional para móvil/escritorio */}
       <Card>
         <CardHeader>
           <CardTitle>
@@ -332,51 +446,51 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="px-4 py-3 min-w-[150px]">Producto</TableHead>
-                  <TableHead className="px-4 py-3 min-w-[100px]">Código</TableHead>
-                  {selectedSucursal ? (
-                    <>
-                      <TableHead className="px-4 py-3 text-center min-w-[80px]">Stock</TableHead>
-                      <TableHead className="px-4 py-3 text-center min-w-[80px]">Stock Mínimo</TableHead>
-                    </>
-                  ) : (
-                    bodegaNames.map((nombre) => (
-                      <TableHead key={nombre} className="px-4 py-3 text-center min-w-[80px]">
-                        {nombre}
-                      </TableHead>
-                    ))
-                  )}
-                  <TableHead className="px-4 py-3 text-right min-w-[100px]">Precio Compra</TableHead>
-                  <TableHead className="px-4 py-3 text-right min-w-[100px]">Precio Venta</TableHead>
-                  <TableHead className="px-4 py-3 text-right min-w-[120px]">Total Invertido</TableHead>
-                  <TableHead className="px-4 py-3 text-right min-w-[120px]">Total Ganancia</TableHead>
-                  <TableHead className="px-4 py-3 text-center min-w-[60px]">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin" />
+            </div>
+          ) : inventoryData.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {showLowMarginOnly 
+                ? "No hay productos con margen bajo" 
+                : "No se encontraron productos"
+              }
+            </div>
+          ) : isMobile ? (
+            // Vista móvil - Tarjetas
+            <div className="space-y-3">
+              {inventoryData.map((item) => renderMobileCard(item))}
+            </div>
+          ) : (
+            // Vista escritorio - Tabla
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8">
-                      <div className="flex justify-center">
-                        <RefreshCw className="h-6 w-6 animate-spin" />
-                      </div>
-                    </TableCell>
+                    <TableHead className="px-4 py-3 min-w-[150px]">Producto</TableHead>
+                    <TableHead className="px-4 py-3 min-w-[100px]">Código</TableHead>
+                    {selectedSucursal ? (
+                      <>
+                        <TableHead className="px-4 py-3 text-center min-w-[80px]">Stock</TableHead>
+                        <TableHead className="px-4 py-3 text-center min-w-[80px]">Stock Mínimo</TableHead>
+                      </>
+                    ) : (
+                      bodegaNames.map((nombre) => (
+                        <TableHead key={nombre} className="px-4 py-3 text-center min-w-[80px]">
+                          {nombre}
+                        </TableHead>
+                      ))
+                    )}
+                    <TableHead className="px-4 py-3 text-right min-w-[100px]">Precio Compra</TableHead>
+                    <TableHead className="px-4 py-3 text-right min-w-[100px]">Precio Venta</TableHead>
+                    <TableHead className="px-4 py-3 text-right min-w-[120px]">Total Invertido</TableHead>
+                    <TableHead className="px-4 py-3 text-right min-w-[120px]">Total Ganancia</TableHead>
+                    <TableHead className="px-4 py-3 text-center min-w-[60px]">Acciones</TableHead>
                   </TableRow>
-                ) : inventoryData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                      {showLowMarginOnly 
-                        ? "No hay productos con margen bajo" 
-                        : "No se encontraron productos"
-                      }
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  inventoryData.map((item) => (
+                </TableHeader>
+                <TableBody>
+                  {inventoryData.map((item) => (
                     <TableRow 
                       key={item.id} 
                       className="border-b transition-colors hover:bg-muted/50 cursor-pointer"
@@ -390,7 +504,7 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
                               Stock mínimo
                             </Badge>
                           )}
-                          {!selectedSucursal && item.bodegasStock.length > 1 && (
+                          {!selectedSucursal && item.bodegasStock && item.bodegasStock.length > 1 && (
                             <Badge variant="outline" className="text-xs mt-1 ml-1">
                               {item.bodegasStock.length} bodegas
                             </Badge>
@@ -413,7 +527,7 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
                         </>
                       ) : (
                         bodegaNames.map((nombre) => {
-                          const bodegaStock = item.bodegasStock.find(bs => bs.bodegaNombre === nombre);
+                          const bodegaStock = item.bodegasStock?.find(bs => bs.bodegaNombre === nombre);
                           return (
                             <TableCell key={nombre} className="px-4 py-3 text-center">
                               {bodegaStock ? (
@@ -459,11 +573,11 @@ export const InventarioView = ({ onViewChange }: InventarioViewProps) => {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
