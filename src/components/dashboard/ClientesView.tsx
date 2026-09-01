@@ -365,7 +365,7 @@ export function ClientesView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="carnet">
-                  Carnet <span className="text-red-500">*</span>
+                  Carnet
                 </Label>
                 <Input
                   id="carnet"
@@ -378,7 +378,7 @@ export function ClientesView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="celular">
-                  Celular <span className="text-red-500">*</span>
+                  Celular 
                 </Label>
                 <Input
                   id="celular"

@@ -41,16 +41,16 @@ const menuItems = [
     title: "Vender",
     url: "vender",
     icon: ShoppingCart,
-    roles: ["asistente"],
+    roles: ["admin", "asistente"],
   },
   {
     title: "Productos",
     url: "productos",
     icon: Package,
-    roles: ["asistente"],
+    roles: ["asistente"], // CAMBIADO: ahora también admin
   },
   { 
-    title: "Bodega", 
+    title: "Almacén", 
     url: "bodega", 
     icon: Warehouse, 
     roles: ["admin"] 
@@ -146,7 +146,9 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
     if (isMobile) {
       setOpenMobile(false);
     }
+    // Cambiar la vista y navegar
     onViewChange(view);
+    navigate(`/dashboard/${view}`);
   };
 
   useEffect(() => {
@@ -178,9 +180,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
               {filteredMenuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
-                    onClick={() =>
-                      handleMenuItemClick(item.url)
-                    }
+                    onClick={() => handleMenuItemClick(item.url)}
                     className={`
                       py-3 px-4 h-auto min-h-[48px]
                       ${isActive(item.url)

@@ -8,12 +8,27 @@ interface ProtectedRouteProps {
 // Definir qué rutas son accesibles por rol
 const routePermissions = {
   admin: [
-    "bodega", "inventario", "ventas", "cotizacion", 
-    "pagos-pendientes", "clientes", "usuarios"
+    "vender",
+    "productos",
+    "bodega", 
+    "inventario", 
+    "ventas", 
+    "cotizacion", 
+    "pagos-pendientes", 
+    "clientes",
+    "caja",
+    "transferencias",
+    "usuarios"
   ],
   asistente: [
-    "vender", "productos", "ventas", "cotizacion", 
-    "pagos-pendientes", "clientes"
+    "vender", 
+    "productos", 
+    "ventas", 
+    "cotizacion", 
+    "pagos-pendientes", 
+    "clientes",
+    "caja",
+    "transferencias"
   ]
 };
 
@@ -51,7 +66,6 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Si NO tiene permiso, redirigir a su ruta por defecto
   if (!hasPermission) {
     const defaultRoute = getDefaultRoute(userRole);
-    console.log(`Usuario ${userRole} intentó acceder a ${currentRoute}, redirigiendo a ${defaultRoute}`);
     return <Navigate to={defaultRoute} replace />;
   }
 
