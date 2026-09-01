@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Edit, Trash2, UserPlus } from "lucide-react";
+import { Edit, Trash2, UserPlus, Eye, EyeOff } from "lucide-react"; // ✅ Añadido Eye y EyeOff
 import { useToast } from "@/hooks/use-toast";
 import { getUsuarios, createUsuario, updateUsuario, deleteUsuario, toggleUsuarioStatus, Usuario, UsuarioRequest } from "@/api/UsersApi";
 import { getBodegasActivas } from "@/api/BodegaApi";
@@ -46,6 +46,7 @@ export function GestionUsuariosView() {
     usuario?: string;
     general?: string;
   }>({});
+  const [mostrarContraseña, setMostrarContraseña] = useState(false); // ✅ Estado para mostrar/ocultar contraseña
   const { toast } = useToast();
 
   useEffect(() => {
@@ -114,6 +115,7 @@ export function GestionUsuariosView() {
     setEditandoUsuario(null);
     setEnviandoFormulario(false);
     setErroresFormulario({});
+    setMostrarContraseña(false); // ✅ Resetear el estado de mostrar contraseña
   };
 
   const abrirDialogCrear = () => {
@@ -133,6 +135,7 @@ export function GestionUsuariosView() {
       idbodega: usuario.idbodega ? String(usuario.idbodega) : ""
     });
     setErroresFormulario({});
+    setMostrarContraseña(false); // ✅ Resetear el estado de mostrar contraseña
     setDialogAbierto(true);
   };
 
@@ -330,6 +333,11 @@ export function GestionUsuariosView() {
   // Componente para asterisco rojo
   const RequiredAsterisk = () => <span className="text-red-500 ml-0.5">*</span>;
 
+  // ✅ Función para alternar la visibilidad de la contraseña
+  const toggleMostrarContraseña = () => {
+    setMostrarContraseña(!mostrarContraseña);
+  };
+
   if (loading && cargandoBodegas) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -423,19 +431,36 @@ export function GestionUsuariosView() {
                   <p className="text-sm text-red-500 mt-1">{erroresFormulario.usuario}</p>
                 )}
               </div>
-              <div>
+              <div className="relative">
                 <Label htmlFor="contraseña">
                   Contraseña {editandoUsuario ? "(opcional)" : <RequiredAsterisk />}
                 </Label>
-                <Input
-                  id="contraseña"
-                  type="password"
-                  value={formData.contraseña}
-                  onChange={(e) => setFormData({ ...formData, contraseña: e.target.value })}
-                  required={!editandoUsuario}
-                  placeholder={editandoUsuario ? "Dejar en blanco para mantener actual" : ""}
-                  disabled={enviandoFormulario}
-                />
+                <div className="relative">
+                  <Input
+                    id="contraseña"
+                    type={mostrarContraseña ? "text" : "password"}
+                    value={formData.contraseña}
+                    onChange={(e) => setFormData({ ...formData, contraseña: e.target.value })}
+                    required={!editandoUsuario}
+                    placeholder={editandoUsuario ? "Dejar en blanco para mantener actual" : ""}
+                    disabled={enviandoFormulario}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={toggleMostrarContraseña}
+                    disabled={enviandoFormulario}
+                  >
+                    {mostrarContraseña ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label htmlFor="rol">
