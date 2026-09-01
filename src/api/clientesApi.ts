@@ -7,8 +7,8 @@ interface BackendCliente {
   idcliente: number;
   nombres: string;
   apellidos: string;
-  carnet: string;
-  celular: string;
+  carnet: string | null;
+  celular: string | null;
   nota: string | null;
   estado: number;
 }
@@ -17,8 +17,8 @@ export interface Cliente {
   id: number;
   nombres: string;
   apellidos: string;
-  carnet: string;
-  celular: string;
+  carnet: string | null;
+  celular: string | null;
   nota: string;
   estado: boolean;
 }
@@ -26,8 +26,8 @@ export interface Cliente {
 export interface ClienteRequest {
   nombres: string;
   apellidos: string;
-  carnet: string;
-  celular: string;
+  carnet?: string;
+  celular?: string;
   nota?: string;
 }
 
@@ -46,8 +46,8 @@ export const getClientes = async (): Promise<Cliente[]> => {
       id: cliente.idcliente,
       nombres: cliente.nombres,
       apellidos: cliente.apellidos,
-      carnet: cliente.carnet,
-      celular: cliente.celular,
+      carnet: cliente.carnet || null,
+      celular: cliente.celular || null,
       nota: cliente.nota || "",
       estado: cliente.estado === 0,
     }));
@@ -62,9 +62,9 @@ export const createCliente = async (cliente: ClienteRequest): Promise<Cliente> =
     const response = await api.post<BackendCliente>("/clientes/clientes", {
       nombres: cliente.nombres,
       apellidos: cliente.apellidos,
-      carnet: cliente.carnet,
-      celular: cliente.celular,
-      nota: cliente.nota || "",
+      carnet: cliente.carnet || null,
+      celular: cliente.celular || null,
+      nota: cliente.nota || null,
     });
     return mapBackendCliente(response.data);
   } catch (error: any) {
@@ -81,9 +81,9 @@ export const updateCliente = async (id: number, cliente: ClienteRequest): Promis
     const response = await api.put<BackendCliente>(`/clientes/clientes/${id}`, {
       nombres: cliente.nombres,
       apellidos: cliente.apellidos,
-      carnet: cliente.carnet,
-      celular: cliente.celular,
-      nota: cliente.nota || "",
+      carnet: cliente.carnet || null,
+      celular: cliente.celular || null,
+      nota: cliente.nota || null,
     });
     return mapBackendCliente(response.data);
   } catch (error: any) {
@@ -125,8 +125,8 @@ function mapBackendCliente(cliente: BackendCliente): Cliente {
     id: cliente.idcliente,
     nombres: cliente.nombres,
     apellidos: cliente.apellidos,
-    carnet: cliente.carnet,
-    celular: cliente.celular,
+    carnet: cliente.carnet || null,
+    celular: cliente.celular || null,
     nota: cliente.nota || "",
     estado: cliente.estado === 0,
   };

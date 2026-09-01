@@ -107,8 +107,8 @@ export function ClientesView() {
       (c) =>
         c.nombres.toLowerCase().includes(term) ||
         c.apellidos.toLowerCase().includes(term) ||
-        c.carnet.includes(term) ||
-        c.celular.includes(term)
+        (c.carnet && c.carnet.toLowerCase().includes(term)) ||
+        (c.celular && c.celular.includes(term))
     );
   }, [clientes, searchTerm]);
 
@@ -129,8 +129,8 @@ export function ClientesView() {
     setFormData({
       nombres: cliente.nombres,
       apellidos: cliente.apellidos,
-      carnet: cliente.carnet,
-      celular: cliente.celular,
+      carnet: cliente.carnet || "",
+      celular: cliente.celular || "",
       nota: cliente.nota || "",
     });
     setIsEditing(true);
@@ -141,7 +141,6 @@ export function ClientesView() {
   const handleDelete = async (id: number, nombreCompleto: string) => {
     try {
       await deleteCliente(id);
-      // Recargar la lista desde el backend para asegurar que los datos estén actualizados
       const data = await getClientes();
       setClientes(data);
       toast({
@@ -158,13 +157,15 @@ export function ClientesView() {
     }
   };
 
-  // Validación para carnet: entre 5 y 13 caracteres (cualquier carácter)
+  // Validación para carnet: opcional, si se ingresa debe tener entre 5 y 13 caracteres
   const validateCarnet = (carnet: string): boolean => {
+    if (carnet.trim() === "") return true; // Permitir vacío
     return carnet.length >= 5 && carnet.length <= 13;
   };
 
-  // Validación para celular: solo números y el signo +, entre 6 y 12 caracteres
+  // Validación para celular: opcional, si se ingresa solo números y el signo +, entre 6 y 12 caracteres
   const validateCelular = (celular: string): boolean => {
+    if (celular.trim() === "") return true; // Permitir vacío
     const celularRegex = /^[0-9+]{6,12}$/;
     return celularRegex.test(celular);
   };
@@ -187,26 +188,10 @@ export function ClientesView() {
       });
       return;
     }
-    if (!formData.carnet.trim()) {
-      toast({
-        title: "Error",
-        description: "El carnet es obligatorio",
-        variant: "destructive",
-      });
-      return;
-    }
     if (!validateCarnet(formData.carnet.trim())) {
       toast({
         title: "Error",
-        description: "El carnet debe tener entre 5 y 13 caracteres",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!formData.celular.trim()) {
-      toast({
-        title: "Error",
-        description: "El celular es obligatorio",
+        description: "El carnet debe tener entre 5 y 13 caracteres o estar vacío",
         variant: "destructive",
       });
       return;
@@ -214,7 +199,7 @@ export function ClientesView() {
     if (!validateCelular(formData.celular.trim())) {
       toast({
         title: "Error",
-        description: "El celular debe tener entre 6 y 12 caracteres (solo números y el signo +)",
+        description: "El celular debe tener entre 6 y 12 caracteres (solo números y el signo +) o estar vacío",
         variant: "destructive",
       });
       return;
@@ -226,13 +211,12 @@ export function ClientesView() {
       const clienteData: ClienteRequest = {
         nombres: formData.nombres.trim(),
         apellidos: formData.apellidos.trim(),
-        carnet: formData.carnet.trim(),
-        celular: formData.celular.trim(),
+        carnet: formData.carnet.trim() || undefined,
+        celular: formData.celular.trim() || undefined,
         nota: formData.nota.trim() || undefined,
       };
 
       if (isEditing && editingId !== null) {
-        // Editar cliente existente
         const updated = await updateCliente(editingId, clienteData);
         setClientes(clientes.map((c) => (c.id === editingId ? updated : c)));
         toast({
@@ -240,7 +224,6 @@ export function ClientesView() {
           description: `${formData.nombres} ${formData.apellidos} ha sido actualizado.`,
         });
       } else {
-        // Agregar nuevo cliente
         const newCliente = await createCliente(clienteData);
         setClientes([...clientes, newCliente]);
         toast({
@@ -364,33 +347,35 @@ export function ClientesView() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="carnet">
-                  Carnet
-                </Label>
+                <Label htmlFor="carnet">Carnet (opcional)</Label>
                 <Input
                   id="carnet"
-                  placeholder="Ej: 1234567"
+                  placeholder="Ej: 1234567 (opcional)"
                   value={formData.carnet}
                   onChange={inputChange}
                   maxLength={13}
                   disabled={submitting}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Dejar vacío si no tiene carnet
+                </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="celular">
-                  Celular 
-                </Label>
+                <Label htmlFor="celular">Celular (opcional)</Label>
                 <Input
                   id="celular"
-                  placeholder="Ej: 72123456"
+                  placeholder="Ej: 72123456 (opcional)"
                   value={formData.celular}
                   onChange={inputChange}
                   maxLength={12}
                   disabled={submitting}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Dejar vacío si no tiene celular
+                </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="nota">Nota</Label>
+                <Label htmlFor="nota">Nota (opcional)</Label>
                 <Input
                   id="nota"
                   placeholder="Observaciones adicionales..."
@@ -439,7 +424,7 @@ export function ClientesView() {
                         {cliente.nombres} {cliente.apellidos}
                       </h3>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Carnet: {cliente.carnet}
+                        Carnet: {cliente.carnet || "No registrado"}
                       </p>
                     </div>
                     <div className="flex gap-1">
@@ -486,11 +471,11 @@ export function ClientesView() {
                   <div className="grid grid-cols-2 gap-1 text-xs">
                     <div className="flex items-center gap-1">
                       <Phone className="h-3 w-3 text-muted-foreground" />
-                      <span>{cliente.celular}</span>
+                      <span>{cliente.celular || "No registrado"}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <CreditCard className="h-3 w-3 text-muted-foreground" />
-                      <span>{cliente.carnet}</span>
+                      <span>{cliente.carnet || "N/A"}</span>
                     </div>
                   </div>
                   {cliente.nota && (
@@ -524,8 +509,8 @@ export function ClientesView() {
                           <div className="font-medium">{cliente.nombres}</div>
                           <div className="text-xs text-muted-foreground">{cliente.apellidos}</div>
                         </TableCell>
-                        <TableCell>{cliente.carnet}</TableCell>
-                        <TableCell>{cliente.celular}</TableCell>
+                        <TableCell>{cliente.carnet || "—"}</TableCell>
+                        <TableCell>{cliente.celular || "—"}</TableCell>
                         <TableCell>
                           {cliente.nota ? (
                             <span className="text-sm">{cliente.nota}</span>

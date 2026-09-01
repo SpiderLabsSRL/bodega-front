@@ -17,7 +17,7 @@ CREATE TABLE clientes (
     idcliente SERIAL PRIMARY KEY,
     nombres VARCHAR(100) NOT NULL,
     apellidos VARCHAR(100) NOT NULL,
-    carnet VARCHAR(20) UNIQUE NOT NULL,
+    carnet VARCHAR(20) UNIQUE,
     celular VARCHAR(20),
     nota TEXT,
     estado SMALLINT DEFAULT 0 CHECK (estado IN (0, 1)) -- 0: Activo, 1: Inactivo
