@@ -219,7 +219,6 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export function ProductosView() {
   const [isStockFormOpen, setIsStockFormOpen] = useState(false);
-  const [showAllProducts, setShowAllProducts] = useState(false);
   const [currentStockProduct, setCurrentStockProduct] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [products, setProducts] = useState<Producto[]>([]);
@@ -244,14 +243,17 @@ export function ProductosView() {
 
   const debouncedSearchTerm = useDebounce(searchTerm, 1000);
 
-  // Cargar datos básicos (opciones para selects)
+  // Cargar datos básicos (opciones para selects) y todos los productos al montar
   useEffect(() => {
-    const loadBasicData = async () => {
+    const loadInitialData = async () => {
       try {
         setLoading(true);
-        const [ubicacionesData, categoriasData] = await Promise.all([
+        setLoadingAll(true);
+        
+        const [ubicacionesData, categoriasData, allProducts] = await Promise.all([
           getUbicaciones(),
           getCategorias(),
+          getAllProductos(),
         ]);
 
         setUbicaciones(ubicacionesData.map((item) => ({
@@ -262,8 +264,9 @@ export function ProductosView() {
           idcategoria: item.idcategoria,
           nombre: item.nombre
         })));
+        setProducts(allProducts);
       } catch (error) {
-        console.error("Error cargando datos básicos:", error);
+        console.error("Error cargando datos iniciales:", error);
         toast({
           title: "Error",
           description: "No se pudieron cargar los datos necesarios",
@@ -271,10 +274,11 @@ export function ProductosView() {
         });
       } finally {
         setLoading(false);
+        setLoadingAll(false);
       }
     };
 
-    loadBasicData();
+    loadInitialData();
   }, [toast]);
 
   // Cargar búsqueda desde inventario si existe
@@ -291,10 +295,29 @@ export function ProductosView() {
   useEffect(() => {
     if (debouncedSearchTerm.trim().length >= 2) {
       performSearch(debouncedSearchTerm);
-    } else if (debouncedSearchTerm.trim().length === 0 && !showAllProducts) {
-      setProducts([]);
+    } else if (debouncedSearchTerm.trim().length === 0) {
+      // Si no hay término de búsqueda, mostrar todos los productos
+      loadAllProducts();
     }
-  }, [debouncedSearchTerm, showAllProducts]);
+  }, [debouncedSearchTerm]);
+
+  // Función para cargar todos los productos
+  const loadAllProducts = async () => {
+    setLoadingAll(true);
+    try {
+      const allProducts = await getAllProductos();
+      setProducts(allProducts);
+    } catch (error) {
+      console.error("Error cargando todos los productos:", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar todos los productos",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAll(false);
+    }
+  };
 
   // Función para realizar búsqueda
   const performSearch = async (query: string) => {
@@ -315,29 +338,12 @@ export function ProductosView() {
     }
   };
 
-  // Función para cargar todos los productos
-  const handleShowAllProducts = async () => {
-    const newShowAll = !showAllProducts;
-    setShowAllProducts(newShowAll);
-
-    if (newShowAll) {
-      setLoadingAll(true);
-      try {
-        const allProducts = await getAllProductos();
-        setProducts(allProducts);
-      } catch (error) {
-        console.error("Error cargando todos los productos:", error);
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar todos los productos",
-          variant: "destructive",
-        });
-      } finally {
-        setLoadingAll(false);
-      }
+  // Función para recargar productos después de actualizar stock
+  const reloadProducts = async () => {
+    if (searchTerm.trim().length >= 2) {
+      await performSearch(searchTerm);
     } else {
-      setProducts([]);
-      setSearchTerm("");
+      await loadAllProducts();
     }
   };
 
@@ -368,13 +374,7 @@ export function ProductosView() {
       });
 
       // Recargar productos para actualizar la vista
-      if (showAllProducts) {
-        const allProducts = await getAllProductos();
-        setProducts(allProducts);
-      } else if (searchTerm.trim().length >= 2) {
-        const results = await buscarProductos(searchTerm);
-        setProducts(results);
-      }
+      await reloadProducts();
 
       setIsStockFormOpen(false);
       setStockFormData({
@@ -422,6 +422,9 @@ export function ProductosView() {
         <h1 className="text-2xl md:text-3xl font-bold text-primary">
           {isAssistant ? "Visualización de Productos" : "Gestión de Productos"}
         </h1>
+        <div className="text-sm text-muted-foreground">
+          {products.length} productos disponibles
+        </div>
       </div>
 
       {/* Dialog para aumentar stock */}
@@ -490,27 +493,12 @@ export function ProductosView() {
       </Dialog>
 
       <Card>
-        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <CardHeader>
           <CardTitle>
-            {showAllProducts
-              ? `Todos los Productos (${products.length})`
-              : searchTerm.trim().length >= 2
-                ? `Resultados de búsqueda (${products.length})`
-                : "Productos"}
+            {searchTerm.trim().length >= 2
+              ? `Resultados de búsqueda (${products.length})`
+              : `Todos los Productos (${products.length})`}
           </CardTitle>
-          <Button
-            variant="outline"
-            onClick={handleShowAllProducts}
-            className="flex items-center gap-2 w-full md:w-auto"
-            disabled={loadingAll}
-          >
-            {loadingAll ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
-            {showAllProducts ? "Ocultar productos" : "Ver todos los productos"}
-          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative">
@@ -531,341 +519,325 @@ export function ProductosView() {
             <div className="text-center py-8">
               <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
               <p className="text-muted-foreground mt-2">
-                Cargando todos los productos...
+                Cargando productos...
               </p>
             </div>
           ) : (
             <>
-              {(searchTerm.trim().length >= 2 || showAllProducts) &&
-                products.length > 0 && (
-                  <>
-                    {/* Vista móvil y tablet - Cards */}
-                    <div className="block xl:hidden space-y-3 w-full">
-                      {products.map((product) => {
-                        const totalStock = getTotalStock(product);
-                        const ubicacionesProducto = product.ubicaciones || [];
-                        const ubicacionesNombres = ubicacionesProducto.map(u => u.nombre).filter(Boolean);
-                        const ubicacionesMostrar = ubicacionesNombres.slice(0, 2);
-                        const ubicacionesRestantes = ubicacionesNombres.length - 2;
+              {products.length > 0 && (
+                <>
+                  {/* Vista móvil y tablet - Cards */}
+                  <div className="block xl:hidden space-y-3 w-full">
+                    {products.map((product) => {
+                      const totalStock = getTotalStock(product);
+                      const ubicacionesProducto = product.ubicaciones || [];
+                      const ubicacionesNombres = ubicacionesProducto.map(u => u.nombre).filter(Boolean);
+                      const ubicacionesMostrar = ubicacionesNombres.slice(0, 2);
+                      const ubicacionesRestantes = ubicacionesNombres.length - 2;
 
-                        return (
-                          <Card key={product.idproducto} className="p-3 w-full">
-                            <div className="space-y-3 w-full">
-                              <div className="flex items-start gap-3 w-full">
-                                <div className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20">
-                                  <ImageCarousel
-                                    images={[getImageUrl(product.imagen)]}
-                                    productName={product.nombre}
-                                    className="w-16 h-16 sm:w-20 sm:h-20"
-                                  />
-                                </div>
+                      return (
+                        <Card key={product.idproducto} className="p-3 w-full">
+                          <div className="space-y-3 w-full">
+                            <div className="flex items-start gap-3 w-full">
+                              <div className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20">
+                                <ImageCarousel
+                                  images={[getImageUrl(product.imagen)]}
+                                  productName={product.nombre}
+                                  className="w-16 h-16 sm:w-20 sm:h-20"
+                                />
+                              </div>
 
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="font-semibold text-sm sm:text-base leading-tight line-clamp-2 break-words">
-                                    {product.nombre}
-                                  </h3>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {product.categorias
-                                      .slice(0, 2)
-                                      .map((categoria, index) => (
-                                        <Badge
-                                          key={index}
-                                          variant="secondary"
-                                          className="text-xs px-1.5 py-0.5"
-                                        >
-                                          {categoria.length > 15
-                                            ? categoria.substring(0, 12) + "..."
-                                            : categoria}
-                                        </Badge>
-                                      ))}
-                                    {product.categorias.length > 2 && (
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-sm sm:text-base leading-tight line-clamp-2 break-words">
+                                  {product.nombre}
+                                </h3>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {product.categorias
+                                    .slice(0, 2)
+                                    .map((categoria, index) => (
                                       <Badge
+                                        key={index}
                                         variant="secondary"
                                         className="text-xs px-1.5 py-0.5"
                                       >
-                                        +{product.categorias.length - 2}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
-                                <div className="col-span-2">
-                                  <span className="font-medium">Ubicación:</span>
-                                  <div className="flex flex-wrap gap-1 mt-0.5">
-                                    {ubicacionesMostrar.map((nombre, index) => (
-                                      <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0">
-                                        {nombre.length > 10 ? nombre.substring(0, 8) + "..." : nombre}
+                                        {categoria.length > 15
+                                          ? categoria.substring(0, 12) + "..."
+                                          : categoria}
                                       </Badge>
                                     ))}
-                                    {ubicacionesRestantes > 0 && (
-                                      <Badge variant="secondary" className="text-xs px-1.5 py-0">
-                                        +{ubicacionesRestantes}
-                                      </Badge>
-                                    )}
-                                    {ubicacionesNombres.length === 0 && (
-                                      <span className="text-muted-foreground text-xs">Sin ubicación</span>
-                                    )}
-                                  </div>
+                                  {product.categorias.length > 2 && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-xs px-1.5 py-0.5"
+                                    >
+                                      +{product.categorias.length - 2}
+                                    </Badge>
+                                  )}
                                 </div>
-                                <div>
-                                  <span className="font-medium">Stock:</span>
-                                  <span className="text-primary ml-1 font-semibold">
-                                    {product.stock} u.
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="font-medium">Precio:</span>
-                                  <span className="text-primary ml-1 font-semibold">
-                                    Bs {Number(product.precio_venta).toFixed(2)}
-                                  </span>
-                                </div>
-                                {product.codigo_barras && (
-                                  <div className="col-span-2">
-                                    <span className="font-medium">Código:</span>
-                                    <span className="text-muted-foreground ml-1 font-mono text-xs break-all">
-                                      {product.codigo_barras}
-                                    </span>
-                                  </div>
-                                )}
                               </div>
+                            </div>
 
-                              {product.productos_similares &&
-                                product.productos_similares.length > 0 && (
-                                  <div className="text-xs">
-                                    <span className="font-medium">
-                                      Similares:
-                                    </span>
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {product.productos_similares
-                                        .slice(0, 2)
-                                        .map((similar, idx) => (
-                                          <Badge
-                                            key={idx}
-                                            variant="outline"
-                                            className="text-xs"
-                                          >
-                                            {similar.nombre.length > 20
-                                              ? similar.nombre.substring(
-                                                  0,
-                                                  17,
-                                                ) + "..."
-                                              : similar.nombre}
-                                          </Badge>
-                                        ))}
-                                      {product.productos_similares.length >
-                                        2 && (
+                            <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
+                              <div className="col-span-2">
+                                <span className="font-medium">Ubicación:</span>
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                  {ubicacionesMostrar.map((nombre, index) => (
+                                    <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0">
+                                      {nombre.length > 10 ? nombre.substring(0, 8) + "..." : nombre}
+                                    </Badge>
+                                  ))}
+                                  {ubicacionesRestantes > 0 && (
+                                    <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                                      +{ubicacionesRestantes}
+                                    </Badge>
+                                  )}
+                                  {ubicacionesNombres.length === 0 && (
+                                    <span className="text-muted-foreground text-xs">Sin ubicación</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="font-medium">Stock:</span>
+                                <span className="text-primary ml-1 font-semibold">
+                                  {product.stock} u.
+                                </span>
+                              </div>
+                              <div>
+                                <span className="font-medium">Precio:</span>
+                                <span className="text-primary ml-1 font-semibold">
+                                  Bs {Number(product.precio_venta).toFixed(2)}
+                                </span>
+                              </div>
+                              {product.codigo_barras && (
+                                <div className="col-span-2">
+                                  <span className="font-medium">Código:</span>
+                                  <span className="text-muted-foreground ml-1 font-mono text-xs break-all">
+                                    {product.codigo_barras}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {product.productos_similares &&
+                              product.productos_similares.length > 0 && (
+                                <div className="text-xs">
+                                  <span className="font-medium">
+                                    Similares:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {product.productos_similares
+                                      .slice(0, 2)
+                                      .map((similar, idx) => (
                                         <Badge
+                                          key={idx}
                                           variant="outline"
                                           className="text-xs"
                                         >
-                                          +
-                                          {product.productos_similares.length -
-                                            2}
+                                          {similar.nombre.length > 20
+                                            ? similar.nombre.substring(
+                                                0,
+                                                17,
+                                              ) + "..."
+                                            : similar.nombre}
                                         </Badge>
-                                      )}
-                                    </div>
+                                      ))}
+                                    {product.productos_similares.length >
+                                      2 && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        +
+                                        {product.productos_similares.length -
+                                          2}
+                                      </Badge>
+                                    )}
                                   </div>
-                                )}
+                                </div>
+                              )}
 
-                              <div className="flex flex-wrap gap-2 pt-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleIncreaseStock(product)}
-                                  className="flex-1 h-8 text-xs"
-                                >
-                                  <Package className="h-3 w-3 mr-1" />
-                                  Añadir Stock
-                                </Button>
-                              </div>
+                            <div className="flex flex-wrap gap-2 pt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleIncreaseStock(product)}
+                                className="flex-1 h-8 text-xs"
+                              >
+                                <Package className="h-3 w-3 mr-1" />
+                                Añadir Stock
+                              </Button>
                             </div>
-                          </Card>
-                        );
-                      })}
-                    </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
 
-                    {/* Vista desktop - Tabla responsiva sin scroll */}
-                    <div className="hidden xl:block">
-                      <div className="w-full border rounded-lg">
-                        <div className="overflow-x-auto">
-                          <Table className="min-w-full">
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-[70px]">Img</TableHead>
-                                <TableHead>Producto</TableHead>
-                                <TableHead className="min-w-[150px]">Ubicación</TableHead>
-                                <TableHead className="min-w-[150px]">
-                                  Código de Barras
-                                </TableHead>
-                                <TableHead className="min-w-[150px]">
-                                  Similares
-                                </TableHead>
-                                <TableHead className="w-[100px]">
-                                  Stock
-                                </TableHead>
-                                <TableHead className="w-[100px]">
-                                  Precio
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {products.map((product) => {
-                                return (
-                                  <TableRow key={product.idproducto}>
-                                    <TableCell>
-                                      <div className="w-10 h-10">
-                                        <ImageCarousel
-                                          images={[getImageUrl(product.imagen)]}
-                                          productName={product.nombre}
-                                          className="w-10 h-10"
-                                        />
+                  {/* Vista desktop - Tabla responsiva sin scroll */}
+                  <div className="hidden xl:block">
+                    <div className="w-full border rounded-lg">
+                      <div className="overflow-x-auto">
+                        <Table className="min-w-full">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[70px]">Img</TableHead>
+                              <TableHead>Producto</TableHead>
+                              <TableHead className="min-w-[150px]">Ubicación</TableHead>
+                              <TableHead className="min-w-[150px]">
+                                Código de Barras
+                              </TableHead>
+                              <TableHead className="min-w-[150px]">
+                                Similares
+                              </TableHead>
+                              <TableHead className="w-[100px]">
+                                Stock
+                              </TableHead>
+                              <TableHead className="w-[100px]">
+                                Precio
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {products.map((product) => {
+                              return (
+                                <TableRow key={product.idproducto}>
+                                  <TableCell>
+                                    <div className="w-10 h-10">
+                                      <ImageCarousel
+                                        images={[getImageUrl(product.imagen)]}
+                                        productName={product.nombre}
+                                        className="w-10 h-10"
+                                      />
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div>
+                                      <div className="font-medium text-sm">
+                                        {product.nombre}
                                       </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div>
-                                        <div className="font-medium text-sm">
-                                          {product.nombre}
-                                        </div>
-                                        <div className="flex flex-wrap gap-1 mt-1">
-                                          {product.categorias
-                                            .slice(0, 2)
-                                            .map((categoria, index) => (
-                                              <Badge
-                                                key={index}
-                                                variant="secondary"
-                                                className="text-xs"
-                                              >
-                                                {categoria.length > 10
-                                                  ? categoria.substring(0, 8) +
-                                                    "..."
-                                                  : categoria}
-                                              </Badge>
-                                            ))}
-                                          {product.categorias.length > 2 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {product.categorias
+                                          .slice(0, 2)
+                                          .map((categoria, index) => (
                                             <Badge
+                                              key={index}
                                               variant="secondary"
                                               className="text-xs"
                                             >
-                                              +{product.categorias.length - 2}
+                                              {categoria.length > 10
+                                                ? categoria.substring(0, 8) +
+                                                  "..."
+                                                : categoria}
                                             </Badge>
-                                          )}
-                                        </div>
+                                          ))}
+                                        {product.categorias.length > 2 && (
+                                          <Badge
+                                            variant="secondary"
+                                            className="text-xs"
+                                          >
+                                            +{product.categorias.length - 2}
+                                          </Badge>
+                                        )}
                                       </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <RenderUbicaciones 
-                                        ubicaciones={product.ubicaciones || []} 
-                                        bodegaId={userBodegaId}
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      {product.codigo_barras ? (
-                                        <span className="text-sm font-mono break-all">
-                                          {product.codigo_barras}
-                                        </span>
-                                      ) : (
-                                        <span className="text-xs text-muted-foreground">
-                                          —
-                                        </span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      {product.productos_similares &&
-                                      product.productos_similares.length > 0 ? (
-                                        <div className="flex flex-wrap gap-1">
-                                          {product.productos_similares
-                                            .slice(0, 2)
-                                            .map((similar, idx) => (
-                                              <Badge
-                                                key={idx}
-                                                variant="outline"
-                                                className="text-xs"
-                                              >
-                                                {similar.nombre.length > 12
-                                                  ? similar.nombre.substring(
-                                                      0,
-                                                      10,
-                                                    ) + "..."
-                                                  : similar.nombre}
-                                              </Badge>
-                                            ))}
-                                          {product.productos_similares.length >
-                                            2 && (
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <RenderUbicaciones 
+                                      ubicaciones={product.ubicaciones || []} 
+                                      bodegaId={userBodegaId}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    {product.codigo_barras ? (
+                                      <span className="text-sm font-mono break-all">
+                                        {product.codigo_barras}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">
+                                        —
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {product.productos_similares &&
+                                    product.productos_similares.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {product.productos_similares
+                                          .slice(0, 2)
+                                          .map((similar, idx) => (
                                             <Badge
+                                              key={idx}
                                               variant="outline"
                                               className="text-xs"
                                             >
-                                              +
-                                              {product.productos_similares
-                                                .length - 2}
+                                              {similar.nombre.length > 12
+                                                ? similar.nombre.substring(
+                                                    0,
+                                                    10,
+                                                  ) + "..."
+                                                : similar.nombre}
                                             </Badge>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <span className="text-xs text-muted-foreground">
-                                          —
-                                        </span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="space-y-1">
-                                        <div className="text-sm font-semibold text-primary">
-                                          {product.stock}
-                                        </div>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() =>
-                                            handleIncreaseStock(product)
-                                          }
-                                          className="h-7 text-xs px-2"
-                                        >
-                                          <Package className="h-2.5 w-2.5 mr-1" />
-                                          +
-                                        </Button>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="text-sm font-semibold">
-                                        Bs{" "}
-                                        {Number(product.precio_venta).toFixed(
-                                          2,
+                                          ))}
+                                        {product.productos_similares.length >
+                                          2 && (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                          >
+                                            +
+                                            {product.productos_similares
+                                              .length - 2}
+                                          </Badge>
                                         )}
                                       </div>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </div>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">
+                                        —
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="space-y-1">
+                                      <div className="text-sm font-semibold text-primary">
+                                        {product.stock}
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          handleIncreaseStock(product)
+                                        }
+                                        className="h-7 text-xs px-2"
+                                      >
+                                        <Package className="h-2.5 w-2.5 mr-1" />
+                                        +
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm font-semibold">
+                                      Bs{" "}
+                                      {Number(product.precio_venta).toFixed(
+                                        2,
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
                       </div>
                     </div>
-                  </>
-                )}
-
-              {searchTerm.trim().length >= 2 &&
-                !searching &&
-                products.length === 0 && (
-                  <div className="text-center text-muted-foreground py-8">
-                    No se encontraron productos que coincidan con la búsqueda.
                   </div>
-                )}
+                </>
+              )}
 
-              {searchTerm.trim().length < 2 &&
-                !showAllProducts &&
-                !searching && (
-                  <div className="text-center text-muted-foreground py-8">
-                    Ingresa al menos 2 caracteres en el buscador o haz clic en
-                    "Ver todos los productos" para mostrar el inventario.
-                  </div>
-                )}
-
-              {showAllProducts && products.length === 0 && !loadingAll && (
+              {!loadingAll && products.length === 0 && (
                 <div className="text-center text-muted-foreground py-8">
-                  No hay productos registrados.
+                  {searchTerm.trim().length >= 2
+                    ? "No se encontraron productos que coincidan con la búsqueda."
+                    : "No hay productos registrados."}
                 </div>
               )}
             </>

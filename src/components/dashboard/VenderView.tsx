@@ -1,3 +1,4 @@
+// src/components/dashboard/VenderView.tsx
 import { useState, useRef, useEffect } from "react";
 import {
   Search,
@@ -5,7 +6,6 @@ import {
   Minus,
   Trash2,
   ChevronDown,
-  ChevronUp,
   Camera,
   User,
   UserPlus,
@@ -48,6 +48,7 @@ import { createCliente } from "@/api/clientesApi";
 import BarcodeScanner from "./BarcodeScanner";
 import { Textarea } from "../ui/textarea";
 import { cn } from "@/lib/utils";
+import { generateVentaPDF } from "./VentasPDF";
 
 interface SaleItem extends Product {
   cantidad: number;
@@ -70,6 +71,36 @@ interface BodegaInfo {
 interface CajaEstado {
   efectivo: string;
   qr: string;
+}
+
+// Definir interfaz para DetalleVenta que usa generateVentaPDF
+interface DetalleVentaForPDF {
+  iddetalle_venta: number;
+  idproducto: number;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal_linea: number;
+  producto: string;
+}
+
+// Definir interfaz VentaForPDF
+interface VentaForPDF {
+  id: number;
+  fecha: string | Date;
+  usuario: string;
+  usuario_completo: string;
+  usuario_login: string;
+  idcliente: number | null;
+  cliente: string;
+  idbodega?: number;
+  bodegaNombre?: string;
+  descripcion: string;
+  descripcion_descuento?: string;
+  detalle: DetalleVentaForPDF[];
+  subtotal: number;
+  descuento: number;
+  total: number;
+  metodo: string;
 }
 
 const formatBs = (value: number) => {
@@ -162,6 +193,7 @@ export function VenderView() {
   const [montoPagado, setMontoPagado] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [generandoPDF, setGenerandoPDF] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null);
   const [similarProductsData, setSimilarProductsData] = useState<
     Map<number, Product[]>
@@ -188,6 +220,7 @@ export function VenderView() {
   const [showClienteNota, setShowClienteNota] = useState(false);
   const [bodegaInfo, setBodegaInfo] = useState<BodegaInfo | null>(null);
   const [cajaEstado, setCajaEstado] = useState<CajaEstado>({ efectivo: 'cerrada', qr: 'cerrada' });
+  const [ventaIdGenerada, setVentaIdGenerada] = useState<number | null>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const cartRef = useRef<HTMLDivElement>(null);
@@ -256,13 +289,9 @@ export function VenderView() {
 
   useEffect(() => {
     fetchEstadoCajas();
-    // Refrescar cada 30 segundos
     const interval = setInterval(fetchEstadoCajas, 30000);
     return () => clearInterval(interval);
   }, [userBodegaId]);
-
-  console.log("👤 Usuario actual:", { userId, userBodegaId, username, bodegaInfo });
-  console.log("💰 Estado de cajas:", cajaEstado);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const debouncedClienteSearch = useDebounce(clienteSearchTerm, 500);
@@ -756,6 +785,36 @@ export function VenderView() {
 
   const tieneItemsInvalidos = ventaItems.some((item) => item.cantidad < 1);
 
+  // Función para generar PDF usando generateVentaPDF
+  const generarPDFVenta = async (ventaData: VentaForPDF) => {
+    try {
+      setGenerandoPDF(true);
+
+      const nombreCliente = ventaData.cliente || "No especificado";
+      const fileName = `Venta_${ventaData.id}_${nombreCliente.replace(/\s+/g, '_')}.pdf`;
+
+      await generateVentaPDF({
+        venta: ventaData,
+        nombreCliente: nombreCliente,
+        fileName: fileName,
+      });
+
+      toast({
+        title: "PDF generado",
+        description: "El ticket de venta se ha descargado correctamente.",
+      });
+    } catch (error) {
+      console.error("Error generando PDF:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo generar el PDF del ticket.",
+        variant: "destructive",
+      });
+    } finally {
+      setGenerandoPDF(false);
+    }
+  };
+
   const validateClienteForm = (): boolean => {
     if (!clienteFormData.nombres.trim()) {
       toast({ title: "Error", description: "Los nombres son obligatorios", variant: "destructive" });
@@ -865,7 +924,6 @@ export function VenderView() {
       return;
     }
 
-    // Verificar si la caja está abierta antes de procesar
     const estadoActual = metodoPago === "Efectivo" ? cajaEstado.efectivo : cajaEstado.qr;
     if (estadoActual !== 'abierta') {
       toast({
@@ -915,7 +973,6 @@ export function VenderView() {
     setLoading(true);
 
     try {
-      // Crear descripción solo con los nombres de productos y cantidades (sin precios)
       const descripcion = ventaItems
         .map((item) => `${item.cantidad} ${item.nombre}`)
         .join(", ");
@@ -941,7 +998,40 @@ export function VenderView() {
 
       console.log("📤 Enviando venta:", saleRequest);
 
-      await processSale(saleRequest, userId);
+      const response = await processSale(saleRequest, userId);
+
+      const ventaId = response.idventa || Date.now();
+      setVentaIdGenerada(ventaId);
+
+      // Preparar datos para el PDF en el formato que espera generateVentaPDF
+      const ventaParaPDF: VentaForPDF = {
+        id: ventaId,
+        fecha: new Date(),
+        usuario: username,
+        usuario_completo: username,
+        usuario_login: currentUser?.usuario || username,
+        idcliente: selectedCliente?.id || null,
+        cliente: selectedCliente ? `${selectedCliente.nombres} ${selectedCliente.apellidos}` : "No especificado",
+        idbodega: userBodegaId,
+        bodegaNombre: bodegaInfo?.nombre || undefined,
+        descripcion: descripcion,
+        descripcion_descuento: discountReason || undefined,
+        detalle: ventaItems.map((item, index) => ({
+          iddetalle_venta: index + 1,
+          idproducto: item.idproducto,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_venta,
+          subtotal_linea: item.precio_venta * item.cantidad,
+          producto: item.nombre,
+        })),
+        subtotal: subtotal,
+        descuento: descuento,
+        total: total,
+        metodo: metodoPago,
+      };
+
+      // Generar PDF automáticamente después de la venta
+      await generarPDFVenta(ventaParaPDF);
 
       setVentaItems([]);
       setDescuento(0);
@@ -952,7 +1042,6 @@ export function VenderView() {
       setSelectedCliente(null);
       setShowClienteNota(false);
 
-      // Actualizar estado de cajas después de la venta
       await fetchEstadoCajas();
 
       toast({
@@ -964,7 +1053,6 @@ export function VenderView() {
       console.error("❌ Error en procesarVenta:", error);
       let errorMessage = error instanceof Error ? error.message : "Error al procesar la venta";
       
-      // Si el error es por caja cerrada, mostrar mensaje específico
       if (errorMessage.includes("caja está cerrada")) {
         toast({
           title: "Caja Cerrada",
@@ -989,13 +1077,11 @@ export function VenderView() {
     year: "numeric",
   });
 
-  // Determinar el estado de la caja seleccionada
   const cajaSeleccionadaEstado = metodoPago === "Efectivo" ? cajaEstado.efectivo : cajaEstado.qr;
   const cajaAbierta = cajaSeleccionadaEstado === 'abierta';
 
   return (
     <div className="space-y-6">
-      {/* Escáner de código de barras */}
       {showScanner && (
         <BarcodeScanner
           onScanSuccess={handleBarcodeScanned}
@@ -1349,7 +1435,6 @@ export function VenderView() {
                 )}
               </div>
 
-              {/* Resultados de búsqueda */}
               {clienteSearchResults.length > 0 && (
                 <div className="border rounded-md overflow-hidden max-h-48 overflow-y-auto shadow-lg bg-white">
                   {clienteSearchResults.map((cliente) => (
@@ -1379,7 +1464,6 @@ export function VenderView() {
                 </div>
               )}
 
-              {/* Mensaje de "No se encontraron clientes" */}
               {clienteSearchTerm.trim().length >= 2 && 
                clienteSearchResults.length === 0 && 
                !searchingClientes && (
@@ -1388,7 +1472,6 @@ export function VenderView() {
                 </div>
               )}
 
-              {/* Mensaje de "Buscando..." */}
               {clienteSearchTerm.trim().length >= 2 && 
                clienteSearchResults.length === 0 && 
                searchingClientes && (
@@ -1397,7 +1480,6 @@ export function VenderView() {
                 </div>
               )}
 
-              {/* Cliente seleccionado con botón de "ojito" */}
               {selectedCliente && (
                 <div className="text-sm bg-primary/5 p-3 rounded-md border border-primary/20">
                   <div className="flex items-center justify-between">
@@ -1433,7 +1515,6 @@ export function VenderView() {
                     </TooltipProvider>
                   </div>
                   
-                  {/* Mostrar nota si está visible y existe */}
                   {showClienteNota && (
                     <div className="mt-2 pt-2 border-t border-primary/10">
                       <p className="text-xs text-muted-foreground font-medium">Nota:</p>
@@ -1450,7 +1531,6 @@ export function VenderView() {
               )}
             </div>
 
-            {/* Dialog para crear cliente */}
             <Dialog open={showClienteForm} onOpenChange={setShowClienteForm}>
               <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
@@ -1770,14 +1850,22 @@ export function VenderView() {
                   disabled={
                     ventaItems.length === 0 ||
                     tieneItemsInvalidos ||
-                    !cajaAbierta
+                    !cajaAbierta ||
+                    generandoPDF
                   }
                 >
-                  {!cajaAbierta
-                    ? "Caja Cerrada"
-                    : tieneItemsInvalidos
-                    ? "Cantidades inválidas"
-                    : "Procesar Venta"}
+                  {generandoPDF ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2"></div>
+                      Generando PDF...
+                    </>
+                  ) : !cajaAbierta ? (
+                    "Caja Cerrada"
+                  ) : tieneItemsInvalidos ? (
+                    "Cantidades inválidas"
+                  ) : (
+                    "Procesar Venta"
+                  )}
                 </Button>
               </DialogTrigger>
               <DialogContent>

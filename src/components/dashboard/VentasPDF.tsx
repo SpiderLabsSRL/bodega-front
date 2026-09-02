@@ -110,14 +110,6 @@ export async function generateVentaPDF(params: GenerateVentaPDFParams): Promise<
       <p style="margin:0 0 6px 0;">
         <strong>Fecha:</strong> ${escapeHtml(fechaFormateada)}
       </p>
-
-      <p style="margin:0 0 6px 0;">
-        <strong>Dirección:</strong> Av. Heroinas esq. Hamiraya #316
-      </p>
-
-      <p style="margin:0;">
-        <strong>Números:</strong> 77950297 - 77918672
-      </p>
     </div>
 
     <div

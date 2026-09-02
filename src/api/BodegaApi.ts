@@ -320,7 +320,7 @@ export const getTodosProductosParaSelect = async (): Promise<Array<{ idproducto:
       idproducto: p.idproducto,
       nombre: p.nombre
     }));
-  } catch (error) {
+  } catch (error) { 
     console.error("Error fetching productos para select:", error);
     return [];
   }
@@ -517,3 +517,19 @@ function mapBackendProductoBodega(producto: BackendProductoBodega): ProductoBode
     bodegas_stock: producto.bodegas_stock,
   };
 }
+export const updateStockProductoBodega = async (
+  idproducto: number,
+  idbodega: number,
+  cantidad: number
+): Promise<ProductoBodega> => {
+  try {
+    const response = await api.patch<BackendProductoBodega>(
+      `/bodegas/productos/${idproducto}/stock`,
+      { idbodega, cantidad }
+    );
+    return mapBackendProductoBodega(response.data);
+  } catch (error) {
+    console.error("Error actualizando stock:", error);
+    throw new Error("No se pudo actualizar el stock");
+  }
+};

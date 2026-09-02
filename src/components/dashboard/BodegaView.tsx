@@ -50,6 +50,7 @@ import {
   MapPin,
   Store,
   X,
+  PackagePlus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FormularioProductos } from "./FormularioProductos";
@@ -73,6 +74,7 @@ import {
   Sucursal,
   asignarUbicacionProductoBodega,
   getUbicacionesByProductoBodega,
+  updateStockProductoBodega,
 } from "@/api/BodegaApi";
 import {
   createUbicacion,
@@ -254,6 +256,14 @@ interface BodegaViewProps {
   searchProductId?: string;
   searchProductName?: string;
   searchBodegaId?: number;
+}
+
+interface StockFormData {
+  stockActual: number;
+  cantidadAñadir: string;
+  productoId: number;
+  productoNombre: string;
+  idbodega: number;
 }
 
 // ============================================
@@ -1226,6 +1236,18 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
   });
   const [isCreatingSucursal, setIsCreatingSucursal] = useState(false);
   const [ubicacionesPorSucursal, setUbicacionesPorSucursal] = useState<Array<{ idubicacion: number; nombre: string }>>([]);
+  
+  // Estados para el diálogo de aumento de stock
+  const [isStockFormOpen, setIsStockFormOpen] = useState(false);
+  const [currentStockProduct, setCurrentStockProduct] = useState<ProductoBodega | null>(null);
+  const [stockFormData, setStockFormData] = useState<StockFormData>({
+    stockActual: 0,
+    cantidadAñadir: "",
+    productoId: 0,
+    productoNombre: "",
+    idbodega: 0,
+  });
+
   const { toast } = useToast();
 
   const userRole = localStorage.getItem("userRole") || "admin";
@@ -1330,6 +1352,61 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       setSearching(false);
     }
   }, [selectedBodega, toast]);
+
+  // ============================================
+  // FUNCIONES PARA AUMENTAR STOCK
+  // ============================================
+
+  const handleIncreaseStock = (product: ProductoBodega) => {
+    setCurrentStockProduct(product);
+    setStockFormData({
+      stockActual: product.stock,
+      cantidadAñadir: "",
+      productoId: product.id,
+      productoNombre: product.nombre,
+      idbodega: selectedBodega || 1,
+    });
+    setIsStockFormOpen(true);
+  };
+
+  const handleStockSubmit = async () => {
+    try {
+      await updateStockProductoBodega(
+        stockFormData.productoId,
+        stockFormData.idbodega,
+        parseInt(stockFormData.cantidadAñadir || "0")
+      );
+
+      const newTotal = stockFormData.stockActual + parseInt(stockFormData.cantidadAñadir || "0");
+      toast({
+        title: "Stock actualizado",
+        description: `Stock de ${currentStockProduct?.nombre} aumentado a ${newTotal} unidades en ${currentStockProduct?.bodega_nombre || "la bodega"}.`,
+      });
+
+      // Recargar productos para actualizar la vista
+      if (showAllProducts) {
+        await loadAllProductos();
+      } else if (selectedBodega) {
+        await loadProductosByBodega(selectedBodega);
+      }
+
+      setIsStockFormOpen(false);
+      setStockFormData({
+        stockActual: 0,
+        cantidadAñadir: "",
+        productoId: 0,
+        productoNombre: "",
+        idbodega: 0,
+      });
+      setCurrentStockProduct(null);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo actualizar el stock",
+        variant: "destructive",
+      });
+    }
+  };
 
   // ============================================
   // HANDLERS
@@ -1813,12 +1890,80 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
   return (
     <div className="space-y-4 md:space-y-6 p-2 md:p-0">
       {/* ============================================
+      DIALOG PARA AUMENTAR STOCK
+      ============================================ */}
+      <Dialog open={isStockFormOpen} onOpenChange={setIsStockFormOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Aumentar Stock</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">
+                Producto: {currentStockProduct?.nombre}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Bodega: {currentStockProduct?.bodega_nombre || "Actual"}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Stock actual</div>
+              <Input value={stockFormData.stockActual} disabled />
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Cantidad a añadir</div>
+              <Input
+                type="number"
+                value={stockFormData.cantidadAñadir}
+                onChange={(e) =>
+                  setStockFormData((prev) => ({
+                    ...prev,
+                    cantidadAñadir: e.target.value,
+                  }))
+                }
+                placeholder="0"
+                className="number-input-no-scroll"
+                onWheel={(e) => e.currentTarget.blur()}
+                min="0"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Total después del aumento</div>
+              <Input
+                value={
+                  stockFormData.stockActual +
+                  parseInt(stockFormData.cantidadAñadir || "0")
+                }
+                disabled
+                className="font-bold"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsStockFormOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleStockSubmit}
+              className="bg-primary hover:bg-primary/90"
+              disabled={
+                !stockFormData.cantidadAñadir ||
+                parseInt(stockFormData.cantidadAñadir) <= 0
+              }
+            >
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================
       HEADER
       ============================================ */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl md:text-3xl font-bold text-primary flex items-center gap-2">
           <Warehouse className="h-7 w-7" />
-          Bodega Central
+          Almacen Central
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -1968,7 +2113,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
       <Card>
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <CardTitle>
-            Inventario en Bodega
+            Inventario en Almacen
             {filterBajoStock && (
               <Badge variant="destructive" className="ml-2">
                 Filtro: Stock bajo
@@ -2088,12 +2233,21 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                       </Badge>
                     )}
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleIncreaseStock(product)}
+                        className="flex-1 h-8 text-xs min-w-[80px]"
+                      >
+                        <PackagePlus className="h-3 w-3 mr-1" />
+                        Stock
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleTransferir(product)}
-                        className="flex-1 h-8 text-xs"
+                        className="flex-1 h-8 text-xs min-w-[80px]"
                       >
                         <ArrowRight className="h-3 w-3 mr-1" />
                         Transferir
@@ -2104,7 +2258,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                             variant="outline"
                             size="sm"
                             onClick={() => handleEdit(product)}
-                            className="flex-1 h-8 text-xs"
+                            className="flex-1 h-8 text-xs min-w-[60px]"
                           >
                             <Edit className="h-3 w-3 mr-1" />
                             Editar
@@ -2114,7 +2268,7 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="flex-1 h-8 text-xs"
+                                className="flex-1 h-8 text-xs min-w-[40px]"
                               >
                                 <Trash2 className="h-3 w-3 text-destructive" />
                               </Button>
@@ -2211,14 +2365,16 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                           {product.bodega_nombre || "—"}
                         </TableCell>
                         <TableCell className="text-center">
-                          <span className={`font-semibold ${product.stock <= product.stockMinimo ? 'text-red-500' : 'text-primary'}`}>
-                            {product.stock}
-                          </span>
-                          {product.stock <= product.stockMinimo && (
-                            <Badge variant="destructive" className="text-xs ml-2">
-                              Bajo stock
-                            </Badge>
-                          )}
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`font-semibold ${product.stock <= product.stockMinimo ? 'text-red-500' : 'text-primary'}`}>
+                              {product.stock}
+                            </span>
+                            {product.stock <= product.stockMinimo && (
+                              <Badge variant="destructive" className="text-xs">
+                                Bajo stock
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-center text-sm">
                           {product.stockMinimo}
@@ -2231,11 +2387,20 @@ export function BodegaView({ searchProductId, searchProductName, searchBodegaId 
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() => handleIncreaseStock(product)}
+                              className="h-8 px-2 text-xs"
+                              title="Aumentar Stock"
+                            >
+                              <PackagePlus className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => handleTransferir(product)}
-                              className="h-8 text-xs"
+                              className="h-8 px-2 text-xs"
                               title="Transferir"
                             >
-                              <ArrowRight className="h-3 w-3" />
+                              <ArrowRight className="h-3.5 w-3.5" />
                             </Button>
                             {!isAssistant && (
                               <>
