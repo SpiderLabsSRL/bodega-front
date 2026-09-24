@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,19 +20,22 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Package,
+  Eye,
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  getAllProductos,
+  getUbicaciones,
+  getCategorias,
   buscarProductos,
+  getAllProductos,
   Producto,
   updateStockProducto,
-  getImageUrl,
+  clearProductsCache,
 } from "@/api/ProductsApi";
+import { getImageUrl } from "./VenderView";
 
 interface StockFormData {
   stockActual: number;
@@ -42,9 +45,8 @@ interface StockFormData {
 }
 
 // ============================================
-// COMPONENTE PARA EL CARRUSEL DE IMÁGENES
+// CARRUSEL DE IMÁGENES
 // ============================================
-
 interface ImageCarouselProps {
   images: string[];
   productName: string;
@@ -60,13 +62,11 @@ export function ImageCarousel({
 
   useEffect(() => {
     if (images.length <= 1) return;
-
     const interval = setInterval(() => {
       setCurrentIndex((prevIndex) =>
-        prevIndex === images.length - 1 ? 0 : prevIndex + 1,
+        prevIndex === images.length - 1 ? 0 : prevIndex + 1
       );
     }, 3000);
-
     return () => clearInterval(interval);
   }, [images.length]);
 
@@ -88,10 +88,6 @@ export function ImageCarousel({
     setCurrentIndex(currentIndex === images.length - 1 ? 0 : currentIndex + 1);
   };
 
-  const goToSlide = (index: number) => {
-    setCurrentIndex(index);
-  };
-
   return (
     <div className={`relative overflow-hidden rounded ${className}`}>
       <div className="relative aspect-square w-full">
@@ -100,7 +96,6 @@ export function ImageCarousel({
           alt={`${productName} - Imagen ${currentIndex + 1}`}
           className="w-full h-full object-cover"
           loading="lazy"
-          decoding="async"
           onError={(e) => {
             (e.target as HTMLImageElement).src =
               "https://static.vecteezy.com/system/resources/previews/011/781/801/non_2x/medicine-3d-render-icon-illustration-png.png";
@@ -132,7 +127,7 @@ export function ImageCarousel({
           {images.map((_, index) => (
             <button
               key={index}
-              onClick={() => goToSlide(index)}
+              onClick={() => setCurrentIndex(index)}
               className={`w-2 h-2 rounded-full transition-all ${
                 index === currentIndex ? "bg-white" : "bg-white/50"
               }`}
@@ -152,9 +147,8 @@ export function ImageCarousel({
 }
 
 // ============================================
-// FUNCIÓN PARA RENDERIZAR UBICACIONES
+// RENDER UBICACIONES
 // ============================================
-
 function RenderUbicaciones({
   ubicaciones,
   bodegaId,
@@ -201,9 +195,8 @@ function RenderUbicaciones({
 }
 
 // ============================================
-// HOOK DE DEBOUNCE
+// HOOK DEBOUNCE
 // ============================================
-
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
@@ -223,17 +216,22 @@ function useDebounce<T>(value: T, delay: number): T {
 // ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
-
 export function ProductosView() {
   const [isStockFormOpen, setIsStockFormOpen] = useState(false);
-  const [currentStockProduct, setCurrentStockProduct] = useState<Producto | null>(
-    null,
-  );
+  const [currentStockProduct, setCurrentStockProduct] =
+    useState<Producto | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [products, setProducts] = useState<Producto[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingAll, setLoadingAll] = useState(false);
   const [searching, setSearching] = useState(false);
+
+  const [ubicaciones, setUbicaciones] = useState<
+    { idubicacion: number; nombre: string }[]
+  >([]);
+  const [categorias, setCategorias] = useState<
+    { idcategoria: number; nombre: string }[]
+  >([]);
 
   const userRole = localStorage.getItem("userRole") || "admin";
   const isAssistant = userRole === "Asistente";
@@ -244,121 +242,154 @@ export function ProductosView() {
     productoId: 0,
     productoNombre: "",
   });
-  const { toast } = useToast();
 
+  const { toast } = useToast();
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-  // Bandera para evitar doble carga al montar
+  // Evita que el efecto de búsqueda se dispare al montar
   const isInitialMount = useRef(true);
+  // Evita disparar búsqueda mientras se carga inicial
+  const isSearchingRef = useRef(false);
 
   // ============================================
-  // FUNCIONES DE CARGA
+  // CARGA INICIAL: todo en paralelo
   // ============================================
-
-  const loadAllProducts = async (skipCache = false) => {
-    setLoadingAll(true);
-    try {
-      const allProducts = await getAllProductos(skipCache);
-      setProducts(allProducts);
-    } catch (error) {
-      console.error("Error cargando todos los productos:", error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar todos los productos",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingAll(false);
-    }
-  };
-
-  const performSearch = async (query: string) => {
-    setSearching(true);
-    try {
-      const results = await buscarProductos(query);
-      setProducts(results);
-    } catch (error) {
-      console.error("Error buscando productos:", error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los productos",
-        variant: "destructive",
-      });
-      setProducts([]);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const reloadProducts = async () => {
-    if (searchTerm.trim().length >= 2) {
-      await performSearch(searchTerm);
-    } else {
-      await loadAllProducts(true); // skipCache porque acabamos de modificar stock
-    }
-  };
-
-  // ============================================
-  // CARGA INICIAL - UNA SOLA VEZ
-  // ============================================
-
   useEffect(() => {
+    let cancelled = false;
+
     const loadInitialData = async () => {
       setLoading(true);
       setLoadingAll(true);
 
       try {
-        const searchFromInventory =
-          sessionStorage.getItem("searchProductName");
+        const [ubicacionesData, categoriasData, allProducts] =
+          await Promise.all([
+            getUbicaciones(),
+            getCategorias(),
+            getAllProductos(),
+          ]);
 
-        if (searchFromInventory) {
-          sessionStorage.removeItem("searchProductName");
-          setSearchTerm(searchFromInventory);
-          const results = await buscarProductos(searchFromInventory);
-          setProducts(results);
-        } else {
-          const allProducts = await getAllProductos();
-          setProducts(allProducts);
-        }
+        if (cancelled) return;
+
+        setUbicaciones(
+          ubicacionesData.map((item) => ({
+            idubicacion: item.idubicacion,
+            nombre: item.nombre,
+          }))
+        );
+        setCategorias(
+          categoriasData.map((item) => ({
+            idcategoria: item.idcategoria,
+            nombre: item.nombre,
+          }))
+        );
+        setProducts(allProducts);
       } catch (error) {
+        if (cancelled) return;
         console.error("Error cargando datos iniciales:", error);
         toast({
           title: "Error",
-          description: "No se pudieron cargar los productos",
+          description: "No se pudieron cargar los datos necesarios",
           variant: "destructive",
         });
       } finally {
-        setLoading(false);
-        setLoadingAll(false);
-        isInitialMount.current = false;
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingAll(false);
+          isInitialMount.current = false;
+        }
       }
     };
 
     loadInitialData();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ============================================
-  // BÚSQUEDA CON DEBOUNCE (solo tras montaje inicial)
+  // BÚSQUEDA DESDE INVENTARIO
   // ============================================
-
   useEffect(() => {
+    const searchFromInventory = sessionStorage.getItem("searchProductName");
+    if (searchFromInventory) {
+      setSearchTerm(searchFromInventory);
+      sessionStorage.removeItem("searchProductName");
+    }
+  }, []);
+
+  // ============================================
+  // EFECTO DE BÚSQUEDA CON DEBOUNCE
+  // ============================================
+  useEffect(() => {
+    // No buscar en el primer render
     if (isInitialMount.current) return;
 
-    const trimmed = debouncedSearchTerm.trim();
+    const term = debouncedSearchTerm.trim();
 
-    if (trimmed.length >= 2) {
-      performSearch(trimmed);
-    } else if (trimmed.length === 0) {
-      loadAllProducts();
+    if (term.length >= 2) {
+      if (isSearchingRef.current) return;
+      isSearchingRef.current = true;
+
+      setSearching(true);
+      buscarProductos(term)
+        .then((results) => {
+          setProducts(results);
+        })
+        .catch((error) => {
+          console.error("Error buscando productos:", error);
+          toast({
+            title: "Error",
+            description: "No se pudieron cargar los productos",
+            variant: "destructive",
+          });
+          setProducts([]);
+        })
+        .finally(() => {
+          setSearching(false);
+          isSearchingRef.current = false;
+        });
+    } else if (term.length === 0) {
+      // Volver a todos
+      let cancelled = false;
+      setLoadingAll(true);
+      getAllProductos()
+        .then((all) => {
+          if (!cancelled) setProducts(all);
+        })
+        .catch(() => {
+          if (!cancelled) setProducts([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingAll(false);
+        });
+
+      return () => {
+        cancelled = true;
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchTerm]);
 
   // ============================================
+  // RECARGAR PRODUCTOS
+  // ============================================
+  const reloadProducts = useCallback(async () => {
+    clearProductsCache();
+    if (searchTerm.trim().length >= 2) {
+      const results = await buscarProductos(searchTerm.trim());
+      setProducts(results);
+    } else {
+      const all = await getAllProductos();
+      setProducts(all);
+    }
+  }, [searchTerm]);
+
+  // ============================================
   // HANDLERS
   // ============================================
-
   const handleIncreaseStock = (product: Producto) => {
     setCurrentStockProduct(product);
     setStockFormData({
@@ -374,7 +405,7 @@ export function ProductosView() {
     try {
       await updateStockProducto(
         stockFormData.productoId,
-        parseInt(stockFormData.cantidadAñadir || "0"),
+        parseInt(stockFormData.cantidadAñadir || "0")
       );
 
       const newTotal =
@@ -383,7 +414,7 @@ export function ProductosView() {
 
       toast({
         title: "Stock actualizado",
-        description: `Stock de ${stockFormData.productoNombre} aumentado a ${newTotal} unidades.`,
+        description: `Stock de ${currentStockProduct?.nombre} - ${stockFormData.productoNombre} aumentado a ${newTotal} unidades.`,
       });
 
       await reloadProducts();
@@ -395,7 +426,6 @@ export function ProductosView() {
         productoId: 0,
         productoNombre: "",
       });
-      setCurrentStockProduct(null);
     } catch (error) {
       toast({
         title: "Error",
@@ -403,6 +433,10 @@ export function ProductosView() {
         variant: "destructive",
       });
     }
+  };
+
+  const getTotalStock = (producto: Producto): number => {
+    return producto.stock || 0;
   };
 
   const getUserBodegaId = (): number | null => {
@@ -414,17 +448,13 @@ export function ProductosView() {
     }
   };
 
-  const userBodegaId = useMemo(() => getUserBodegaId(), []);
-
-  // ============================================
-  // RENDER
-  // ============================================
+  const userBodegaId = getUserBodegaId();
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2 text-lg">Cargando productos...</span>
+        <span className="ml-2 text-lg">Cargando configuraciones...</span>
       </div>
     );
   }
@@ -440,9 +470,7 @@ export function ProductosView() {
         </div>
       </div>
 
-      {/* ============================================
-          DIALOG PARA AUMENTAR STOCK
-      ============================================ */}
+      {/* Dialog para aumentar stock */}
       <Dialog open={isStockFormOpen} onOpenChange={setIsStockFormOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -473,7 +501,6 @@ export function ProductosView() {
                 className="number-input-no-scroll"
                 onWheel={(e) => e.currentTarget.blur()}
                 min="0"
-                autoFocus
               />
             </div>
             <div className="space-y-2">
@@ -508,9 +535,6 @@ export function ProductosView() {
         </DialogContent>
       </Dialog>
 
-      {/* ============================================
-          LISTADO
-      ============================================ */}
       <Card>
         <CardHeader>
           <CardTitle>
@@ -521,7 +545,6 @@ export function ProductosView() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar productos por nombre, categoría, código de barras o tipo... (mín. 2 caracteres)"
               value={searchTerm}
@@ -538,17 +561,18 @@ export function ProductosView() {
           {loadingAll ? (
             <div className="text-center py-8">
               <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-              <p className="text-muted-foreground mt-2">Cargando productos...</p>
+              <p className="text-muted-foreground mt-2">
+                Cargando productos...
+              </p>
             </div>
           ) : (
             <>
               {products.length > 0 && (
                 <>
-                  {/* ============================================
-                      VISTA MÓVIL Y TABLET - CARDS
-                  ============================================ */}
+                  {/* Vista móvil y tablet */}
                   <div className="block xl:hidden space-y-3 w-full">
                     {products.map((product) => {
+                      const totalStock = getTotalStock(product);
                       const ubicacionesProducto = product.ubicaciones || [];
                       const ubicacionesNombres = ubicacionesProducto
                         .map((u) => u.nombre)
@@ -563,12 +587,7 @@ export function ProductosView() {
                             <div className="flex items-start gap-3 w-full">
                               <div className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20">
                                 <ImageCarousel
-                                  images={[
-                                    getImageUrl(
-                                      product.imagen,
-                                      product.idproducto,
-                                    ),
-                                  ]}
+                                  images={[getImageUrl(product.imagen)]}
                                   productName={product.nombre}
                                   className="w-16 h-16 sm:w-20 sm:h-20"
                                 />
@@ -643,8 +662,7 @@ export function ProductosView() {
                               <div>
                                 <span className="font-medium">Precio:</span>
                                 <span className="text-primary ml-1 font-semibold">
-                                  Bs{" "}
-                                  {Number(product.precio_venta).toFixed(2)}
+                                  Bs {Number(product.precio_venta).toFixed(2)}
                                 </span>
                               </div>
                               {product.codigo_barras && (
@@ -675,7 +693,7 @@ export function ProductosView() {
                                           {similar.nombre.length > 20
                                             ? similar.nombre.substring(
                                                 0,
-                                                17,
+                                                17
                                               ) + "..."
                                             : similar.nombre}
                                         </Badge>
@@ -712,9 +730,7 @@ export function ProductosView() {
                     })}
                   </div>
 
-                  {/* ============================================
-                      VISTA DESKTOP - TABLA
-                  ============================================ */}
+                  {/* Vista desktop */}
                   <div className="hidden xl:block">
                     <div className="w-full border rounded-lg">
                       <div className="overflow-x-auto">
@@ -732,8 +748,12 @@ export function ProductosView() {
                               <TableHead className="min-w-[150px]">
                                 Similares
                               </TableHead>
-                              <TableHead className="w-[100px]">Stock</TableHead>
-                              <TableHead className="w-[100px]">Precio</TableHead>
+                              <TableHead className="w-[100px]">
+                                Stock
+                              </TableHead>
+                              <TableHead className="w-[100px]">
+                                Precio
+                              </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -742,12 +762,7 @@ export function ProductosView() {
                                 <TableCell>
                                   <div className="w-10 h-10">
                                     <ImageCarousel
-                                      images={[
-                                        getImageUrl(
-                                          product.imagen,
-                                          product.idproducto,
-                                        ),
-                                      ]}
+                                      images={[getImageUrl(product.imagen)]}
                                       productName={product.nombre}
                                       className="w-10 h-10"
                                     />
@@ -816,7 +831,7 @@ export function ProductosView() {
                                             {similar.nombre.length > 12
                                               ? similar.nombre.substring(
                                                   0,
-                                                  10,
+                                                  10
                                                 ) + "..."
                                               : similar.nombre}
                                           </Badge>
@@ -828,8 +843,8 @@ export function ProductosView() {
                                           className="text-xs"
                                         >
                                           +
-                                          {product.productos_similares
-                                            .length - 2}
+                                          {product.productos_similares.length -
+                                            2}
                                         </Badge>
                                       )}
                                     </div>
@@ -887,3 +902,5 @@ export function ProductosView() {
     </div>
   );
 }
+
+export default ProductosView;

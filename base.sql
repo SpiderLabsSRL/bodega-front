@@ -221,23 +221,6 @@ CREATE TABLE caja (
 );
 
 -- ============================================
--- TABLA DE MOVIMIENTOS DE CAJA
--- ============================================
-CREATE TABLE movimiento_caja (
-    idmovimiento_caja SERIAL PRIMARY KEY,
-    idcaja INTEGER REFERENCES caja(idcaja),
-    idusuario INTEGER REFERENCES usuarios(idusuario),
-    monto DECIMAL(10,2) NOT NULL,
-    tipo VARCHAR(20) CHECK (tipo IN ('apertura', 'ingreso', 'egreso', 'transferencia_efectivo', 'transferencia_qr', 'cierre')) NOT NULL,
-    descripcion TEXT,
-    monto_anterior DECIMAL(10,2) DEFAULT 0,
-    monto_actual DECIMAL(10,2) DEFAULT 0,
-    fecha TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('America/La_Paz', NOW()),
-    idventa INTEGER REFERENCES ventas(idventa) ON DELETE SET NULL,
-    idtransferencia INTEGER REFERENCES transferencias_caja(idtransferencia) ON DELETE SET NULL
-);
-
--- ============================================
 -- TABLA DE TRANSFERENCIAS (ACTUALIZADA)
 -- ============================================
 CREATE TABLE transferencias_caja (
@@ -255,37 +238,133 @@ CREATE TABLE transferencias_caja (
 );
 
 -- ============================================
--- ÍNDICES
+-- TABLA DE MOVIMIENTOS DE CAJA
 -- ============================================
+CREATE TABLE movimiento_caja (
+    idmovimiento_caja SERIAL PRIMARY KEY,
+    idcaja INTEGER REFERENCES caja(idcaja),
+    idusuario INTEGER REFERENCES usuarios(idusuario),
+    monto DECIMAL(10,2) NOT NULL,
+    tipo VARCHAR(20) CHECK (tipo IN ('apertura', 'ingreso', 'egreso', 'transferencia_efectivo', 'transferencia_qr', 'cierre')) NOT NULL,
+    descripcion TEXT,
+    monto_anterior DECIMAL(10,2) DEFAULT 0,
+    monto_actual DECIMAL(10,2) DEFAULT 0,
+    fecha TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('America/La_Paz', NOW()),
+    idventa INTEGER REFERENCES ventas(idventa) ON DELETE SET NULL,
+    idtransferencia INTEGER REFERENCES transferencias_caja(idtransferencia) ON DELETE SET NULL
+);
+
+-- ============================================
+-- ÍNDICES (COMPLETOS Y SIN DUPLICADOS)
+-- ============================================
+
+-- --------------------------------------------
+-- Índices para BODEGAS
+-- --------------------------------------------
+CREATE INDEX idx_bodegas_estado ON bodegas(estado);
+
+-- --------------------------------------------
+-- Índices para UBICACIONES
+-- --------------------------------------------
+CREATE INDEX idx_ubicaciones_bodega ON ubicaciones(idbodega);
+CREATE INDEX idx_ubicaciones_estado ON ubicaciones(estado);
+
+-- --------------------------------------------
+-- Índices para CATEGORÍAS
+-- --------------------------------------------
+CREATE INDEX idx_categorias_estado ON categorias(estado);
+
+-- --------------------------------------------
+-- Índices para PRODUCTOS
+-- --------------------------------------------
+CREATE INDEX idx_productos_estado ON productos(estado);
+CREATE INDEX idx_productos_nombre ON productos(nombre);
+CREATE INDEX idx_productos_codigo_barras ON productos(codigo_barras);
+
+-- --------------------------------------------
+-- Índices para PRODUCTO_BODEGA
+-- --------------------------------------------
+CREATE INDEX idx_producto_bodega_producto ON producto_bodega(idproducto);
+CREATE INDEX idx_producto_bodega_bodega ON producto_bodega(idbodega);
+CREATE INDEX idx_producto_bodega_compuesto ON producto_bodega(idproducto, idbodega);
+
+-- --------------------------------------------
+-- Índices para PRODUCTO_UBICACION_BODEGA
+-- --------------------------------------------
+CREATE INDEX idx_pub_producto ON producto_ubicacion_bodega(idproducto);
+CREATE INDEX idx_pub_bodega ON producto_ubicacion_bodega(idbodega);
+CREATE INDEX idx_pub_compuesto ON producto_ubicacion_bodega(idproducto, idbodega);
+
+-- --------------------------------------------
+-- Índices para PRODUCTO_CATEGORIAS
+-- --------------------------------------------
+CREATE INDEX idx_pc_producto ON producto_categorias(idproducto);
+CREATE INDEX idx_pc_categoria ON producto_categorias(idcategoria);
+
+-- --------------------------------------------
+-- Índices para PRODUCTOS_SIMILARES
+-- --------------------------------------------
+CREATE INDEX idx_productos_similares_producto ON productos_similares(idproducto);
+CREATE INDEX idx_productos_similares_similar ON productos_similares(idproducto_similar);
+
+-- --------------------------------------------
+-- Índices para CAJA
+-- --------------------------------------------
 CREATE INDEX idx_caja_tipo ON caja(tipo);
 CREATE INDEX idx_caja_bodega ON caja(idbodega);
+
+-- --------------------------------------------
+-- Índices para MOVIMIENTO_CAJA
+-- --------------------------------------------
 CREATE INDEX idx_movimiento_caja_caja ON movimiento_caja(idcaja);
 CREATE INDEX idx_movimiento_caja_usuario ON movimiento_caja(idusuario);
 CREATE INDEX idx_movimiento_caja_tipo ON movimiento_caja(tipo);
 CREATE INDEX idx_movimiento_caja_venta ON movimiento_caja(idventa);
 CREATE INDEX idx_movimiento_caja_transferencia ON movimiento_caja(idtransferencia);
+
+-- --------------------------------------------
+-- Índices para TRANSFERENCIAS_CAJA
+-- --------------------------------------------
 CREATE INDEX idx_transferencias_origen ON transferencias_caja(idcaja_origen);
 CREATE INDEX idx_transferencias_estado ON transferencias_caja(estado);
 CREATE INDEX idx_transferencias_tipo ON transferencias_caja(tipo);
 CREATE INDEX idx_transferencias_solicitante ON transferencias_caja(idusuario_solicitante);
 CREATE INDEX idx_transferencias_aprobador ON transferencias_caja(idusuario_aprobador);
+
+-- --------------------------------------------
+-- Índices para VENTAS
+-- --------------------------------------------
 CREATE INDEX idx_ventas_fecha ON ventas(fecha_hora);
 CREATE INDEX idx_ventas_usuario ON ventas(idusuario);
 CREATE INDEX idx_ventas_cliente ON ventas(idcliente);
 CREATE INDEX idx_ventas_bodega ON ventas(idbodega);
+
+-- --------------------------------------------
+-- Índices para DETALLE_VENTAS
+-- --------------------------------------------
 CREATE INDEX idx_detalle_ventas_venta ON detalle_ventas(idventa);
+CREATE INDEX idx_detalle_ventas_bodega ON detalle_ventas(idbodega);
+
+-- --------------------------------------------
+-- Índices para DETALLE_COTIZACIONES
+-- --------------------------------------------
 CREATE INDEX idx_detalle_cotizaciones_cotizacion ON detalle_cotizaciones(idcotizacion);
-CREATE INDEX idx_productos_codigo_barras ON productos(codigo_barras);
-CREATE INDEX idx_productos_similares_producto ON productos_similares(idproducto);
-CREATE INDEX idx_productos_similares_similar ON productos_similares(idproducto_similar);
-CREATE INDEX idx_ubicaciones_bodega ON ubicaciones(idbodega);
+
+-- --------------------------------------------
+-- Índices para CLIENTES
+-- --------------------------------------------
 CREATE INDEX idx_clientes_carnet ON clientes(carnet);
+
+-- --------------------------------------------
+-- Índices para COTIZACIONES
+-- --------------------------------------------
 CREATE INDEX idx_cotizaciones_cliente ON cotizaciones(idcliente);
 CREATE INDEX idx_cotizaciones_bodega ON cotizaciones(idbodega);
+
+-- --------------------------------------------
+-- Índices para USUARIOS
+-- --------------------------------------------
 CREATE INDEX idx_usuarios_bodega ON usuarios(idbodega);
-CREATE INDEX idx_producto_bodega_producto ON producto_bodega(idproducto);
-CREATE INDEX idx_producto_bodega_bodega ON producto_bodega(idbodega);
-CREATE INDEX idx_detalle_ventas_bodega ON detalle_ventas(idbodega);
 
 -- ============================================
 -- TRIGGER PARA CREAR CAJAS AUTOMÁTICAMENTE
