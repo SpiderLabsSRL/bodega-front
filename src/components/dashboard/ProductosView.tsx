@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,23 +20,19 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Package,
-  Eye,
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  getUbicaciones,
-  getCategorias,
-  getProductos,
-  buscarProductos,
   getAllProductos,
-  deleteProducto,
+  buscarProductos,
   Producto,
   updateStockProducto,
+  getImageUrl,
 } from "@/api/ProductsApi";
-import { getImageUrl } from "./VenderView";
 
 interface StockFormData {
   stockActual: number;
@@ -45,7 +41,10 @@ interface StockFormData {
   productoNombre: string;
 }
 
-// Componente para el carrusel de imágenes
+// ============================================
+// COMPONENTE PARA EL CARRUSEL DE IMÁGENES
+// ============================================
+
 interface ImageCarouselProps {
   images: string[];
   productName: string;
@@ -100,6 +99,8 @@ export function ImageCarousel({
           src={images[currentIndex]}
           alt={`${productName} - Imagen ${currentIndex + 1}`}
           className="w-full h-full object-cover"
+          loading="lazy"
+          decoding="async"
           onError={(e) => {
             (e.target as HTMLImageElement).src =
               "https://static.vecteezy.com/system/resources/previews/011/781/801/non_2x/medicine-3d-render-icon-illustration-png.png";
@@ -150,37 +151,36 @@ export function ImageCarousel({
   );
 }
 
-// Función para renderizar ubicaciones con badges
-function RenderUbicaciones({ 
-  ubicaciones, 
-  bodegaId 
-}: { 
-  ubicaciones: Array<{ idubicacion: number; nombre: string; idbodega: number }>; 
+// ============================================
+// FUNCIÓN PARA RENDERIZAR UBICACIONES
+// ============================================
+
+function RenderUbicaciones({
+  ubicaciones,
+  bodegaId,
+}: {
+  ubicaciones: Array<{ idubicacion: number; nombre: string; idbodega: number }>;
   bodegaId: number | null;
 }) {
   if (!ubicaciones || ubicaciones.length === 0) {
     return <span className="text-xs text-muted-foreground">Sin ubicación</span>;
   }
 
-  // Filtrar ubicaciones por bodega si se especifica
   let ubicacionesFiltradas = ubicaciones;
   if (bodegaId !== null && bodegaId !== undefined) {
-    ubicacionesFiltradas = ubicaciones.filter(u => u.idbodega === bodegaId);
+    ubicacionesFiltradas = ubicaciones.filter((u) => u.idbodega === bodegaId);
   }
 
-  // Si no hay ubicaciones filtradas, mostrar todas
   if (ubicacionesFiltradas.length === 0) {
     ubicacionesFiltradas = ubicaciones;
   }
 
-  // Extraer los nombres
-  const nombres = ubicacionesFiltradas.map(u => u.nombre).filter(Boolean);
-  
+  const nombres = ubicacionesFiltradas.map((u) => u.nombre).filter(Boolean);
+
   if (nombres.length === 0) {
     return <span className="text-xs text-muted-foreground">Sin ubicación</span>;
   }
 
-  // Mostrar hasta 2 ubicaciones
   const mostrar = nombres.slice(0, 2);
   const restantes = nombres.length - 2;
 
@@ -200,7 +200,10 @@ function RenderUbicaciones({
   );
 }
 
-// Hook para debounce
+// ============================================
+// HOOK DE DEBOUNCE
+// ============================================
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
@@ -217,18 +220,20 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
+
 export function ProductosView() {
   const [isStockFormOpen, setIsStockFormOpen] = useState(false);
-  const [currentStockProduct, setCurrentStockProduct] = useState<any>(null);
+  const [currentStockProduct, setCurrentStockProduct] = useState<Producto | null>(
+    null,
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [products, setProducts] = useState<Producto[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingAll, setLoadingAll] = useState(false);
   const [searching, setSearching] = useState(false);
-
-  // Estados para las opciones desde la API
-  const [ubicaciones, setUbicaciones] = useState<{idubicacion: number; nombre: string}[]>([]);
-  const [categorias, setCategorias] = useState<{idcategoria: number; nombre: string}[]>([]);
 
   const userRole = localStorage.getItem("userRole") || "admin";
   const isAssistant = userRole === "Asistente";
@@ -241,71 +246,19 @@ export function ProductosView() {
   });
   const { toast } = useToast();
 
-  const debouncedSearchTerm = useDebounce(searchTerm, 1000);
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-  // Cargar datos básicos (opciones para selects) y todos los productos al montar
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        setLoading(true);
-        setLoadingAll(true);
-        
-        const [ubicacionesData, categoriasData, allProducts] = await Promise.all([
-          getUbicaciones(),
-          getCategorias(),
-          getAllProductos(),
-        ]);
+  // Bandera para evitar doble carga al montar
+  const isInitialMount = useRef(true);
 
-        setUbicaciones(ubicacionesData.map((item) => ({
-          idubicacion: item.idubicacion,
-          nombre: item.nombre
-        })));
-        setCategorias(categoriasData.map((item) => ({
-          idcategoria: item.idcategoria,
-          nombre: item.nombre
-        })));
-        setProducts(allProducts);
-      } catch (error) {
-        console.error("Error cargando datos iniciales:", error);
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar los datos necesarios",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-        setLoadingAll(false);
-      }
-    };
+  // ============================================
+  // FUNCIONES DE CARGA
+  // ============================================
 
-    loadInitialData();
-  }, [toast]);
-
-  // Cargar búsqueda desde inventario si existe
-  useEffect(() => {
-    const searchFromInventory = sessionStorage.getItem("searchProductName");
-    if (searchFromInventory) {
-      setSearchTerm(searchFromInventory);
-      performSearch(searchFromInventory);
-      sessionStorage.removeItem("searchProductName");
-    }
-  }, []);
-
-  // Efecto para búsqueda con debounce
-  useEffect(() => {
-    if (debouncedSearchTerm.trim().length >= 2) {
-      performSearch(debouncedSearchTerm);
-    } else if (debouncedSearchTerm.trim().length === 0) {
-      // Si no hay término de búsqueda, mostrar todos los productos
-      loadAllProducts();
-    }
-  }, [debouncedSearchTerm]);
-
-  // Función para cargar todos los productos
-  const loadAllProducts = async () => {
+  const loadAllProducts = async (skipCache = false) => {
     setLoadingAll(true);
     try {
-      const allProducts = await getAllProductos();
+      const allProducts = await getAllProductos(skipCache);
       setProducts(allProducts);
     } catch (error) {
       console.error("Error cargando todos los productos:", error);
@@ -319,7 +272,6 @@ export function ProductosView() {
     }
   };
 
-  // Función para realizar búsqueda
   const performSearch = async (query: string) => {
     setSearching(true);
     try {
@@ -338,14 +290,74 @@ export function ProductosView() {
     }
   };
 
-  // Función para recargar productos después de actualizar stock
   const reloadProducts = async () => {
     if (searchTerm.trim().length >= 2) {
       await performSearch(searchTerm);
     } else {
-      await loadAllProducts();
+      await loadAllProducts(true); // skipCache porque acabamos de modificar stock
     }
   };
+
+  // ============================================
+  // CARGA INICIAL - UNA SOLA VEZ
+  // ============================================
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setLoading(true);
+      setLoadingAll(true);
+
+      try {
+        const searchFromInventory =
+          sessionStorage.getItem("searchProductName");
+
+        if (searchFromInventory) {
+          sessionStorage.removeItem("searchProductName");
+          setSearchTerm(searchFromInventory);
+          const results = await buscarProductos(searchFromInventory);
+          setProducts(results);
+        } else {
+          const allProducts = await getAllProductos();
+          setProducts(allProducts);
+        }
+      } catch (error) {
+        console.error("Error cargando datos iniciales:", error);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los productos",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+        setLoadingAll(false);
+        isInitialMount.current = false;
+      }
+    };
+
+    loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ============================================
+  // BÚSQUEDA CON DEBOUNCE (solo tras montaje inicial)
+  // ============================================
+
+  useEffect(() => {
+    if (isInitialMount.current) return;
+
+    const trimmed = debouncedSearchTerm.trim();
+
+    if (trimmed.length >= 2) {
+      performSearch(trimmed);
+    } else if (trimmed.length === 0) {
+      loadAllProducts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm]);
+
+  // ============================================
+  // HANDLERS
+  // ============================================
 
   const handleIncreaseStock = (product: Producto) => {
     setCurrentStockProduct(product);
@@ -368,12 +380,12 @@ export function ProductosView() {
       const newTotal =
         stockFormData.stockActual +
         parseInt(stockFormData.cantidadAñadir || "0");
+
       toast({
         title: "Stock actualizado",
-        description: `Stock de ${currentStockProduct?.nombre} - ${stockFormData.productoNombre} aumentado a ${newTotal} unidades.`,
+        description: `Stock de ${stockFormData.productoNombre} aumentado a ${newTotal} unidades.`,
       });
 
-      // Recargar productos para actualizar la vista
       await reloadProducts();
 
       setIsStockFormOpen(false);
@@ -383,6 +395,7 @@ export function ProductosView() {
         productoId: 0,
         productoNombre: "",
       });
+      setCurrentStockProduct(null);
     } catch (error) {
       toast({
         title: "Error",
@@ -392,11 +405,6 @@ export function ProductosView() {
     }
   };
 
-  const getTotalStock = (producto: Producto): number => {
-    return producto.stock || 0;
-  };
-
-  // Obtener el ID de bodega del usuario para filtrar ubicaciones
   const getUserBodegaId = (): number | null => {
     try {
       const bodegaId = localStorage.getItem("userBodega");
@@ -406,12 +414,17 @@ export function ProductosView() {
     }
   };
 
-  const userBodegaId = getUserBodegaId();
+  const userBodegaId = useMemo(() => getUserBodegaId(), []);
+
+  // ============================================
+  // RENDER
+  // ============================================
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Cargando configuraciones...</div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2 text-lg">Cargando productos...</span>
       </div>
     );
   }
@@ -427,7 +440,9 @@ export function ProductosView() {
         </div>
       </div>
 
-      {/* Dialog para aumentar stock */}
+      {/* ============================================
+          DIALOG PARA AUMENTAR STOCK
+      ============================================ */}
       <Dialog open={isStockFormOpen} onOpenChange={setIsStockFormOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -458,6 +473,7 @@ export function ProductosView() {
                 className="number-input-no-scroll"
                 onWheel={(e) => e.currentTarget.blur()}
                 min="0"
+                autoFocus
               />
             </div>
             <div className="space-y-2">
@@ -492,6 +508,9 @@ export function ProductosView() {
         </DialogContent>
       </Dialog>
 
+      {/* ============================================
+          LISTADO
+      ============================================ */}
       <Card>
         <CardHeader>
           <CardTitle>
@@ -502,6 +521,7 @@ export function ProductosView() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar productos por nombre, categoría, código de barras o tipo... (mín. 2 caracteres)"
               value={searchTerm}
@@ -518,22 +538,24 @@ export function ProductosView() {
           {loadingAll ? (
             <div className="text-center py-8">
               <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-              <p className="text-muted-foreground mt-2">
-                Cargando productos...
-              </p>
+              <p className="text-muted-foreground mt-2">Cargando productos...</p>
             </div>
           ) : (
             <>
               {products.length > 0 && (
                 <>
-                  {/* Vista móvil y tablet - Cards */}
+                  {/* ============================================
+                      VISTA MÓVIL Y TABLET - CARDS
+                  ============================================ */}
                   <div className="block xl:hidden space-y-3 w-full">
                     {products.map((product) => {
-                      const totalStock = getTotalStock(product);
                       const ubicacionesProducto = product.ubicaciones || [];
-                      const ubicacionesNombres = ubicacionesProducto.map(u => u.nombre).filter(Boolean);
+                      const ubicacionesNombres = ubicacionesProducto
+                        .map((u) => u.nombre)
+                        .filter(Boolean);
                       const ubicacionesMostrar = ubicacionesNombres.slice(0, 2);
-                      const ubicacionesRestantes = ubicacionesNombres.length - 2;
+                      const ubicacionesRestantes =
+                        ubicacionesNombres.length - 2;
 
                       return (
                         <Card key={product.idproducto} className="p-3 w-full">
@@ -541,7 +563,12 @@ export function ProductosView() {
                             <div className="flex items-start gap-3 w-full">
                               <div className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20">
                                 <ImageCarousel
-                                  images={[getImageUrl(product.imagen)]}
+                                  images={[
+                                    getImageUrl(
+                                      product.imagen,
+                                      product.idproducto,
+                                    ),
+                                  ]}
                                   productName={product.nombre}
                                   className="w-16 h-16 sm:w-20 sm:h-20"
                                 />
@@ -582,17 +609,28 @@ export function ProductosView() {
                                 <span className="font-medium">Ubicación:</span>
                                 <div className="flex flex-wrap gap-1 mt-0.5">
                                   {ubicacionesMostrar.map((nombre, index) => (
-                                    <Badge key={index} variant="secondary" className="text-xs px-1.5 py-0">
-                                      {nombre.length > 10 ? nombre.substring(0, 8) + "..." : nombre}
+                                    <Badge
+                                      key={index}
+                                      variant="secondary"
+                                      className="text-xs px-1.5 py-0"
+                                    >
+                                      {nombre.length > 10
+                                        ? nombre.substring(0, 8) + "..."
+                                        : nombre}
                                     </Badge>
                                   ))}
                                   {ubicacionesRestantes > 0 && (
-                                    <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-xs px-1.5 py-0"
+                                    >
                                       +{ubicacionesRestantes}
                                     </Badge>
                                   )}
                                   {ubicacionesNombres.length === 0 && (
-                                    <span className="text-muted-foreground text-xs">Sin ubicación</span>
+                                    <span className="text-muted-foreground text-xs">
+                                      Sin ubicación
+                                    </span>
                                   )}
                                 </div>
                               </div>
@@ -605,7 +643,8 @@ export function ProductosView() {
                               <div>
                                 <span className="font-medium">Precio:</span>
                                 <span className="text-primary ml-1 font-semibold">
-                                  Bs {Number(product.precio_venta).toFixed(2)}
+                                  Bs{" "}
+                                  {Number(product.precio_venta).toFixed(2)}
                                 </span>
                               </div>
                               {product.codigo_barras && (
@@ -673,7 +712,9 @@ export function ProductosView() {
                     })}
                   </div>
 
-                  {/* Vista desktop - Tabla responsiva sin scroll */}
+                  {/* ============================================
+                      VISTA DESKTOP - TABLA
+                  ============================================ */}
                   <div className="hidden xl:block">
                     <div className="w-full border rounded-lg">
                       <div className="overflow-x-auto">
@@ -682,149 +723,148 @@ export function ProductosView() {
                             <TableRow>
                               <TableHead className="w-[70px]">Img</TableHead>
                               <TableHead>Producto</TableHead>
-                              <TableHead className="min-w-[150px]">Ubicación</TableHead>
+                              <TableHead className="min-w-[150px]">
+                                Ubicación
+                              </TableHead>
                               <TableHead className="min-w-[150px]">
                                 Código de Barras
                               </TableHead>
                               <TableHead className="min-w-[150px]">
                                 Similares
                               </TableHead>
-                              <TableHead className="w-[100px]">
-                                Stock
-                              </TableHead>
-                              <TableHead className="w-[100px]">
-                                Precio
-                              </TableHead>
+                              <TableHead className="w-[100px]">Stock</TableHead>
+                              <TableHead className="w-[100px]">Precio</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {products.map((product) => {
-                              return (
-                                <TableRow key={product.idproducto}>
-                                  <TableCell>
-                                    <div className="w-10 h-10">
-                                      <ImageCarousel
-                                        images={[getImageUrl(product.imagen)]}
-                                        productName={product.nombre}
-                                        className="w-10 h-10"
-                                      />
+                            {products.map((product) => (
+                              <TableRow key={product.idproducto}>
+                                <TableCell>
+                                  <div className="w-10 h-10">
+                                    <ImageCarousel
+                                      images={[
+                                        getImageUrl(
+                                          product.imagen,
+                                          product.idproducto,
+                                        ),
+                                      ]}
+                                      productName={product.nombre}
+                                      className="w-10 h-10"
+                                    />
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div>
+                                    <div className="font-medium text-sm">
+                                      {product.nombre}
                                     </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div>
-                                      <div className="font-medium text-sm">
-                                        {product.nombre}
-                                      </div>
-                                      <div className="flex flex-wrap gap-1 mt-1">
-                                        {product.categorias
-                                          .slice(0, 2)
-                                          .map((categoria, index) => (
-                                            <Badge
-                                              key={index}
-                                              variant="secondary"
-                                              className="text-xs"
-                                            >
-                                              {categoria.length > 10
-                                                ? categoria.substring(0, 8) +
-                                                  "..."
-                                                : categoria}
-                                            </Badge>
-                                          ))}
-                                        {product.categorias.length > 2 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {product.categorias
+                                        .slice(0, 2)
+                                        .map((categoria, index) => (
                                           <Badge
+                                            key={index}
                                             variant="secondary"
                                             className="text-xs"
                                           >
-                                            +{product.categorias.length - 2}
+                                            {categoria.length > 10
+                                              ? categoria.substring(0, 8) +
+                                                "..."
+                                              : categoria}
                                           </Badge>
-                                        )}
-                                      </div>
+                                        ))}
+                                      {product.categorias.length > 2 && (
+                                        <Badge
+                                          variant="secondary"
+                                          className="text-xs"
+                                        >
+                                          +{product.categorias.length - 2}
+                                        </Badge>
+                                      )}
                                     </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <RenderUbicaciones 
-                                      ubicaciones={product.ubicaciones || []} 
-                                      bodegaId={userBodegaId}
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    {product.codigo_barras ? (
-                                      <span className="text-sm font-mono break-all">
-                                        {product.codigo_barras}
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">
-                                        —
-                                      </span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {product.productos_similares &&
-                                    product.productos_similares.length > 0 ? (
-                                      <div className="flex flex-wrap gap-1">
-                                        {product.productos_similares
-                                          .slice(0, 2)
-                                          .map((similar, idx) => (
-                                            <Badge
-                                              key={idx}
-                                              variant="outline"
-                                              className="text-xs"
-                                            >
-                                              {similar.nombre.length > 12
-                                                ? similar.nombre.substring(
-                                                    0,
-                                                    10,
-                                                  ) + "..."
-                                                : similar.nombre}
-                                            </Badge>
-                                          ))}
-                                        {product.productos_similares.length >
-                                          2 && (
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <RenderUbicaciones
+                                    ubicaciones={product.ubicaciones || []}
+                                    bodegaId={userBodegaId}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {product.codigo_barras ? (
+                                    <span className="text-sm font-mono break-all">
+                                      {product.codigo_barras}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">
+                                      —
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {product.productos_similares &&
+                                  product.productos_similares.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {product.productos_similares
+                                        .slice(0, 2)
+                                        .map((similar, idx) => (
                                           <Badge
+                                            key={idx}
                                             variant="outline"
                                             className="text-xs"
                                           >
-                                            +
-                                            {product.productos_similares
-                                              .length - 2}
+                                            {similar.nombre.length > 12
+                                              ? similar.nombre.substring(
+                                                  0,
+                                                  10,
+                                                ) + "..."
+                                              : similar.nombre}
                                           </Badge>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">
-                                        —
-                                      </span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="space-y-1">
-                                      <div className="text-sm font-semibold text-primary">
-                                        {product.stock}
-                                      </div>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          handleIncreaseStock(product)
-                                        }
-                                        className="h-7 text-xs px-2"
-                                      >
-                                        <Package className="h-2.5 w-2.5 mr-1" />
-                                        +
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="text-sm font-semibold">
-                                      Bs{" "}
-                                      {Number(product.precio_venta).toFixed(
-                                        2,
+                                        ))}
+                                      {product.productos_similares.length >
+                                        2 && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
+                                          +
+                                          {product.productos_similares
+                                            .length - 2}
+                                        </Badge>
                                       )}
                                     </div>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">
+                                      —
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="space-y-1">
+                                    <div className="text-sm font-semibold text-primary">
+                                      {product.stock}
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleIncreaseStock(product)
+                                      }
+                                      className="h-7 text-xs px-2"
+                                    >
+                                      <Package className="h-2.5 w-2.5 mr-1" />
+                                      +
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-sm font-semibold">
+                                    Bs{" "}
+                                    {Number(product.precio_venta).toFixed(2)}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
                           </TableBody>
                         </Table>
                       </div>
