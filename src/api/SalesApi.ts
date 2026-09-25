@@ -1,3 +1,4 @@
+// src/api/SalesApi.ts
 import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -80,6 +81,7 @@ const api = axios.create({
 const getUserBodega = (): number | null => {
   try {
     const bodegaId = localStorage.getItem("userBodega");
+    console.log("🏢 getUserBodega desde localStorage:", bodegaId);
     return bodegaId ? parseInt(bodegaId) : null;
   } catch (error) {
     console.error("Error getting user bodega:", error);
@@ -87,9 +89,11 @@ const getUserBodega = (): number | null => {
   }
 };
 
+// 👈 CAMBIO IMPORTANTE: withoutStock por defecto false para que aparezcan
+//    productos aunque tengan stock 0
 export const searchProducts = async (
   query: string,
-  withoutStock: boolean = true,
+  withoutStock: boolean = false,
 ): Promise<Product[]> => {
   try {
     const idbodega = getUserBodega();
@@ -97,8 +101,15 @@ export const searchProducts = async (
     if (idbodega) {
       url += `&bodega=${idbodega}`;
     }
-    
+
+    console.log("📡 searchProducts URL:", url);
+
     const response = await api.get<BackendProduct[]>(url);
+    console.log(
+      `📥 searchProducts response (${response.data.length} items):`,
+      response.data.map((p) => p.nombre),
+    );
+
     return response.data.map(mapBackendProduct);
   } catch (error) {
     console.error("Error searching products:", error);
@@ -116,21 +127,23 @@ export const searchProducts = async (
   }
 };
 
-export const searchClientes = async (query: string): Promise<ClienteSearchResult[]> => {
+export const searchClientes = async (
+  query: string,
+): Promise<ClienteSearchResult[]> => {
   try {
     console.log("🔍 searchClientes called with query:", query);
-    
+
     if (!query || query.trim().length < 2) {
       console.log("⚠️ Query too short, returning empty");
       return [];
     }
-    
+
     const url = `/sales/clientes/search?q=${encodeURIComponent(query.trim())}`;
     console.log("📡 Calling URL:", url);
-    
+
     const response = await api.get<ClienteSearchResult[]>(url);
     console.log("✅ Response data:", response.data);
-    
+
     return response.data;
   } catch (error) {
     console.error("❌ Error searching clients:", error);
@@ -148,11 +161,11 @@ export const processSale = async (
   try {
     const idbodega = getUserBodega();
     console.log("📦 ID Bodega para venta:", idbodega);
-    
+
     if (!idbodega) {
       throw new Error("No se pudo determinar la bodega del usuario");
     }
-    
+
     const saleWithUser = {
       ...sale,
       userId: userId,
@@ -160,7 +173,7 @@ export const processSale = async (
     };
 
     console.log("📤 Enviando venta:", saleWithUser);
-    
+
     const response = await api.post<{ idventa: number }>(
       "/sales/process",
       saleWithUser,
@@ -175,16 +188,18 @@ export const processSale = async (
   }
 };
 
-// Nueva función para obtener el estado de la caja
-export const getEstadoCaja = async (idbodega: number, tipo: string): Promise<string> => {
+export const getEstadoCaja = async (
+  idbodega: number,
+  tipo: string,
+): Promise<string> => {
   try {
     const response = await api.get<{ estado: string }>(
-      `/sales/caja/estado?idbodega=${idbodega}&tipo=${encodeURIComponent(tipo)}`
+      `/sales/caja/estado?idbodega=${idbodega}&tipo=${encodeURIComponent(tipo)}`,
     );
     return response.data.estado;
   } catch (error) {
     console.error("Error getting caja estado:", error);
-    return 'cerrada';
+    return "cerrada";
   }
 };
 

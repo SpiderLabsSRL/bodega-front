@@ -383,3 +383,24 @@ CREATE TRIGGER trigger_crear_cajas_bodega
 AFTER INSERT ON bodegas
 FOR EACH ROW
 EXECUTE FUNCTION crear_cajas_bodega();
+
+
+
+-- 1. Asegurar pg_trgm (unaccent ya está)
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS unaccent;
+SELECT extname, extnamespace::regnamespace AS schema
+FROM pg_extension
+WHERE extname IN ('unaccent', 'pg_trgm');
+CREATE OR REPLACE FUNCTION immutable_unaccent(text)
+RETURNS text AS $$
+  SELECT public.unaccent('public.unaccent'::regdictionary, $1)
+$$ LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT;
+CREATE INDEX IF NOT EXISTS idx_productos_nombre_trgm 
+  ON productos USING GIN (LOWER(immutable_unaccent(nombre)) gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_productos_descripcion_trgm 
+  ON productos USING GIN (LOWER(immutable_unaccent(COALESCE(descripcion, ''))) gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_productos_codigo_barras_trgm 
+  ON productos USING GIN (LOWER(immutable_unaccent(COALESCE(codigo_barras, ''))) gin_trgm_ops);

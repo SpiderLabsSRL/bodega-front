@@ -593,18 +593,24 @@ export function VenderView() {
     const abortController = new AbortController();
     searchAbortControllerRef.current = abortController;
 
-    if (isSearchingRef.current) return;
+    // ❌ ELIMINADO: if (isSearchingRef.current) return;
+    // ❌ ELIMINADO: isSearchingRef.current = true;
 
-    isSearchingRef.current = true;
     setLoading(true);
 
     try {
-      const results = await searchProducts(query);
-      
+      // 👈 CAMBIO: pasar withoutStock=false explícitamente para que
+      //    aparezcan productos aunque tengan stock 0
+      const results = await searchProducts(query, false);
+      console.log(
+        `🔍 Búsqueda "${query}" → ${results.length} resultados:`,
+        results.map((p) => p.nombre),
+      );
+
       if (abortController.signal.aborted) {
         return;
       }
-      
+
       const uniqueResults = filterUniqueProducts(results);
       setSearchResults(uniqueResults);
       setSimilarProductsData(new Map());
@@ -614,13 +620,15 @@ export function VenderView() {
           const currentPosition = searchInputRef.current.selectionStart;
           searchInputRef.current.focus();
           if (currentPosition !== null) {
-            searchInputRef.current.setSelectionRange(currentPosition, currentPosition);
+            searchInputRef.current.setSelectionRange(
+              currentPosition,
+              currentPosition,
+            );
           }
         }
       }, 10);
-
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (error instanceof Error && error.name === "AbortError") {
         return;
       }
       console.error("Error searching products:", error);
@@ -632,7 +640,7 @@ export function VenderView() {
       setSearchResults([]);
     } finally {
       setLoading(false);
-      isSearchingRef.current = false;
+      // ❌ ELIMINADO: isSearchingRef.current = false;
       if (searchAbortControllerRef.current === abortController) {
         searchAbortControllerRef.current = null;
       }
@@ -1892,7 +1900,7 @@ export function VenderView() {
             </Dialog>
           </CardContent>
         </Card>
-      </div>
+      </div> 
     </div>
   );
 }
